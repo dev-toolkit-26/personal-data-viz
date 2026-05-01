@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KPI Dashboard 2026</title>
+<script>__CHARTJS__</script>
+<script>__XLSX__</script>
+<script>__SNOW_DATA__
+__SNOW_ALL__
+__BOTTLE_DATA__
+</script>
+<style>
+:root{--bg:#f0f2f7;--surface:#fff;--surface2:#f4f5f9;--border:#dde1ee;--text:#1a1d2e;--muted:#6b7280;--accent:#3b6ef5;--green:#16a34a;--yellow:#d97706;--red:#dc2626}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:"Segoe UI",Arial,sans-serif;font-size:14px}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:18px;font-weight:700}
+header h1 span{color:var(--accent)}
+.date-badge{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--muted)}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 28px}
+.tab{padding:12px 20px;cursor:pointer;border-bottom:2px solid transparent;font-size:13px;font-weight:600;color:var(--muted);transition:all .2s}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:hover:not(.active){color:var(--text)}
+.page{display:none;padding:24px 28px}
+.page.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.card-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.card-value{font-size:28px;font-weight:700;line-height:1}
+.card-sub{font-size:12px;color:var(--muted);margin-top:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+.box h3{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px}
+.tw{overflow-x:auto}
+.ow{max-height:480px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--surface2);padding:9px 13px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+td{padding:9px 13px;border-bottom:1px solid var(--border)}
+tr:hover td{background:var(--surface2)}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
+.bg{background:rgba(22,163,74,.12);color:var(--green)}
+.by{background:rgba(217,119,6,.12);color:var(--yellow)}
+.br{background:rgba(220,38,38,.12);color:var(--red)}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
+.tag-서울{background:rgba(59,110,245,.12);color:#3b6ef5}
+.tag-부산{background:rgba(234,88,12,.12);color:#ea580c}
+.tag-대구{background:rgba(168,85,247,.12);color:#9333ea}
+.tag-제주{background:rgba(20,184,166,.12);color:#0d9488}
+.tag-대전{background:rgba(217,119,6,.12);color:#d97706}
+.tag-광주{background:rgba(220,38,38,.12);color:#dc2626}
+.tag-Seoul{background:rgba(59,110,245,.12);color:#3b6ef5}
+.tag-Busan{background:rgba(234,88,12,.12);color:#ea580c}
+.tag-Daegu{background:rgba(168,85,247,.12);color:#9333ea}
+.tag-Jeju{background:rgba(20,184,166,.12);color:#0d9488}
+.tag-Daejeon{background:rgba(217,119,6,.12);color:#d97706}
+.tag-Gwangju{background:rgba(220,38,38,.12);color:#dc2626}
+td.sr-cell{white-space:nowrap}
+.rrow td{background:var(--surface2);font-weight:700;color:var(--accent)}
+.frow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.frow label{font-size:11px;font-weight:700;color:var(--muted)}
+.fb{padding:4px 13px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.fb.on,.fb:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.fsel{padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-weight:600}
+.fi{padding:5px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;width:180px}
+.fi::placeholder{color:var(--muted)}
+.fc{font-size:12px;color:var(--muted);margin-left:auto}
+.r{text-align:right;font-weight:600}
+.mu{color:var(--muted)}
+.bo{font-weight:700}
+/* 업데이트 탭 */
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface)}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(59,110,245,.04)}
+.upload-zone input[type=file]{display:none}
+.upload-icon{font-size:32px;margin-bottom:10px}
+.upload-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+.upload-sub{font-size:12px;color:var(--muted)}
+.upload-btn{margin-top:14px;padding:7px 20px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.upload-btn:hover{opacity:.85}
+.preview-box{margin-top:14px;display:none}
+.preview-box .prev-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.preview-box .prev-title{font-size:13px;font-weight:700}
+.prev-count{font-size:12px;color:var(--muted)}
+.confirm-btn{padding:6px 18px;border-radius:20px;border:none;background:var(--green);color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.confirm-btn:hover{opacity:.85}
+.cancel-btn{padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;margin-left:8px}
+.utable{width:100%;border-collapse:collapse;font-size:12px}
+.utable th{background:var(--surface2);padding:7px 10px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left;position:sticky;top:0}
+.utable td{padding:6px 10px;border-bottom:1px solid var(--border)}
+.utable tr:hover td{background:var(--surface2)}
+.dl-btn{padding:5px 14px;border-radius:20px;border:1px solid var(--accent);background:#fff;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+.dl-btn:hover{background:var(--accent);color:#fff}
+.hist-badge{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700}
+.hist-bottle{background:rgba(59,110,245,.1);color:#3b6ef5}
+.hist-snow{background:rgba(20,184,166,.1);color:#0d9488}
+.del-btn{padding:2px 9px;border-radius:4px;border:1px solid #fca5a5;background:#fff1f1;color:var(--red);font-size:12px;font-weight:700;cursor:pointer}
+.file-name{font-size:12px;color:var(--green);font-weight:600;margin-top:8px}
+.branch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+@media(max-width:900px){.branch-grid{grid-template-columns:repeat(2,1fr)}}
+.branch-card{border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:var(--surface2);transition:border-color .2s}
+.branch-card.uploaded{background:var(--surface);border-color:var(--accent)}
+.bc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.bc-date{font-size:11px;color:var(--muted)}
+.bc-count{font-size:22px;font-weight:700;color:var(--accent);margin-bottom:10px}
+.bc-none{font-size:12px;color:var(--muted);margin-bottom:10px}
+.bc-btns{display:flex;gap:8px}
+.up-btn{padding:5px 12px;border-radius:16px;border:1px solid var(--accent);background:var(--surface);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer}
+.up-btn:hover{background:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KPI <span>Dashboard</span> 2026</h1>
+  <div class="date-badge">기준일: 2026.03.23</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('bottle',this)">33cl Bottle SR KPI</div>
+  <div class="tab" onclick="switchTab('snow',this)">SNOW 50cl 신규 아울렛</div>
+  <div class="tab" onclick="switchTab('update',this)">데이터 업데이트</div>
+</div>
+
+<!-- BOTTLE -->
+<div class="page active" id="page-bottle">
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">1월 전체 달성률</div>
+      <div class="card-value" style="color:var(--yellow)">90%</div>
+      <div class="card-sub">목표 312 / 실적 281</div>
+    </div>
+    <div class="card">
+      <div class="card-label">2월 전체 달성률</div>
+      <div class="card-value" style="color:var(--green)">104%</div>
+      <div class="card-sub">목표 268 / 실적 278</div>
+    </div>
+    <div class="card">
+      <div class="card-label">3월 전체 달성률</div>
+      <div class="card-value" style="color:var(--red)">49%</div>
+      <div class="card-sub">목표 354 / 실적 174</div>
+    </div>
+    <div class="card">
+      <div class="card-label">총 SR 수</div>
+      <div class="card-value" style="color:var(--accent)">22</div>
+      <div class="card-sub">서울 11 · 부산 4 · 기타 7</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="box"><h3>월별 전체 목표 vs 실적</h3><canvas id="bOverall"></canvas></div>
+    <div class="box"><h3>지역별 달성률 비교</h3><canvas id="bRegion"></canvas></div>
+  </div>
+
+  <div class="box">
+    <h3>SR 상세 실적 테이블</h3>
+    <div class="tw"><table id="srTable"></table></div>
+  </div>
+
+  <div class="box">
+    <h3>아울렛별 월별 판매 현황</h3>
+    <div class="frow">
+      <label>지점</label>
+      <button class="fb on" onclick="bf('region','전체',this)">전체</button>
+      <button class="fb" onclick="bf('region','서울',this)">서울</button>
+      <button class="fb" onclick="bf('region','부산',this)">부산</button>
+      <button class="fb" onclick="bf('region','대구',this)">대구</button>
+      <button class="fb" onclick="bf('region','대전',this)">대전</button>
+      <button class="fb" onclick="bf('region','광주',this)">광주</button>
+      <button class="fb" onclick="bf('region','제주',this)">제주</button>
+    </div>
+    <div class="frow">
+      <label>SR</label>
+      <select class="fsel" id="bSrSel" onchange="renderBottle()"><option value="">전체</option></select>
+      <label>검색</label>
+      <input class="fi" id="bSearch" placeholder="아울렛명 검색..." oninput="renderBottle()">
+      <span class="fc" id="bCount"></span>
+    </div>
+    <div class="ow">
+      <table>
+        <thead><tr>
+          <th>지점</th><th>SR</th><th>아울렛명</th>
+          <th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">합계</th>
+        </tr></thead>
+        <tbody id="bBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SNOW -->
+<div class="page" id="page-snow">
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">1월 신규 입점</div>
+      <div class="card-value" style="color:var(--accent)">19</div>
+      <div class="card-sub">서울 2 · 부산 2 · 대구 2 · 대전 4 · 광주 9</div>
+    </div>
+    <div class="card">
+      <div class="card-label">2월 신규 입점</div>
+      <div class="card-value" style="color:var(--accent)">23</div>
+      <div class="card-sub">서울 7 · 부산 8 · 대구 1 · 제주 1 · 광주 6</div>
+    </div>
+    <div class="card">
+      <div class="card-label">3월 신규 입점</div>
+      <div class="card-value" style="color:var(--accent)">12</div>
+      <div class="card-sub">서울 2 · 부산 7 · 대전 3</div>
+    </div>
+    <div class="card">
+      <div class="card-label">누적 신규 입점</div>
+      <div class="card-value" style="color:var(--green)">54</div>
+      <div class="card-sub">25년 미입점 → 26년 신규 개척</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="box"><h3>월별 신규 입점 추이 (지점별)</h3><canvas id="sMonthly"></canvas></div>
+    <div class="box"><h3>지점별 누적 신규 입점</h3><canvas id="sRegion"></canvas></div>
+  </div>
+
+  <div class="box">
+    <h3>신규 입점 아울렛 목록</h3>
+    <div class="frow">
+      <label>지점</label>
+      <button class="fb on" onclick="sf('region','전체',this)">전체</button>
+      <button class="fb" onclick="sf('region','서울',this)">서울</button>
+      <button class="fb" onclick="sf('region','부산',this)">부산</button>
+      <button class="fb" onclick="sf('region','대구',this)">대구</button>
+      <button class="fb" onclick="sf('region','제주',this)">제주</button>
+      <button class="fb" onclick="sf('region','대전',this)">대전</button>
+      <button class="fb" onclick="sf('region','광주',this)">광주</button>
+    </div>
+    <div class="frow">
+      <label>입점월</label>
+      <button class="fb on" onclick="sf('month','전체',this)">전체</button>
+      <button class="fb" onclick="sf('month','1월',this)">1월</button>
+      <button class="fb" onclick="sf('month','2월',this)">2월</button>
+      <button class="fb" onclick="sf('month','3월',this)">3월</button>
+      <label>SR</label>
+      <select class="fsel" id="sSrSel" onchange="renderSnow()"><option value="">전체</option></select>
+      <label>검색</label>
+      <input class="fi" id="sSearch" placeholder="아울렛명 검색..." oninput="renderSnow()">
+      <span class="fc" id="sCount"></span>
+    </div>
+    <div class="ow">
+      <table>
+        <thead><tr>
+          <th>지점</th><th>입점월</th><th>SR</th><th>아울렛명</th><th>지역(구)</th>
+        </tr></thead>
+        <tbody id="sBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 전체 아울렛 리스트 -->
+  <div class="box">
+    <h3>전체 아울렛 리스트</h3>
+    <div class="frow">
+      <label>지점</label>
+      <button class="fb on" onclick="af('region','전체',this)">전체</button>
+      <button class="fb" onclick="af('region','서울',this)">서울</button>
+      <button class="fb" onclick="af('region','부산',this)">부산</button>
+      <button class="fb" onclick="af('region','대구',this)">대구</button>
+      <button class="fb" onclick="af('region','제주',this)">제주</button>
+      <button class="fb" onclick="af('region','대전',this)">대전</button>
+      <button class="fb" onclick="af('region','광주',this)">광주</button>
+    </div>
+    <div class="frow">
+      <label>매출</label>
+      <button class="fb on" onclick="af('sales','전체',this)">전체</button>
+      <button class="fb" onclick="af('sales','있음',this)">매출 있음</button>
+      <button class="fb" onclick="af('sales','없음',this)">매출 없음</button>
+      <label>SR</label>
+      <select class="fsel" id="aSrSel" onchange="renderAll()"><option value="">전체</option></select>
+      <label>검색</label>
+      <input class="fi" id="aSearch" placeholder="아울렛명 / 도매상 검색..." oninput="renderAll()" style="width:220px">
+      <span class="fc" id="aCount"></span>
+    </div>
+    <div class="ow">
+      <table>
+        <thead><tr>
+          <th>지점</th><th>SR</th><th>아울렛명</th>
+          <th>도매담당</th><th>도매상명</th>
+          <th>주소</th>
+          <th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">합계</th>
+        </tr></thead>
+        <tbody id="aBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 데이터 업데이트 ===== -->
+<div class="page" id="page-update">
+
+  <!-- Bottle -->
+  <div class="box" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">33cl Bottle 업데이트</h3>
+      <button class="dl-btn" onclick="downloadCurrent('bottle')">⬇ 현황 다운로드</button>
+    </div>
+    <div class="branch-grid" id="bgBottle"></div>
+    <input type="file" id="fBottle" accept=".xlsx,.xls" style="display:none" onchange="readExcel(this,'bottle')">
+    <div class="preview-box" id="pvBottle">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span>
+        <span class="prev-count" id="pcBottle"></span>
+        <div>
+          <button class="confirm-btn" onclick="confirmUpload('bottle')">대시보드 반영</button>
+          <button class="cancel-btn" onclick="cancelPreview('bottle')">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:300px">
+        <table class="utable"><thead><tr><th>지점</th><th>월</th><th>SR</th><th>아울렛명</th><th class="r">수량</th></tr></thead>
+        <tbody id="pbBottle"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snow -->
+  <div class="box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">Snow 신규 입점 업데이트</h3>
+      <button class="dl-btn" onclick="downloadCurrent('snow')">⬇ 현황 다운로드</button>
+    </div>
+    <div class="branch-grid" id="bgSnow"></div>
+    <input type="file" id="fSnow" accept=".xlsx,.xls" style="display:none" onchange="readExcel(this,'snow')">
+    <div class="preview-box" id="pvSnow">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span>
+        <span class="prev-count" id="pcSnow"></span>
+        <div>
+          <button class="confirm-btn" onclick="confirmUpload('snow')">대시보드 반영</button>
+          <button class="cancel-btn" onclick="cancelPreview('snow')">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:300px">
+        <table class="utable"><thead><tr><th>지점</th><th>SR</th><th>아울렛명</th><th>도매담당</th><th>도매상명</th><th>구</th><th class="r">2025합계</th><th class="r">2026합계</th><th>신규입점</th></tr></thead>
+        <tbody id="pbSnow"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// 공통
+const CD={plugins:{legend:{labels:{color:'#6b7280',font:{size:11}}}},scales:{x:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}},y:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}}}};
+function pct(a,t){return t?Math.round(a/t*100):null}
+function badge(p){if(p===null)return '<span class="mu">–</span>';const c=p>=100?'bg':p>=80?'by':'br';return `<span class="badge ${c}">${p}%</span>`;}
+function switchTab(n,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');el.classList.add('active');}
+function rtag(r){return `<span class="tag tag-${r}">${r}</span>`;}
+
+// localStorage (최상단 선언 - 하위 함수에서 참조하므로)
+const UK='kpi_updates_2026';
+const MK={'1월':'m1','2월':'m2','3월':'m3','4월':'m4','5월':'m5','6월':'m6','7월':'m7','8월':'m8','9월':'m9','10월':'m10','11월':'m11','12월':'m12'};
+function getUD(){return JSON.parse(localStorage.getItem(UK)||'{"bottle":{},"snow":{}}')}
+function setUD(d){localStorage.setItem(UK,JSON.stringify(d))}
+
+// BOTTLE 차트
+const bD={months:['1월','2월','3월'],overall:{target:[312,268,354],actual:[281,278,174]},regions:{'서울':{target:[155,136,170],actual:[144,140,111]},'부산':{target:[64,56,80],actual:[44,43,15]},'대전':{target:[20,17,23],actual:[20,27,3]},'광주':{target:[36,25,35],actual:[33,21,10]},'대구/제주':{target:[37,34,46],actual:[40,47,35]}},srs:[{name:'Minkyu Lee',region:'서울',jan:[12,15],feb:[8,14],mar:[20,20]},{name:'Hyunjin Lee',region:'서울',jan:[8,15],feb:[9,13],mar:[13,20]},{name:'Joosuk Lee',region:'서울',jan:[24,20],feb:[19,18],mar:[0,25]},{name:'Eunhee Lee',region:'서울',jan:[27,25],feb:[27,23],mar:[24,30]},{name:'Sanghun Um',region:'서울',jan:[4,10],feb:[10,8],mar:[0,null]},{name:'Sangtae Kang',region:'서울',jan:[8,10],feb:[10,8],mar:[13,15]},{name:'Hangjoe Yoo',region:'서울',jan:[11,15],feb:[12,13],mar:[0,null]},{name:'Hongjun Park',region:'서울',jan:[20,15],feb:[20,13],mar:[14,20]},{name:'Pilsung Kim',region:'서울',jan:[10,10],feb:[9,8],mar:[12,15]},{name:'Gunseok Hong',region:'서울',jan:[20,20],feb:[6,18],mar:[8,25]},{name:'Hanju Kim',region:'서울',jan:[0,null],feb:[10,null],mar:[7,null]},{name:'Yeongmin Kang',region:'부산',jan:[9,16],feb:[16,14],mar:[4,20]},{name:'Sunghun Jung',region:'부산',jan:[11,16],feb:[14,14],mar:[4,20]},{name:'Jinhyun Byun',region:'부산',jan:[16,16],feb:[13,14],mar:[7,20]},{name:'Gyeongho Kim',region:'부산',jan:[8,16],feb:[0,14],mar:[0,20]},{name:'Jeongkyu Kim',region:'대전',jan:[0,null],feb:[10,null],mar:[3,null]},{name:'Gyuntae Kim',region:'대전',jan:[20,20],feb:[17,17],mar:[0,23]},{name:'Taewan Kim',region:'대구/제주',jan:[23,21],feb:[24,20],mar:[14,23]},{name:'Sunho Shon',region:'대구/제주',jan:[9,9],feb:[14,8],mar:[14,13]},{name:'Jaeyoung Jung',region:'대구/제주',jan:[8,7],feb:[9,6],mar:[7,10]},{name:'Hyoseong Kim',region:'광주',jan:[11,16],feb:[0,null],mar:[0,null]},{name:'Gyeongjun Kwak',region:'광주',jan:[22,20],feb:[21,25],mar:[10,35]}]};
+
+new Chart(document.getElementById('bOverall'),{type:'bar',data:{labels:bD.months,datasets:[{label:'목표',data:bD.overall.target,backgroundColor:'rgba(139,143,168,.3)',borderRadius:4},{label:'실적',data:bD.overall.actual,backgroundColor:'rgba(59,110,245,.75)',borderRadius:4}]},options:{...CD,responsive:true}});
+
+const rL=Object.keys(bD.regions);
+new Chart(document.getElementById('bRegion'),{type:'bar',data:{labels:rL,datasets:bD.months.map((m,i)=>({label:m,data:rL.map(r=>pct(bD.regions[r].actual[i],bD.regions[r].target[i])),backgroundColor:['rgba(59,110,245,.75)','rgba(34,197,94,.75)','rgba(239,68,68,.75)'][i],borderRadius:4}))},options:{...CD,responsive:true,plugins:{...CD.plugins,tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw}%`}}}}});
+
+(function(){
+  const t=document.getElementById('srTable');
+  t.innerHTML='<tr><th>SR</th><th>지역</th><th>1월 목표</th><th>1월 실적</th><th>1월 달성률</th><th>2월 목표</th><th>2월 실적</th><th>2월 달성률</th><th>3월 목표</th><th>3월 실적</th><th>3월 달성률</th></tr>';
+  [...new Set(bD.srs.map(s=>s.region))].forEach(region=>{
+    const rd=bD.regions[region];
+    if(rd){const r=document.createElement('tr');r.className='rrow';r.innerHTML=`<td colspan="2">${region} 합계</td><td>${rd.target[0]}</td><td>${rd.actual[0]}</td><td>${badge(pct(rd.actual[0],rd.target[0]))}</td><td>${rd.target[1]}</td><td>${rd.actual[1]}</td><td>${badge(pct(rd.actual[1],rd.target[1]))}</td><td>${rd.target[2]}</td><td>${rd.actual[2]}</td><td>${badge(pct(rd.actual[2],rd.target[2]))}</td>`;t.appendChild(r);}
+    bD.srs.filter(s=>s.region===region).forEach(sr=>{const r=document.createElement('tr');r.innerHTML=`<td class="sr-cell">${sr.name}</td><td>${rtag(sr.region)}</td><td>${sr.jan[1]??'–'}</td><td>${sr.jan[0]??'–'}</td><td>${badge(pct(sr.jan[0],sr.jan[1]))}</td><td>${sr.feb[1]??'–'}</td><td>${sr.feb[0]??'–'}</td><td>${badge(pct(sr.feb[0],sr.feb[1]))}</td><td>${sr.mar[1]??'–'}</td><td>${sr.mar[0]??'–'}</td><td>${badge(pct(sr.mar[0],sr.mar[1]))}</td>`;t.appendChild(r);});
+  });
+})();
+
+const bF={region:'전체'};
+function bf(key,val,btn){bF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderBottle();}
+function qc(v){return v?`<td class="r" style="color:var(--accent)">${v}</td>`:`<td class="r mu">–</td>`;}
+function renderBottle(data){
+  data=data||getMergedBottleOutlets();
+  const r=bF.region,sr=document.getElementById('bSrSel').value,q=document.getElementById('bSearch').value.trim().toLowerCase();
+  const rows=data.filter(d=>(r==='전체'||d.team===r)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>(b.m1+b.m2+b.m3)-(a.m1+a.m2+a.m3));
+  document.getElementById('bCount').textContent=`총 ${rows.length}개`;
+  document.getElementById('bBody').innerHTML=rows.map(d=>{const tot=d.m1+d.m2+d.m3;return `<tr><td>${rtag(d.team)}</td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td>${qc(d.m1)}${qc(d.m2)}${qc(d.m3)}<td class="r bo">${tot||'–'}</td></tr>`;}).join('');
+}
+(function(){const srs=[...new Set(BOTTLE_OUTLETS.map(d=>d.sr))].filter(Boolean).sort();const sel=document.getElementById('bSrSel');srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});renderBottle();})();
+
+// SNOW 차트
+const sReg=['서울','부산','대구','제주','대전','광주'];
+const sCl=['rgba(59,110,245,.8)','rgba(34,197,94,.8)','rgba(245,158,11,.8)','rgba(168,85,247,.8)','rgba(239,68,68,.8)','rgba(20,184,166,.8)'];
+const ALL_MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+function buildSnowCounts(data){
+  const c={};sReg.forEach(r=>{c[r]={};ALL_MONTHS.forEach(m=>{c[r][m]=0;});});
+  data.forEach(d=>{if(c[d.region]&&d.first_month)c[d.region][d.first_month]++;});
+  return c;
+}
+function getActiveMonths(c){
+  return ALL_MONTHS.filter(m=>sReg.some(r=>c[r][m]>0));
+}
+
+let snowCnt=buildSnowCounts(SNOW_NEW_OUTLETS);
+let snowMo=getActiveMonths(snowCnt);
+let snowMTot=snowMo.map(m=>sReg.reduce((s,r)=>s+(snowCnt[r][m]||0),0));
+
+const chartSMonthly=new Chart(document.getElementById('sMonthly'),{type:'bar',data:{labels:snowMo,datasets:sReg.map((r,i)=>({label:r,data:snowMo.map(m=>snowCnt[r][m]||0),backgroundColor:sCl[i],borderRadius:4,stack:'s'}))},options:{...CD,responsive:true,plugins:{...CD.plugins,tooltip:{callbacks:{afterTitle:items=>`월 합계: ${snowMTot[items[0].dataIndex]} Outlet`}}},scales:{...CD.scales,x:{...CD.scales.x,ticks:{color:'#6b7280',callback:(val,i)=>[snowMo[i],snowMTot[i]+' Outlet']}}}}});
+const chartSRegion=new Chart(document.getElementById('sRegion'),{type:'bar',data:{labels:sReg,datasets:[{label:'신규 입점',data:sReg.map(r=>snowMo.reduce((s,m)=>s+(snowCnt[r][m]||0),0)),backgroundColor:sCl,borderRadius:4}]},options:{...CD,responsive:true,indexAxis:'y',plugins:{...CD.plugins,legend:{display:false}}}});
+
+function refreshSnowCharts(merged){
+  snowCnt=buildSnowCounts(merged);
+  snowMo=getActiveMonths(snowCnt);
+  snowMTot=snowMo.map(m=>sReg.reduce((s,r)=>s+(snowCnt[r][m]||0),0));
+  chartSMonthly.data.labels=snowMo;
+  sReg.forEach((r,i)=>{chartSMonthly.data.datasets[i].data=snowMo.map(m=>snowCnt[r][m]||0);});
+  chartSMonthly.options.scales.x.ticks.callback=(val,i)=>[snowMo[i],snowMTot[i]+' Outlet'];
+  chartSMonthly.update();
+  chartSRegion.data.datasets[0].data=sReg.map(r=>snowMo.reduce((s,m)=>s+(snowCnt[r][m]||0),0));
+  chartSRegion.update();
+}
+
+const sF={region:'전체',month:'전체'};
+const mOrd={'1월':1,'2월':2,'3월':3,'4월':4,'5월':5,'6월':6,'7월':7,'8월':8,'9월':9,'10월':10,'11월':11,'12월':12};
+const mCol={'1월':'#3b6ef5','2월':'#16a34a','3월':'#d97706','4월':'#9333ea','5월':'#dc2626','6월':'#0d9488','7월':'#3b6ef5','8월':'#ea580c','9월':'#16a34a','10월':'#d97706','11월':'#9333ea','12월':'#dc2626'};
+function sf(key,val,btn){sF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderSnow();}
+function renderSnow(data){
+  data=data||getMergedSnowNew();
+  const sr=document.getElementById('sSrSel').value,q=document.getElementById('sSearch').value.trim().toLowerCase();
+  const rows=data.filter(d=>(sF.region==='전체'||d.region===sF.region)&&(sF.month==='전체'||d.first_month===sF.month)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>(mOrd[a.first_month]||9)-(mOrd[b.first_month]||9)||a.region.localeCompare(b.region));
+  document.getElementById('sCount').textContent=`총 ${rows.length}개`;
+  document.getElementById('sBody').innerHTML=rows.map(d=>`<tr><td>${rtag(d.region)}</td><td><span class="badge" style="background:${(mCol[d.first_month]||'#888')}22;color:${mCol[d.first_month]||'#888'}">${d.first_month}</span></td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td><td class="mu" style="font-size:12px">${d.area2}</td></tr>`).join('');
+}
+(function(){const srs=[...new Set(SNOW_NEW_OUTLETS.map(d=>d.sr))].filter(Boolean).sort();const sel=document.getElementById('sSrSel');srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});renderSnow();})();
+
+// 전체 아울렛
+const aF={region:'전체',sales:'전체'};
+function af(key,val,btn){aF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderAll();}
+function renderAll(){
+  const sr=document.getElementById('aSrSel').value, q=document.getElementById('aSearch').value.trim().toLowerCase();
+  const rows=SNOW_ALL.filter(d=>{
+    if(aF.region!=='전체'&&d.region!==aF.region)return false;
+    if(aF.sales==='있음'&&d.total===0)return false;
+    if(aF.sales==='없음'&&d.total>0)return false;
+    if(sr&&d.sr!==sr)return false;
+    if(q&&!d.outlet.toLowerCase().includes(q)&&!d.customer.toLowerCase().includes(q)&&!d.dde.toLowerCase().includes(q))return false;
+    return true;
+  }).sort((a,b)=>b.total-a.total||a.region.localeCompare(b.region));
+  document.getElementById('aCount').textContent=`총 ${rows.length}개`;
+  const addr=d=>[d.area1,d.area2,d.area3].filter(Boolean).join(' ');
+  document.getElementById('aBody').innerHTML=rows.map(d=>`<tr>
+    <td>${rtag(d.region)}</td>
+    <td class="mu sr-cell" style="font-size:12px">${d.sr}</td>
+    <td>${d.outlet}</td>
+    <td class="mu" style="font-size:12px">${d.dde}</td>
+    <td class="mu" style="font-size:12px">${d.customer}</td>
+    <td class="mu" style="font-size:12px">${addr(d)}</td>
+    ${d.m1?`<td class="r" style="color:var(--accent)">${d.m1}</td>`:'<td class="r mu">–</td>'}
+    ${d.m2?`<td class="r" style="color:var(--accent)">${d.m2}</td>`:'<td class="r mu">–</td>'}
+    ${d.m3?`<td class="r" style="color:var(--accent)">${d.m3}</td>`:'<td class="r mu">–</td>'}
+    <td class="r bo">${d.total||'–'}</td>
+  </tr>`).join('');
+}
+(function(){
+  const srs=[...new Set(SNOW_ALL.map(d=>d.sr))].filter(Boolean).sort();
+  const sel=document.getElementById('aSrSel');
+  srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});
+  renderAll();
+})();
+
+// ===== 데이터 업데이트 로직 =====
+
+// 머지 함수
+function getMergedBottleOutlets(){
+  const d=getUD();
+  const uploaded=new Set(Object.keys(d.bottle));
+  // 업로드 안 된 지점은 기본 데이터 사용
+  const result=BOTTLE_OUTLETS.filter(o=>!uploaded.has(o.team)).map(o=>({...o}));
+  // 업로드된 지점은 rows에서 outlet별 월별 합산
+  Object.entries(d.bottle).forEach(([region,batch])=>{
+    const map={};
+    (batch.rows||[]).forEach(r=>{
+      const mk=MK[r.month];if(!mk)return;
+      const key=(r.outlet||'').trim();if(!key)return;
+      if(!map[key]){map[key]={outlet:key,team:region,sr:r.sr||'',m1:0,m2:0,m3:0,m4:0,m5:0,m6:0,m7:0,m8:0,m9:0,m10:0,m11:0,m12:0};}
+      map[key][mk]=(map[key][mk]||0)+Number(r.qty||0);
+    });
+    result.push(...Object.values(map));
+  });
+  return result;
+}
+function getMergedSnowNew(){
+  const d=getUD();
+  const uploaded=new Set(Object.keys(d.snow));
+  // '대구/제주' 업로드 시 기본 데이터의 '대구'·'제주' 모두 교체
+  const covers=r=>uploaded.has(r)||(uploaded.has('대구/제주')&&(r==='대구'||r==='제주'));
+  const base=SNOW_NEW_OUTLETS.filter(o=>!covers(o.region));
+  const added=[];
+  Object.entries(d.snow).forEach(([,batch])=>{
+    (batch.entries||[]).forEach(e=>{
+      added.push({region:e.region||'',outlet:e.outlet||'',sr:e.sr||'',dde:e.dde||'',customer:e.customer||'',area2:e.area2||'',first_month:e.first_month||''});
+    });
+  });
+  return [...base,...added];
+}
+
+function applyAllUpdates(){
+  const mb=getMergedBottleOutlets();
+  renderBottle(mb);
+  const ms=getMergedSnowNew();
+  renderSnow(ms);
+  refreshSnowCharts(ms);
+  renderAll();
+}
+
+// ===== Excel 업로드 =====
+let parsedBottle=[], parsedSnow=[];
+const curRegion={bottle:null,snow:null};
+// Bottle: 대구/제주 한 지점, Snow: 대구·제주 별도
+const REGIONS_BOTTLE=['서울','부산','대구/제주','대전','광주'];
+const REGIONS_SNOW=['서울','부산','대구/제주','대전','광주'];
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+
+function renderBranchCards(type){
+  const d=getUD();
+  const C=cap(type);
+  const regs=type==='bottle'?REGIONS_BOTTLE:REGIONS_SNOW;
+  document.getElementById('bg'+C).innerHTML=regs.map(region=>{
+    const batch=d[type][region];
+    const uploaded=!!batch;
+    const count=uploaded?(type==='bottle'?(batch.rows||[]).length:(batch.entries||[]).length):0;
+    return `<div class="branch-card${uploaded?' uploaded':''}">
+      <div class="bc-top">${rtag(region)}<span class="bc-date">${uploaded?batch.date:''}</span></div>
+      ${uploaded?`<div class="bc-count">${count}건</div>`:`<div class="bc-none">미업데이트</div>`}
+      <div class="bc-btns">
+        <button class="up-btn" onclick="triggerUpload('${type}','${region}')">📁 업로드</button>
+        ${uploaded?`<button class="del-btn" onclick="uDel('${type}','${region}')">삭제</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+function triggerUpload(type,region){
+  curRegion[type]=region;
+  document.getElementById('f'+cap(type)).click();
+}
+
+function dropFile(e,type){
+  e.preventDefault();
+  document.getElementById('bz'+cap(type)).classList.remove('drag');
+  const file=e.dataTransfer.files[0];
+  if(file)processFile(file,type);
+}
+function readExcel(input,type){
+  const file=input.files[0];
+  if(file)processFile(file,type);
+}
+const SNOW_MO_NAMES=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+function parseSnowRows(rows){
+  // Row 0 = year group header (2025Y / 2026Y), Row 1 = column headers → data starts at row 2
+  const skip=rows.length>1&&String(rows[0][10]||'').includes('2025')?2:1;
+  return rows.slice(skip).filter(r=>String(r[5]||'').trim()!=='');
+}
+function processFile(file,type){
+  const C=cap(type);
+  document.getElementById('fn'+C).textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const ws=wb.Sheets['입력']||wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      let data;
+      if(type==='bottle'){
+        data=rows.slice(1).filter(r=>r.some(c=>String(c).trim()!==''));
+        parsedBottle=data;
+      }else{
+        data=parseSnowRows(rows);
+        parsedSnow=data;
+      }
+      showPreview(type,data);
+    }catch(err){alert('파일을 읽을 수 없습니다: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+function showPreview(type,data){
+  const C=cap(type);
+  const pb=document.getElementById('pb'+C);
+  const pv=document.getElementById('pv'+C);
+  if(type==='bottle'){
+    document.getElementById('pc'+C).textContent=`총 ${data.length}건`;
+    pb.innerHTML=data.map(r=>`<tr><td>${r[0]||''}</td><td>${r[1]||''}</td><td class="sr-cell">${r[2]||''}</td><td>${r[3]||''}</td><td class="r">${r[4]||''}</td></tr>`).join('');
+  }else{
+    // Snow original format: B=Team(1), D=DDE(3), E=Customer(4), F=Outlet(5), G=SR(6), I=Area2(8)
+    // 2025: cols 10-21, 2026: cols 23-34
+    const newCount=data.filter(r=>{
+      const t25=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[10+i])||0),0);
+      const t26=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[23+i])||0),0);
+      return t25===0&&t26>0;
+    }).length;
+    document.getElementById('pc'+C).textContent=`총 ${data.length}건 (신규입점 ${newCount}건)`;
+    pb.innerHTML=data.map(r=>{
+      const t25=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[10+i])||0),0);
+      const t26=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[23+i])||0),0);
+      const isNew=t25===0&&t26>0;
+      return `<tr${isNew?' style="background:rgba(59,110,245,.06)"':''}>
+        <td>${r[1]||''}</td><td class="sr-cell mu">${r[6]||''}</td><td>${r[5]||''}</td>
+        <td class="mu">${r[3]||''}</td><td class="mu">${r[4]||''}</td><td class="mu">${r[8]||''}</td>
+        <td class="r mu">${t25||'–'}</td><td class="r" style="color:var(--accent)">${t26||'–'}</td>
+        <td>${isNew?'<span class="badge bg">신규</span>':''}</td>
+      </tr>`;
+    }).join('');
+  }
+  pv.style.display='block';
+}
+function confirmUpload(type){
+  const data=type==='bottle'?parsedBottle:parsedSnow;
+  if(!data.length){alert('업로드된 데이터가 없습니다.');return;}
+  const region=curRegion[type];
+  if(!region){alert('지점을 선택 후 업로드해주세요.');return;}
+  const d=getUD();
+  const now=new Date().toISOString().slice(0,10);
+  if(type==='bottle'){
+    const rows=[];
+    data.forEach(r=>{
+      const month=String(r[1]||'').trim(),sr=String(r[2]||'').trim();
+      const outlet=String(r[3]||'').trim(),qty=Number(r[4])||0;
+      if(!month||!outlet)return;
+      rows.push({sr,outlet,month,qty});
+    });
+    d.bottle[region]={date:now,rows};
+    alert(`저장 완료: ${region} ${rows.length}건 반영`);
+  }else{
+    const entries=[];
+    data.forEach(r=>{
+      const outlet=String(r[5]||'').trim();if(!outlet)return;
+      const t25=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[10+i])||0),0);
+      const y26=SNOW_MO_NAMES.map((m,i)=>Number(r[23+i])||0);
+      const t26=y26.reduce((s,v)=>s+v,0);
+      if(t25===0&&t26>0){
+        const fi=y26.findIndex(v=>v>0);
+        entries.push({region:String(r[1]||'').trim(),outlet,sr:String(r[6]||'').trim(),dde:String(r[3]||'').trim(),customer:String(r[4]||'').trim(),area2:String(r[8]||'').trim(),first_month:SNOW_MO_NAMES[fi]});
+      }
+    });
+    d.snow[region]={date:now,entries};
+    alert(`저장 완료: ${region} 신규입점 ${entries.length}건 반영`);
+  }
+  setUD(d);
+  cancelPreview(type);
+  renderBranchCards(type);
+  applyAllUpdates();
+}
+function cancelPreview(type){
+  const C=cap(type);
+  document.getElementById('pv'+C).style.display='none';
+  document.getElementById('fn'+C).textContent='';
+  document.getElementById('f'+C).value='';
+  if(type==='bottle')parsedBottle=[];
+  else parsedSnow=[];
+}
+
+// ===== 현황 다운로드 =====
+function triggerXlsxDownload(wb, filename){
+  const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+  const a=document.createElement('a');
+  a.href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+wbout;
+  a.download=filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+}
+function downloadCurrent(type){
+  const wb=XLSX.utils.book_new();
+  const today=new Date().toISOString().slice(0,10);
+  if(type==='bottle'){
+    const data=getMergedBottleOutlets().sort((a,b)=>a.team.localeCompare(b.team)||a.sr.localeCompare(b.sr)||a.outlet.localeCompare(b.outlet));
+    const hdr=['지점','SR','아울렛명','1월','2월','3월','합계'];
+    const rows=data.map(d=>{const t=(d.m1||0)+(d.m2||0)+(d.m3||0);return[(d.team||''),(d.sr||''),(d.outlet||''),(d.m1||''),(d.m2||''),(d.m3||''),(t||'')];});
+    const ws=XLSX.utils.aoa_to_sheet([hdr,...rows]);
+    ws['!cols']=[{wch:10},{wch:18},{wch:32},{wch:7},{wch:7},{wch:7},{wch:8}];
+    XLSX.utils.book_append_sheet(wb,ws,'Bottle 현황');
+    triggerXlsxDownload(wb,'Bottle_현황_'+today+'.xlsx');
+  }else{
+    const data=SNOW_ALL.slice().sort((a,b)=>a.region.localeCompare(b.region)||a.outlet.localeCompare(b.outlet));
+    const h1=Array(35).fill('');h1[10]='2025Y';h1[23]='2026Y';
+    const h2=['','Team','Code','DDE','Customer','Outlet Name','Outlet SR','Area1 (시, 도)','Area2 (구, 시)','Area3 (상세주소)',...SNOW_MO_NAMES,'',...SNOW_MO_NAMES];
+    const rows=data.map(d=>{
+      const row=Array(35).fill('');
+      row[1]=d.region;row[2]=d.code||'';row[3]=d.dde||'';row[4]=d.customer||'';
+      row[5]=d.outlet;row[6]=d.sr;row[7]=d.area1||'';row[8]=d.area2||'';row[9]=d.area3||'';
+      SNOW_MO_NAMES.forEach((m,i)=>{row[10+i]=d[`y25_m${i+1}`]||'';});
+      SNOW_MO_NAMES.forEach((m,i)=>{row[23+i]=d[`m${i+1}`]||'';});
+      return row;
+    });
+    const ws=XLSX.utils.aoa_to_sheet([h1,h2,...rows]);
+    ws['!merges']=[{s:{r:0,c:10},e:{r:0,c:21}},{s:{r:0,c:23},e:{r:0,c:34}}];
+    ws['!cols']=[{wch:2},{wch:10},{wch:8},{wch:14},{wch:22},{wch:30},{wch:14},{wch:14},{wch:12},{wch:24},...Array(12).fill({wch:6}),{wch:3},...Array(12).fill({wch:6})];
+    XLSX.utils.book_append_sheet(wb,ws,'전체현황');
+    triggerXlsxDownload(wb,'Snow_전체현황_'+today+'.xlsx');
+  }
+}
+
+// 이력 렌더
+function uHistRender(){
+  renderBranchCards('bottle');
+  renderBranchCards('snow');
+}
+function uDel(type,region){
+  if(!confirm(`${region} 업데이트를 삭제하시겠습니까?`))return;
+  const d=getUD();delete d[type][region];setUD(d);renderBranchCards(type);applyAllUpdates();
+}
+
+// 초기화
+uHistRender();
+applyAllUpdates();
+</script>
+</body>
+</html>

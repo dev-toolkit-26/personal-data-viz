@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+<title>KPI Dashboard 2026</title>
+<script src="chart.min.js"></script>
+<script src="xlsx.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════
+//  Supabase REST helpers
+// ═══════════════════════════════════════════════════
+const SUPA_URL='https://elqammnozbfhkitnncsz.supabase.co';
+const SUPA_KEY='sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd';
+const SH={apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY,'Content-Type':'application/json'};
+async function sGet(t,q){
+  const r=await fetch(SUPA_URL+'/rest/v1/'+t+'?select=*'+(q?'&'+q:''),{headers:SH});
+  if(!r.ok)throw new Error(await r.text());
+  return r.json();
+}
+async function sDel(t,q){
+  const r=await fetch(SUPA_URL+'/rest/v1/'+t+(q?'?'+q:''),{method:'DELETE',headers:SH});
+  if(!r.ok)throw new Error(await r.text());
+}
+async function sIns(t,d){
+  if(!d||!d.length)return;
+  const r=await fetch(SUPA_URL+'/rest/v1/'+t,{method:'POST',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(d)});
+  if(!r.ok)throw new Error(await r.text());
+}
+// Data globals (populated async from Supabase)
+let BOTTLE_OUTLETS=[],SNOW_NEW_OUTLETS=[],SNOW_ALL=[];
+let RSP_DATA_BASE=[],CC_DATA_BASE=[],WS_DATA_BASE=[],Y25_DATA=[];
+</script>
+<style>
+:root{--bg:#f4f7f4;--surface:#fff;--surface2:#f0f5f0;--border:#dce5dc;--text:#1a1d2e;--muted:#6b7280;--accent:#205527;--green:#16a34a;--yellow:#d97706;--red:#dc2626}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:"Inter","Segoe UI",Arial,sans-serif;font-size:14px}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 28px;display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:18px;font-weight:700}
+header h1 span{color:var(--accent)}
+.date-badge{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:12px;color:var(--muted)}
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 28px}
+.tab{padding:12px 20px;cursor:pointer;border-bottom:2px solid transparent;font-size:13px;font-weight:600;color:var(--muted);transition:all .2s}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:hover:not(.active){color:var(--text)}
+.page{display:none;padding:24px 28px}
+.page.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.card-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.card-value{font-size:28px;font-weight:700;line-height:1}
+.card-sub{font-size:12px;color:var(--muted);margin-top:6px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+.box h3{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:16px}
+.tw{overflow-x:auto}
+.ow{max-height:480px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--surface2);padding:9px 13px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+td{padding:9px 13px;border-bottom:1px solid var(--border)}
+tr:hover td{background:var(--surface2)}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
+.bg{background:rgba(22,163,74,.12);color:var(--green)}
+.by{background:rgba(217,119,6,.12);color:var(--yellow)}
+.br{background:rgba(220,38,38,.12);color:var(--red)}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
+.tag-서울{background:rgba(59,110,245,.12);color:#3b6ef5}
+.tag-부산{background:rgba(234,88,12,.12);color:#ea580c}
+.tag-대구{background:rgba(168,85,247,.12);color:#9333ea}
+.tag-제주{background:rgba(20,184,166,.12);color:#0d9488}
+.tag-대전{background:rgba(217,119,6,.12);color:#d97706}
+.tag-광주{background:rgba(220,38,38,.12);color:#dc2626}
+.tag-Seoul{background:rgba(59,110,245,.12);color:#3b6ef5}
+.tag-Busan{background:rgba(234,88,12,.12);color:#ea580c}
+.tag-Daegu{background:rgba(168,85,247,.12);color:#9333ea}
+.tag-Jeju{background:rgba(20,184,166,.12);color:#0d9488}
+.tag-Daejeon{background:rgba(217,119,6,.12);color:#d97706}
+.tag-Gwangju{background:rgba(220,38,38,.12);color:#dc2626}
+td.sr-cell{white-space:nowrap}
+.rrow td{background:var(--surface2);font-weight:700;color:var(--accent)}
+.frow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.frow label{font-size:11px;font-weight:700;color:var(--muted)}
+.fb{padding:4px 13px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.fb.on,.fb:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.fsel{padding:5px 9px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;font-weight:600}
+.fi{padding:5px 11px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:12px;width:180px}
+.fi::placeholder{color:var(--muted)}
+.fc{font-size:12px;color:var(--muted);margin-left:auto}
+.r{text-align:right;font-weight:600}
+.mu{color:var(--muted)}
+.bo{font-weight:700}
+/* 업데이트 탭 */
+.upload-zone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface)}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(59,110,245,.04)}
+.upload-zone input[type=file]{display:none}
+.upload-icon{font-size:32px;margin-bottom:10px}
+.upload-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+.upload-sub{font-size:12px;color:var(--muted)}
+.upload-btn{margin-top:14px;padding:7px 20px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.upload-btn:hover{opacity:.85}
+.preview-box{margin-top:14px;display:none}
+.preview-box .prev-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.preview-box .prev-title{font-size:13px;font-weight:700}
+.prev-count{font-size:12px;color:var(--muted)}
+.confirm-btn{padding:6px 18px;border-radius:20px;border:none;background:var(--green);color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.confirm-btn:hover{opacity:.85}
+.cancel-btn{padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;margin-left:8px}
+.utable{width:100%;border-collapse:collapse;font-size:12px}
+.utable th{background:var(--surface2);padding:7px 10px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);text-align:left;position:sticky;top:0}
+.utable td{padding:6px 10px;border-bottom:1px solid var(--border)}
+.utable tr:hover td{background:var(--surface2)}
+.dl-btn{padding:5px 14px;border-radius:20px;border:1px solid var(--accent);background:#fff;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+.dl-btn:hover{background:var(--accent);color:#fff}
+.status-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.status-card{flex:1;min-width:120px;max-width:200px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface2)}
+.status-card.uploaded{border-color:var(--green);background:#f0fdf4}
+.sc-branch{font-size:12px;font-weight:700;margin-bottom:4px}
+.sc-date{font-size:11px;color:var(--muted);display:block;margin-bottom:3px}
+.sc-count{font-size:13px;font-weight:700;color:var(--green)}
+.sc-none{font-size:12px;color:#9ca3af}
+.hist-badge{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700}
+.hist-bottle{background:rgba(59,110,245,.1);color:#3b6ef5}
+.hist-snow{background:rgba(20,184,166,.1);color:#0d9488}
+.del-btn{padding:2px 9px;border-radius:4px;border:1px solid #fca5a5;background:#fff1f1;color:var(--red);font-size:12px;font-weight:700;cursor:pointer}
+.file-name{font-size:12px;color:var(--green);font-weight:600;margin-top:8px}
+.branch-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+@media(max-width:900px){.branch-grid{grid-template-columns:repeat(2,1fr)}}
+.branch-card{border:1px solid var(--border);border-radius:10px;padding:14px 16px;background:var(--surface2);transition:border-color .2s}
+.branch-card.uploaded{background:var(--surface);border-color:var(--accent)}
+.bc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.bc-date{font-size:11px;color:var(--muted)}
+.bc-count{font-size:22px;font-weight:700;color:var(--accent);margin-bottom:10px}
+.bc-none{font-size:12px;color:var(--muted);margin-bottom:10px}
+.bc-btns{display:flex;gap:8px}
+.up-btn{padding:5px 12px;border-radius:16px;border:1px solid var(--accent);background:var(--surface);color:var(--accent);font-size:12px;font-weight:700;cursor:pointer}
+.up-btn:hover{background:var(--accent);color:#fff}
+
+/* Snow Incentive Tab */
+.si-section{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;margin-top:22px}
+.si-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:900px){.si-grid3{grid-template-columns:1fr}}
+.si-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.si-lbl{font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.si-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.si-bignum{font-size:26px;font-weight:700;color:var(--text);line-height:1}
+.si-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.si-bar-wrap{margin-top:12px;background:var(--border);border-radius:4px;height:6px;overflow:hidden}
+.si-bar-fill{height:100%;border-radius:4px;transition:width .6s ease}
+.si-bar-lbl{margin-top:5px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+.si-month-row{display:flex;gap:8px;margin-top:10px}
+.si-month{flex:1;background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;border:1px solid var(--border)}
+.si-month .ml{font-size:10px;color:var(--muted)}
+.si-month .mv{font-size:16px;font-weight:700;margin-top:3px;color:var(--muted)}
+.si-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.si-team-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden;border-left-width:4px}
+.si-team-name{font-size:14px;font-weight:700;margin-bottom:10px}
+.si-stat-row{display:flex;gap:8px;margin-bottom:8px}
+.si-stat{flex:1;background:var(--surface2);border-radius:6px;padding:7px 8px;text-align:center;border:1px solid var(--border)}
+.si-stat-lbl{font-size:9px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px}
+.si-stat-val{font-size:16px;font-weight:700}
+.si-ref{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.si-overlay{position:absolute;inset:0;background:rgba(240,242,247,.65);display:flex;align-items:center;justify-content:center;border-radius:10px;pointer-events:none}
+.si-overlay span{background:var(--border);color:var(--muted);padding:3px 12px;border-radius:20px;font-size:11px;font-weight:700}
+.si-chart-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+.si-chart-box canvas{max-height:240px}
+.si-r{text-align:right;font-variant-numeric:tabular-nums}
+.si-td{background:rgba(59,110,245,.12);color:#3b6ef5;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700}
+.si-ts{background:rgba(22,163,74,.12);color:#16a34a;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700}
+.si-tp{background:rgba(217,119,6,.12);color:#d97706;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700}
+.si-new{background:rgba(22,163,74,.12);color:#16a34a;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700}
+.team-tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+
+.theme-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700}
+.theme-discount{background:rgba(59,110,245,.12);color:#3b6ef5}
+.theme-set{background:rgba(22,163,74,.12);color:#16a34a}
+.theme-price{background:rgba(217,119,6,.12);color:#d97706}
+.num-cell{text-align:right;font-variant-numeric:tabular-nums}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-ok{background:rgba(22,163,74,.12);color:#16a34a}
+.badge-warn{background:rgba(217,119,6,.12);color:#d97706}
+.badge-empty{background:rgba(107,114,128,.12);color:#6b7280}
+.si-pct-badge{margin-left:6px;padding:1px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:10px}
+.si-ok{background:rgba(22,163,74,.12);color:#16a34a;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.si-empty{background:rgba(107,114,128,.12);color:#6b7280;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+/* Bottle KPI — gauge ring */
+.gauge-wrap{width:130px;height:130px;border-radius:50%;background:conic-gradient(var(--clr) var(--pct),rgba(255,255,255,.08) var(--pct));display:flex;align-items:center;justify-content:center}
+.gauge-val{width:98px;height:98px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:1.45rem;font-weight:700}
+/* Bottle KPI — region progress */
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem}
+.rcard{background:var(--surface2,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem}
+.rcard h4{margin:0 0 .6rem;font-size:.85rem;font-weight:700;color:var(--text)}
+.rpbar-row{display:flex;align-items:center;gap:.4rem;margin-bottom:.35rem}
+.rpbar-label{width:2.2rem;font-size:.72rem;color:var(--muted);flex-shrink:0}
+.rpbar-track{flex:1;height:9px;background:rgba(255,255,255,.08);border-radius:5px;overflow:hidden}
+.rpbar-fill{height:100%;border-radius:5px}
+.rpbar-pct{width:3.2rem;font-size:.78rem;font-weight:700;text-align:right;flex-shrink:0}
+</style>
+</head>
+<body>
+<div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+  <div style="width:48px;height:48px;border:5px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div>
+  <div style="color:#fff;font-size:15px;font-weight:600">Supabase에서 데이터 로딩 중...</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+<header>
+  <h1><span style="color:#e30613;">★</span> KPI <span>Dashboard</span> 2026</h1>
+  <div class="date-badge">기준일: 2026.03.23</div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('bottle',this)">33cl Bottle SR KPI</div>
+  <div class="tab" onclick="switchTab('snow',this)">SNOW 50cl 신규 아울렛</div>
+  <div class="tab" onclick="switchTab('incentive',this)">Snow Incentive</div>
+  <div class="tab" onclick="switchTab('update',this)" style="margin-left:auto">데이터 업데이트</div>
+</div>
+
+<!-- BOTTLE -->
+<div class="page active" id="page-bottle">
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">1월 전체 달성률</div>
+      <div class="card-value" style="color:var(--yellow)">90%</div>
+      <div class="card-sub">목표 312 / 실적 281</div>
+    </div>
+    <div class="card">
+      <div class="card-label">2월 전체 달성률</div>
+      <div class="card-value" style="color:var(--green)">104%</div>
+      <div class="card-sub">목표 268 / 실적 278</div>
+    </div>
+    <div class="card">
+      <div class="card-label">3월 전체 달성률</div>
+      <div class="card-value" style="color:var(--red)">49%</div>
+      <div class="card-sub">목표 354 / 실적 175</div>
+    </div>
+    <div class="card">
+      <div class="card-label">총 SR 수</div>
+      <div class="card-value" style="color:var(--accent)">22</div>
+      <div class="card-sub">서울 11 · 부산 4 · 기타 7</div>
+    </div>
+  </div>
+
+  <!-- 지역별 달성률 -->
+  <div class="box">
+    <h3>지역별 달성률</h3>
+    <div class="rgrid">
+      <div class="rcard">
+        <h4>서울</h4>
+        <div class="rpbar-row"><span class="rpbar-label">1월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:93%;background:var(--yellow)"></div></div><span class="rpbar-pct" style="color:var(--yellow)">93%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">2월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:100%;background:var(--green)"></div></div><span class="rpbar-pct" style="color:var(--green)">103%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">3월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:66%;background:var(--yellow)"></div></div><span class="rpbar-pct" style="color:var(--yellow)">66%</span></div>
+      </div>
+      <div class="rcard">
+        <h4>부산</h4>
+        <div class="rpbar-row"><span class="rpbar-label">1월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:69%;background:var(--yellow)"></div></div><span class="rpbar-pct" style="color:var(--yellow)">69%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">2월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:77%;background:var(--yellow)"></div></div><span class="rpbar-pct" style="color:var(--yellow)">77%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">3월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:19%;background:var(--red)"></div></div><span class="rpbar-pct" style="color:var(--red)">19%</span></div>
+      </div>
+      <div class="rcard">
+        <h4>대전</h4>
+        <div class="rpbar-row"><span class="rpbar-label">1월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:100%;background:var(--green)"></div></div><span class="rpbar-pct" style="color:var(--green)">100%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">2월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:100%;background:var(--green)"></div></div><span class="rpbar-pct" style="color:var(--green)">159%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">3월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:13%;background:var(--red)"></div></div><span class="rpbar-pct" style="color:var(--red)">13%</span></div>
+      </div>
+      <div class="rcard">
+        <h4>광주</h4>
+        <div class="rpbar-row"><span class="rpbar-label">1월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:92%;background:var(--yellow)"></div></div><span class="rpbar-pct" style="color:var(--yellow)">92%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">2월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:84%;background:var(--yellow)"></div></div><span class="rpbar-pct" style="color:var(--yellow)">84%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">3월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:29%;background:var(--red)"></div></div><span class="rpbar-pct" style="color:var(--red)">29%</span></div>
+      </div>
+      <div class="rcard">
+        <h4>대구/제주</h4>
+        <div class="rpbar-row"><span class="rpbar-label">1월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:100%;background:var(--green)"></div></div><span class="rpbar-pct" style="color:var(--green)">108%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">2월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:100%;background:var(--green)"></div></div><span class="rpbar-pct" style="color:var(--green)">138%</span></div>
+        <div class="rpbar-row"><span class="rpbar-label">3월</span><div class="rpbar-track"><div class="rpbar-fill" style="width:76%;background:var(--yellow)"></div></div><span class="rpbar-pct" style="color:var(--yellow)">76%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h3>SR 상세 실적 테이블</h3>
+    <div class="tw"><table id="srTable"></table></div>
+  </div>
+
+  <div class="box">
+    <h3>아울렛별 월별 판매 현황</h3>
+    <div class="frow">
+      <label>지점</label>
+      <button class="fb on" onclick="bf('region','전체',this)">전체</button>
+      <button class="fb" onclick="bf('region','서울',this)">서울</button>
+      <button class="fb" onclick="bf('region','부산',this)">부산</button>
+      <button class="fb" onclick="bf('region','대구',this)">대구</button>
+      <button class="fb" onclick="bf('region','대전',this)">대전</button>
+      <button class="fb" onclick="bf('region','광주',this)">광주</button>
+      <button class="fb" onclick="bf('region','제주',this)">제주</button>
+    </div>
+    <div class="frow">
+      <label>SR</label>
+      <select class="fsel" id="bSrSel" onchange="renderBottle()"><option value="">전체</option></select>
+      <label>검색</label>
+      <input class="fi" id="bSearch" placeholder="아울렛명 검색..." oninput="renderBottle()">
+      <span class="fc" id="bCount"></span>
+    </div>
+    <div class="ow">
+      <table>
+        <thead><tr>
+          <th>지점</th><th>SR</th><th>아울렛명</th>
+          <th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th>
+        </tr></thead>
+        <tbody id="bBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- SNOW -->
+<div class="page" id="page-snow">
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">1월 신규 입점</div>
+      <div class="card-value" style="color:var(--accent)">19</div>
+      <div class="card-sub">서울 2 · 부산 2 · 대구 2 · 대전 4 · 광주 9</div>
+    </div>
+    <div class="card">
+      <div class="card-label">2월 신규 입점</div>
+      <div class="card-value" style="color:var(--accent)">23</div>
+      <div class="card-sub">서울 7 · 부산 8 · 대구 1 · 제주 1 · 광주 6</div>
+    </div>
+    <div class="card">
+      <div class="card-label">3월 신규 입점</div>
+      <div class="card-value" style="color:var(--accent)">12</div>
+      <div class="card-sub">서울 2 · 부산 7 · 대전 3</div>
+    </div>
+    <div class="card">
+      <div class="card-label">누적 신규 입점</div>
+      <div class="card-value" style="color:var(--green)">54</div>
+      <div class="card-sub">25년 미입점 → 26년 신규 개척</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="box"><h3>월별 신규 입점 추이 (지점별)</h3><canvas id="sMonthly"></canvas></div>
+    <div class="box"><h3>지점별 누적 신규 입점</h3><canvas id="sRegion"></canvas></div>
+  </div>
+
+  <div class="box">
+    <h3>신규 입점 아울렛 목록</h3>
+    <div class="frow">
+      <label>지점</label>
+      <button class="fb on" onclick="sf('region','전체',this)">전체</button>
+      <button class="fb" onclick="sf('region','서울',this)">서울</button>
+      <button class="fb" onclick="sf('region','부산',this)">부산</button>
+      <button class="fb" onclick="sf('region','대구',this)">대구</button>
+      <button class="fb" onclick="sf('region','제주',this)">제주</button>
+      <button class="fb" onclick="sf('region','대전',this)">대전</button>
+      <button class="fb" onclick="sf('region','광주',this)">광주</button>
+    </div>
+    <div class="frow">
+      <label>입점월</label>
+      <button class="fb on" onclick="sf('month','전체',this)">전체</button>
+      <button class="fb" onclick="sf('month','1월',this)">1월</button>
+      <button class="fb" onclick="sf('month','2월',this)">2월</button>
+      <button class="fb" onclick="sf('month','3월',this)">3월</button>
+      <label>SR</label>
+      <select class="fsel" id="sSrSel" onchange="renderSnow()"><option value="">전체</option></select>
+      <label>검색</label>
+      <input class="fi" id="sSearch" placeholder="아울렛명 검색..." oninput="renderSnow()">
+      <span class="fc" id="sCount"></span>
+    </div>
+    <div class="ow">
+      <table>
+        <thead><tr>
+          <th>지점</th><th>입점월</th><th>SR</th><th>아울렛명</th><th>지역(구)</th>
+        </tr></thead>
+        <tbody id="sBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 전체 아울렛 리스트 -->
+  <div class="box">
+    <h3>전체 아울렛 리스트</h3>
+    <div class="frow">
+      <label>지점</label>
+      <button class="fb on" onclick="af('region','전체',this)">전체</button>
+      <button class="fb" onclick="af('region','서울',this)">서울</button>
+      <button class="fb" onclick="af('region','부산',this)">부산</button>
+      <button class="fb" onclick="af('region','대구',this)">대구</button>
+      <button class="fb" onclick="af('region','제주',this)">제주</button>
+      <button class="fb" onclick="af('region','대전',this)">대전</button>
+      <button class="fb" onclick="af('region','광주',this)">광주</button>
+    </div>
+    <div class="frow">
+      <label>매출</label>
+      <button class="fb on" onclick="af('sales','전체',this)">전체</button>
+      <button class="fb" onclick="af('sales','있음',this)">매출 있음</button>
+      <button class="fb" onclick="af('sales','없음',this)">매출 없음</button>
+      <label>SR</label>
+      <select class="fsel" id="aSrSel" onchange="renderAll()"><option value="">전체</option></select>
+      <label>검색</label>
+      <input class="fi" id="aSearch" placeholder="아울렛명 / 도매상 검색..." oninput="renderAll()" style="width:220px">
+      <span class="fc" id="aCount"></span>
+    </div>
+    <div class="ow">
+      <table>
+        <thead><tr>
+          <th>지점</th><th>SR</th><th>아울렛명</th>
+          <th>도매담당</th><th>도매상명</th>
+          <th>주소</th>
+          <th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">합계</th>
+        </tr></thead>
+        <tbody id="aBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 데이터 업데이트 ===== -->
+<div class="page" id="page-update">
+
+  <!-- Bottle -->
+  <div class="box" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">33cl Bottle 업데이트</h3>
+      <button class="dl-btn" onclick="downloadCurrent('bottle')">⬇ 현황 다운로드</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">① 현황 다운로드 → ② Excel 수치 수정 → ③ 업로드</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <input type="file" id="fBottleWide" accept=".xlsx,.xls" style="display:none" onchange="readBottleWide(this)">
+      <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="document.getElementById('fBottleWide').click()">📁 현황파일 업로드</button>
+      <span id="fnBottleWide" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div class="status-grid" id="statusBottle"></div>
+    <div class="preview-box" id="pvBottleWide">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span><span class="prev-count" id="pcBottleWide"></span>
+        <div>
+          <button class="confirm-btn" onclick="confirmBottleWide()">대시보드 반영</button>
+          <button class="cancel-btn" onclick="cancelBottleWide()">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:300px">
+        <table class="utable"><thead><tr><th>지점</th><th>SR</th><th>아울렛명</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th></tr></thead>
+        <tbody id="pbBottleWide"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snow -->
+  <div class="box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">Snow 신규입점 업데이트</h3>
+      <button class="dl-btn" onclick="downloadCurrent('snow')">⬇ 현황 다운로드</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">① 현황 다운로드 → ② Excel에서 신규 행 추가 → ③ 업로드</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <input type="file" id="fSnowWide" accept=".xlsx,.xls" style="display:none" onchange="readSnowWide(this)">
+      <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="document.getElementById('fSnowWide').click()">📁 현황파일 업로드</button>
+      <span id="fnSnowWide" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div class="status-grid" id="statusSnow"></div>
+    <div class="preview-box" id="pvSnowWide">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span><span class="prev-count" id="pcSnowWide"></span>
+        <div>
+          <button class="confirm-btn" onclick="confirmSnowWide()">대시보드 반영</button>
+          <button class="cancel-btn" onclick="cancelSnowWide()">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:300px">
+        <table class="utable"><thead><tr><th>지점</th><th>SR</th><th>아울렛명</th><th>도매담당</th><th>도매상명</th><th>구</th><th>신규입점월</th></tr></thead>
+        <tbody id="pbSnowWide"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snow Incentive -->
+  <div class="box" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">Snow Incentive — RSP Setting 업데이트</h3>
+      <button class="dl-btn" onclick="siDownloadRsp()">⬇ RSP 다운로드</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">① 현황 다운로드 → ② Excel 수정 (팀/SR/WS/아울렛/지역/SPT수량/기존가격/변경가격) → ③ 업로드</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <input type="file" id="fSIRsp" accept=".xlsx,.xls" style="display:none" onchange="siReadRsp(this)">
+      <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="document.getElementById('fSIRsp').click()">📁 RSP 파일 업로드</button>
+      <span id="fnSIRsp" style="font-size:12px;color:var(--muted)"></span>
+      <button class="del-btn" id="delSIRsp" style="display:none" onclick="siDeleteRsp()">기본값 복원</button>
+    </div>
+    <div id="statusSIRsp" style="font-size:12px;color:var(--muted)">기본 데이터 사용 중</div>
+    <div class="status-grid" id="statusSIRspGrid" style="margin-top:10px"></div>
+    <div class="preview-box" id="pvSIRsp">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span><span class="prev-count" id="pcSIRsp"></span>
+        <div>
+          <button class="confirm-btn" onclick="siConfirmRsp()">대시보드 반영</button>
+          <button class="cancel-btn" onclick="siCancelRsp()">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:250px">
+        <table class="utable"><thead><tr><th>팀</th><th>SR</th><th>WS</th><th>아울렛</th><th>지역</th><th class="r">SPT</th><th class="r">기존가격</th><th class="r">변경가격</th></tr></thead>
+        <tbody id="pbSIRsp"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">Snow Incentive — Credit Card 업데이트</h3>
+      <button class="dl-btn" onclick="siDownloadCc()">⬇ CC 다운로드</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">① 현황 다운로드 → ② Excel 수정 → ③ 업로드</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <input type="file" id="fSICc" accept=".xlsx,.xls" style="display:none" onchange="siReadCc(this)">
+      <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="document.getElementById('fSICc').click()">📁 CC 파일 업로드</button>
+      <span id="fnSICc" style="font-size:12px;color:var(--muted)"></span>
+      <button class="del-btn" id="delSICc" style="display:none" onclick="siDeleteCc()">기본값 복원</button>
+    </div>
+    <div id="statusSICc" style="font-size:12px;color:var(--muted)">기본 데이터 사용 중</div>
+    <div class="status-grid" id="statusSICcGrid" style="margin-top:10px"></div>
+    <div class="preview-box" id="pvSICc">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span><span class="prev-count" id="pcSICc"></span>
+        <div>
+          <button class="confirm-btn" onclick="siConfirmCc()">대시보드 반영</button>
+          <button class="cancel-btn" onclick="siCancelCc()">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:250px">
+        <table class="utable"><thead><tr><th>팀</th><th>SR</th><th>WS</th><th>아울렛</th><th>지역</th><th>테마</th><th class="r">수량</th><th class="r">금액</th></tr></thead>
+        <tbody id="pbSICc"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">Snow Incentive — WS Incentive 업데이트</h3>
+      <button class="dl-btn" onclick="siDownloadWs()">⬇ WS 다운로드</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">팀별 WS 인센티브 수량 입력 (팀, 3월, 4월, 5월)</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <input type="file" id="fSIWs" accept=".xlsx,.xls" style="display:none" onchange="siReadWs(this)">
+      <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="document.getElementById('fSIWs').click()">📁 WS 파일 업로드</button>
+      <span id="fnSIWs" style="font-size:12px;color:var(--muted)"></span>
+      <button class="del-btn" id="delSIWs" style="display:none" onclick="siDeleteWs()">기본값 복원</button>
+    </div>
+    <div id="statusSIWs" style="font-size:12px;color:var(--muted)">기본 데이터 사용 중 (WS 미입력)</div>
+    <div class="preview-box" id="pvSIWs">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span><span class="prev-count" id="pcSIWs"></span>
+        <div>
+          <button class="confirm-btn" onclick="siConfirmWs()">대시보드 반영</button>
+          <button class="cancel-btn" onclick="siCancelWs()">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:200px">
+        <table class="utable"><thead><tr><th>팀</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th></tr></thead>
+        <tbody id="pbSIWs"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SNOW INCENTIVE -->
+<div class="page" id="page-incentive">
+
+  <div class="si-section">전체 현황</div>
+  <div class="si-grid3">
+    <div class="si-card">
+      <div class="si-lbl"><span class="si-dot" style="background:#3b6ef5"></span>RSP Setting</div>
+      <div style="display:flex;gap:18px;margin-bottom:4px">
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">아울렛 수</div>
+          <div class="si-bignum" id="rspCount">0</div>
+          <div class="si-sub">/ 237 목표</div>
+        </div>
+        <div style="width:1px;background:var(--border);margin:4px 0"></div>
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px">SPT 사용수량</div>
+          <div class="si-bignum" id="rspSpt">0</div>
+          <div class="si-sub">BOX</div>
+        </div>
+      </div>
+      <div class="si-bar-wrap"><div class="si-bar-fill" id="rspBar" style="width:0%"></div></div>
+      <div class="si-bar-lbl"><span id="rspPct">0%</span><span>목표 6,000원 일괄 적용</span></div>
+    </div>
+    <div class="si-card">
+      <div class="si-lbl"><span class="si-dot" style="background:#d97706"></span>Credit Card (T&amp;E)</div>
+      <div class="si-bignum" id="ccAmount">0</div>
+      <div class="si-sub">/ 1,780,000원 예산</div>
+      <div class="si-bar-wrap"><div class="si-bar-fill" id="ccBar" style="width:0%"></div></div>
+      <div class="si-bar-lbl"><span id="ccPct">0%</span><span id="ccCount">0건</span></div>
+    </div>
+    <div class="si-card">
+      <div class="si-lbl"><span class="si-dot" style="background:#9333ea"></span>WS Incentive</div>
+      <div class="si-month-row">
+        <div class="si-month"><div class="ml">3월</div><div class="mv" id="ws3">0</div><div style="font-size:10px;color:var(--muted);margin-top:3px">미입력</div></div>
+        <div class="si-month"><div class="ml">4월</div><div class="mv" id="ws4">0</div><div style="font-size:10px;color:var(--muted);margin-top:3px">미입력</div></div>
+        <div class="si-month"><div class="ml">5월</div><div class="mv" id="ws5">0</div><div style="font-size:10px;color:var(--muted);margin-top:3px">미입력</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="si-section">팀(지점)별 진행 현황</div>
+  <div class="si-team-grid" id="teamGrid"></div>
+
+  <div class="si-section">25Y CC 실적 vs 26Y 현재 — 팀별 CC 건수 비교</div>
+  <div class="si-chart-box"><canvas id="compareChart"></canvas></div>
+
+  <div class="si-section">RSP 프로모션 상세</div>
+  <div class="tw"><table>
+    <thead><tr>
+      <th>No</th><th>팀</th><th>SR</th><th>WS</th><th>아울렛</th><th>지역</th>
+      <th style="text-align:right">SPT 수량</th><th style="text-align:right">기존 가격</th><th style="text-align:right">변경 가격</th><th>유형</th>
+    </tr></thead>
+    <tbody id="rspTableBody"></tbody>
+  </table></div>
+
+  <div class="si-section">Credit Card 프로모션 상세</div>
+  <div class="tw"><table>
+    <thead><tr>
+      <th>No</th><th>SR</th><th>아울렛</th><th>지역</th><th>테마</th>
+      <th style="text-align:right">수량</th><th style="text-align:right">금액</th>
+    </tr></thead>
+    <tbody id="ccTableBody"></tbody>
+  </table></div>
+
+</div>
+
+<script>
+// 공통
+const CD={plugins:{legend:{labels:{color:'#6b7280',font:{size:11}}}},scales:{x:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}},y:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}}}};
+function pct(a,t){return t?Math.round(a/t*100):null}
+function badge(p){if(p===null)return '<span class="mu">–</span>';const c=p>=100?'bg':p>=80?'by':'br';return `<span class="badge ${c}">${p}%</span>`;}
+function switchTab(n,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');el.classList.add('active');if(n==='incentive')initSnowIncentive();}
+function rtag(r){return `<span class="tag tag-${r}">${r}</span>`;}
+
+// Data comes from Supabase
+
+// BOTTLE 차트
+const bD={months:['1월','2월','3월'],overall:{target:[312,268,354],actual:[281,278,175]},regions:{'서울':{target:[155,136,170],actual:[144,140,112]},'부산':{target:[64,56,80],actual:[44,43,15]},'대전':{target:[20,17,23],actual:[20,27,3]},'광주':{target:[36,25,35],actual:[33,21,10]},'대구/제주':{target:[37,34,46],actual:[40,47,35]}},srs:[{name:'Minkyu Lee',region:'서울',jan:[12,15],feb:[8,14],mar:[20,20]},{name:'Hyunjin Lee',region:'서울',jan:[8,15],feb:[9,13],mar:[13,20]},{name:'Joosuk Lee',region:'서울',jan:[24,20],feb:[19,18],mar:[0,25]},{name:'Eunhee Lee',region:'서울',jan:[27,25],feb:[27,23],mar:[24,30]},{name:'Sanghun Um',region:'서울',jan:[4,10],feb:[10,8],mar:[0,null]},{name:'Sangtae Kang',region:'서울',jan:[8,10],feb:[10,8],mar:[14,15]},{name:'Hangjoe Yoo',region:'서울',jan:[11,15],feb:[12,13],mar:[0,null]},{name:'Hongjun Park',region:'서울',jan:[20,15],feb:[20,13],mar:[14,20]},{name:'Pilsung Kim',region:'서울',jan:[10,10],feb:[9,8],mar:[12,15]},{name:'Gunseok Hong',region:'서울',jan:[20,20],feb:[6,18],mar:[8,25]},{name:'Hanju Kim',region:'서울',jan:[0,null],feb:[10,null],mar:[7,null]},{name:'Yeongmin Kang',region:'부산',jan:[9,16],feb:[16,14],mar:[4,20]},{name:'Sunghun Jung',region:'부산',jan:[11,16],feb:[14,14],mar:[4,20]},{name:'Jinhyun Byun',region:'부산',jan:[16,16],feb:[13,14],mar:[7,20]},{name:'Gyeongho Kim',region:'부산',jan:[8,16],feb:[0,14],mar:[0,20]},{name:'Jeongkyu Kim',region:'대전',jan:[0,null],feb:[10,null],mar:[3,null]},{name:'Gyuntae Kim',region:'대전',jan:[20,20],feb:[17,17],mar:[0,23]},{name:'Taewan Kim',region:'대구/제주',jan:[23,21],feb:[24,20],mar:[14,23]},{name:'Sunho Shon',region:'대구/제주',jan:[9,9],feb:[14,8],mar:[14,13]},{name:'Jaeyoung Jung',region:'대구/제주',jan:[8,7],feb:[9,6],mar:[7,10]},{name:'Hyoseong Kim',region:'광주',jan:[11,16],feb:[0,null],mar:[0,null]},{name:'Gyeongjun Kwak',region:'광주',jan:[22,20],feb:[21,25],mar:[10,35]}]};
+
+
+(function(){
+  const t=document.getElementById('srTable');
+  t.innerHTML='<tr><th>SR</th><th>지역</th><th>1월 목표</th><th>1월 실적</th><th>1월 달성률</th><th>2월 목표</th><th>2월 실적</th><th>2월 달성률</th><th>3월 목표</th><th>3월 실적</th><th>3월 달성률</th></tr>';
+  [...new Set(bD.srs.map(s=>s.region))].forEach(region=>{
+    const rd=bD.regions[region];
+    if(rd){const r=document.createElement('tr');r.className='rrow';r.innerHTML=`<td colspan="2">${region} 합계</td><td>${rd.target[0]}</td><td>${rd.actual[0]}</td><td>${badge(pct(rd.actual[0],rd.target[0]))}</td><td>${rd.target[1]}</td><td>${rd.actual[1]}</td><td>${badge(pct(rd.actual[1],rd.target[1]))}</td><td>${rd.target[2]}</td><td>${rd.actual[2]}</td><td>${badge(pct(rd.actual[2],rd.target[2]))}</td>`;t.appendChild(r);}
+    bD.srs.filter(s=>s.region===region).forEach(sr=>{const r=document.createElement('tr');r.innerHTML=`<td class="sr-cell">${sr.name}</td><td>${rtag(sr.region)}</td><td>${sr.jan[1]??'–'}</td><td>${sr.jan[0]??'–'}</td><td>${badge(pct(sr.jan[0],sr.jan[1]))}</td><td>${sr.feb[1]??'–'}</td><td>${sr.feb[0]??'–'}</td><td>${badge(pct(sr.feb[0],sr.feb[1]))}</td><td>${sr.mar[1]??'–'}</td><td>${sr.mar[0]??'–'}</td><td>${badge(pct(sr.mar[0],sr.mar[1]))}</td>`;t.appendChild(r);});
+  });
+})();
+
+const bF={region:'전체'};
+function bf(key,val,btn){bF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderBottle();}
+function qc(v){return v?`<td class="r" style="color:var(--accent)">${v}</td>`:`<td class="r mu">–</td>`;}
+function renderBottle(data){
+  data=data||getMergedBottleOutlets();
+  const r=bF.region,sr=document.getElementById('bSrSel').value,q=document.getElementById('bSearch').value.trim().toLowerCase();
+  const mKeys=['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
+  const mSum=d=>mKeys.reduce((s,k)=>s+(d[k]||0),0);
+  const rows=data.filter(d=>(r==='전체'||d.team===r)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>mSum(b)-mSum(a));
+  document.getElementById('bCount').textContent=`총 ${rows.length}개`;
+  document.getElementById('bBody').innerHTML=rows.map(d=>`<tr><td>${rtag(d.team)}</td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td>${mKeys.map(k=>qc(d[k])).join('')}</tr>`).join('');
+}
+function initBottleView(){
+  const srs=[...new Set(BOTTLE_OUTLETS.map(d=>d.sr))].filter(Boolean).sort();
+  const sel=document.getElementById('bSrSel');
+  while(sel.options.length>1)sel.remove(1);
+  srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});
+  renderBottle();
+}
+initBottleView();
+
+// SNOW 차트
+const sReg=['서울','부산','대구','제주','대전','광주'];
+const sCl=['rgba(59,110,245,.8)','rgba(34,197,94,.8)','rgba(245,158,11,.8)','rgba(168,85,247,.8)','rgba(239,68,68,.8)','rgba(20,184,166,.8)'];
+const ALL_MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+function buildSnowCounts(data){
+  const c={};sReg.forEach(r=>{c[r]={};ALL_MONTHS.forEach(m=>{c[r][m]=0;});});
+  data.forEach(d=>{if(c[d.region]&&d.first_month)c[d.region][d.first_month]++;});
+  return c;
+}
+function getActiveMonths(c){
+  return ALL_MONTHS.filter(m=>sReg.some(r=>c[r][m]>0));
+}
+
+let snowCnt=buildSnowCounts(SNOW_NEW_OUTLETS);
+let snowMo=getActiveMonths(snowCnt);
+let snowMTot=snowMo.map(m=>sReg.reduce((s,r)=>s+(snowCnt[r][m]||0),0));
+
+const chartSMonthly=new Chart(document.getElementById('sMonthly'),{type:'bar',data:{labels:snowMo,datasets:sReg.map((r,i)=>({label:r,data:snowMo.map(m=>snowCnt[r][m]||0),backgroundColor:sCl[i],borderRadius:4,stack:'s'}))},options:{...CD,responsive:true,plugins:{...CD.plugins,tooltip:{callbacks:{afterTitle:items=>`월 합계: ${snowMTot[items[0].dataIndex]} Outlet`}}},scales:{...CD.scales,x:{...CD.scales.x,ticks:{color:'#6b7280',callback:(val,i)=>[snowMo[i],snowMTot[i]+' Outlet']}}}}});
+const chartSRegion=new Chart(document.getElementById('sRegion'),{type:'bar',data:{labels:sReg,datasets:[{label:'신규 입점',data:sReg.map(r=>snowMo.reduce((s,m)=>s+(snowCnt[r][m]||0),0)),backgroundColor:sCl,borderRadius:4}]},options:{...CD,responsive:true,indexAxis:'y',plugins:{...CD.plugins,legend:{display:false}}}});
+
+function refreshSnowCharts(merged){
+  snowCnt=buildSnowCounts(merged);
+  snowMo=getActiveMonths(snowCnt);
+  snowMTot=snowMo.map(m=>sReg.reduce((s,r)=>s+(snowCnt[r][m]||0),0));
+  chartSMonthly.data.labels=snowMo;
+  sReg.forEach((r,i)=>{chartSMonthly.data.datasets[i].data=snowMo.map(m=>snowCnt[r][m]||0);});
+  chartSMonthly.options.scales.x.ticks.callback=(val,i)=>[snowMo[i],snowMTot[i]+' Outlet'];
+  chartSMonthly.update();
+  chartSRegion.data.datasets[0].data=sReg.map(r=>snowMo.reduce((s,m)=>s+(snowCnt[r][m]||0),0));
+  chartSRegion.update();
+}
+
+const sF={region:'전체',month:'전체'};
+const mOrd={'1월':1,'2월':2,'3월':3,'4월':4,'5월':5,'6월':6,'7월':7,'8월':8,'9월':9,'10월':10,'11월':11,'12월':12};
+const mCol={'1월':'#3b6ef5','2월':'#16a34a','3월':'#d97706','4월':'#9333ea','5월':'#dc2626','6월':'#0d9488','7월':'#3b6ef5','8월':'#ea580c','9월':'#16a34a','10월':'#d97706','11월':'#9333ea','12월':'#dc2626'};
+function sf(key,val,btn){sF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderSnow();}
+function renderSnow(data){
+  data=data||getMergedSnowNew();
+  const sr=document.getElementById('sSrSel').value,q=document.getElementById('sSearch').value.trim().toLowerCase();
+  const rows=data.filter(d=>(sF.region==='전체'||d.region===sF.region)&&(sF.month==='전체'||d.first_month===sF.month)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>(mOrd[a.first_month]||9)-(mOrd[b.first_month]||9)||a.region.localeCompare(b.region));
+  document.getElementById('sCount').textContent=`총 ${rows.length}개`;
+  document.getElementById('sBody').innerHTML=rows.map(d=>`<tr><td>${rtag(d.region)}</td><td><span class="badge" style="background:${(mCol[d.first_month]||'#888')}22;color:${mCol[d.first_month]||'#888'}">${d.first_month}</span></td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td><td class="mu" style="font-size:12px">${d.area2}</td></tr>`).join('');
+}
+function initSnowView(){
+  const srs=[...new Set(SNOW_NEW_OUTLETS.map(d=>d.sr))].filter(Boolean).sort();
+  const sel=document.getElementById('sSrSel');
+  while(sel.options.length>1)sel.remove(1);
+  srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});
+  renderSnow();
+}
+initSnowView();
+
+// 전체 아울렛
+const aF={region:'전체',sales:'전체'};
+function af(key,val,btn){aF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderAll();}
+function renderAll(){
+  const sr=document.getElementById('aSrSel').value, q=document.getElementById('aSearch').value.trim().toLowerCase();
+  const rows=SNOW_ALL.filter(d=>{
+    if(aF.region!=='전체'&&d.region!==aF.region)return false;
+    if(aF.sales==='있음'&&d.total===0)return false;
+    if(aF.sales==='없음'&&d.total>0)return false;
+    if(sr&&d.sr!==sr)return false;
+    if(q&&!d.outlet.toLowerCase().includes(q)&&!d.customer.toLowerCase().includes(q)&&!d.dde.toLowerCase().includes(q))return false;
+    return true;
+  }).sort((a,b)=>b.total-a.total||a.region.localeCompare(b.region));
+  document.getElementById('aCount').textContent=`총 ${rows.length}개`;
+  const addr=d=>[d.area1,d.area2,d.area3].filter(Boolean).join(' ');
+  document.getElementById('aBody').innerHTML=rows.map(d=>`<tr>
+    <td>${rtag(d.region)}</td>
+    <td class="mu sr-cell" style="font-size:12px">${d.sr}</td>
+    <td>${d.outlet}</td>
+    <td class="mu" style="font-size:12px">${d.dde}</td>
+    <td class="mu" style="font-size:12px">${d.customer}</td>
+    <td class="mu" style="font-size:12px">${addr(d)}</td>
+    ${d.m1?`<td class="r" style="color:var(--accent)">${d.m1}</td>`:'<td class="r mu">–</td>'}
+    ${d.m2?`<td class="r" style="color:var(--accent)">${d.m2}</td>`:'<td class="r mu">–</td>'}
+    ${d.m3?`<td class="r" style="color:var(--accent)">${d.m3}</td>`:'<td class="r mu">–</td>'}
+    <td class="r bo">${d.total||'–'}</td>
+  </tr>`).join('');
+}
+function initSnowAllView(){
+  const srs=[...new Set(SNOW_ALL.map(d=>d.sr))].filter(Boolean).sort();
+  const sel=document.getElementById('aSrSel');
+  while(sel.options.length>1)sel.remove(1);
+  srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});
+  renderAll();
+}
+initSnowAllView();
+
+// ===== 데이터 업데이트 로직 =====
+
+// 머지 함수
+function getMergedBottleOutlets(){return BOTTLE_OUTLETS;}
+function getMergedSnowNew(){return SNOW_NEW_OUTLETS;}
+
+function renderUploadStatus(){
+  const BOTTLE_ORDER=['Seoul','Busan','Daegu','Daejeon','Gwangju'];
+  const SNOW_ORDER=[{regs:['서울'],label:'서울'},{regs:['부산'],label:'부산'},{regs:['대구','제주'],label:'대구/제주'},{regs:['대전'],label:'대전'},{regs:['광주'],label:'광주'}];
+  const bEl=document.getElementById('statusBottle');
+  if(bEl){
+    const hasData=BOTTLE_OUTLETS.length>0;
+    bEl.innerHTML=hasData
+      ?BOTTLE_ORDER.map(t=>{const cnt=BOTTLE_OUTLETS.filter(d=>d.team===t).length;return cnt>0?`<div class="status-card uploaded"><div class="sc-branch">${rtag(t)}</div><div class="sc-count">${cnt}개 아울렛</div></div>`:''}).join('')||`<div class="status-card"><div class="sc-none">미업로드</div></div>`
+      :`<div class="status-card"><div class="sc-none">미업로드</div></div>`;
+  }
+  const sEl=document.getElementById('statusSnow');
+  if(sEl){
+    const hasData=SNOW_NEW_OUTLETS.length>0;
+    sEl.innerHTML=hasData
+      ?SNOW_ORDER.map(({regs,label})=>{const cnt=SNOW_NEW_OUTLETS.filter(d=>regs.includes(d.region)).length;return cnt>0?`<div class="status-card uploaded"><div class="sc-branch"><span class="tag tag-${regs[0]}">${label}</span></div><div class="sc-count">${cnt}개</div></div>`:''}).join('')||`<div class="status-card"><div class="sc-none">미업로드</div></div>`
+      :`<div class="status-card"><div class="sc-none">미업로드</div></div>`;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+//  Async init: load all data from Supabase then render
+// ═══════════════════════════════════════════════════
+async function initDashboard(){
+  const ov=document.getElementById('loadingOverlay');
+  if(ov)ov.style.display='flex';
+  try{
+    [BOTTLE_OUTLETS,SNOW_NEW_OUTLETS,SNOW_ALL,RSP_DATA_BASE,CC_DATA_BASE,WS_DATA_BASE,Y25_DATA]=
+      await Promise.all([
+        sGet('bottle_outlets','order=team'),
+        sGet('snow_new_outlets','order=region'),
+        sGet('snow_all','order=region'),
+        sGet('snow_incentive_rsp','order=no'),
+        sGet('snow_incentive_cc','order=no'),
+        sGet('snow_incentive_ws','order=team'),
+        sGet('snow_incentive_y25','order=no'),
+      ]);
+    // map Supabase column names → JS property names for RSP
+    RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));
+    // normalize teams
+    [...RSP_DATA_BASE,...CC_DATA_BASE,...WS_DATA_BASE,...Y25_DATA].forEach(r=>{if(r.team)r.team=normalizeTeam(r.team);});
+  }catch(e){
+    console.error('Supabase load failed:',e);
+    alert('데이터 로딩 실패: '+e.message);
+  }finally{
+    if(ov)ov.style.display='none';
+  }
+  initBottleView();
+  initSnowView();
+  refreshSnowCharts(getMergedSnowNew());
+  initSnowAllView();
+  renderUploadStatus();
+  renderSIUploadStatus();
+}
+initDashboard();
+</script>
+
+<script>
+// Snow Incentive
+// ══════════════════════════════════════════
+//  (데이터는 Supabase에서 로드 - initDashboard 참조)
+// ══════════════════════════════════════════
+
+// ── 상수 ──
+const RSP_TARGET = 237;
+const CC_BUDGET  = 1780000;
+
+// ── 팀 정규화: EAST / South / West → Seoul ──
+const TEAM_REMAP = { EAST: 'Seoul', South: 'Seoul', West: 'Seoul', Jeju: 'Daegu' };
+function normalizeTeam(t) { return TEAM_REMAP[t] || t; }
+
+// ══════════════════════════════════════════
+//  Snow Incentive localStorage
+// ══════════════════════════════════════════
+const SI_KEY = 'si_incentive_2026';
+function getSIData() { return JSON.parse(localStorage.getItem(SI_KEY) || '{}'); }
+function setSIData(d) {
+  try { localStorage.setItem(SI_KEY, JSON.stringify(d)); }
+  catch(e) { alert('저장 실패: ' + e.message); throw e; }
+}
+function getSIRsp() {
+  const s = getSIData();
+  if (s.rsp) return s.rsp.data.map(r => ({...r, team: normalizeTeam(r.team)}));
+  return RSP_DATA_BASE;
+}
+function getSICc() {
+  const s = getSIData();
+  if (s.cc) return s.cc.data.map(r => ({...r, team: normalizeTeam(r.team)}));
+  return CC_DATA_BASE;
+}
+function getSIWs() {
+  const s = getSIData();
+  return s.ws ? s.ws.data : WS_DATA_BASE;
+}
+// ── 팀 메타 ──
+const TEAM_META = {
+  Seoul:   { color: '#3182ce', label: 'Seoul (서울)' },
+  Busan:   { color: '#dd6b20', label: 'Busan (부산)' },
+  Daegu:   { color: '#805ad5', label: 'Daegu (대구·제주)' },
+  Daejeon: { color: '#d69e2e', label: 'Daejeon (대전)' },
+  Gwangju: { color: '#e53e3e', label: 'Gwangju (광주)' },
+};
+const TEAM_ORDER = ['Seoul','Busan','Daegu','Daejeon','Gwangju'];
+
+// ══════════════════════════════════════════
+//  집계 함수
+// ══════════════════════════════════════════
+function siGroupBy(arr, key) {
+  return arr.reduce((acc, item) => {
+    const k = item[key] || '미정';
+    if (!acc[k]) acc[k] = [];
+    acc[k].push(item);
+    return acc;
+  }, {});
+}
+
+function siSum(arr, key) { return arr.reduce((s, x) => s + (x[key] || 0), 0); }
+function siFmt(n) { return n.toLocaleString('ko-KR'); }
+function siPct(a, b) { return b === 0 ? 0 : Math.min(100, (a / b) * 100); }
+function siBarColor(p) {
+  if (p >= 70) return 'var(--green)';
+  if (p >= 30) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+let siChart = null;
+function initSnowIncentive() {
+  try {
+  // 25Y 팀별 집계
+  const y25 = siGroupBy(Y25_DATA, 'team');
+  // 활성 데이터 (업로드 또는 기본)
+  const rspData = getSIRsp();
+  const ccData  = getSICc();
+  const wsData  = getSIWs();
+  const rsp26 = siGroupBy(rspData, 'team');
+  const cc26  = siGroupBy(ccData,  'team');
+// ══════════════════════════════════════════
+//  렌더: 요약 카드
+// ══════════════════════════════════════════
+const rspTotal  = rspData.length;
+const rspSptQty = siSum(rspData, 'spt');
+const ccTotal  = siSum(ccData, 'cost');
+const ccCount  = ccData.length;
+const ws3total = siSum(wsData, 'm3');
+const ws4total = siSum(wsData, 'm4');
+const ws5total = siSum(wsData, 'm5');
+
+const rspPct = siPct(rspTotal, RSP_TARGET);
+const ccPct  = siPct(ccTotal,  CC_BUDGET);
+
+document.getElementById('rspCount').textContent = rspTotal;
+document.getElementById('rspSpt').textContent   = rspSptQty;
+document.getElementById('rspBar').style.width = rspPct + '%';
+document.getElementById('rspBar').style.background = siBarColor(rspPct);
+document.getElementById('rspPct').textContent = rspPct.toFixed(1) + '%';
+
+document.getElementById('ccAmount').textContent = siFmt(ccTotal) + '원';
+document.getElementById('ccBar').style.width = ccPct + '%';
+document.getElementById('ccBar').style.background = siBarColor(ccPct);
+document.getElementById('ccPct').textContent = ccPct.toFixed(1) + '%';
+document.getElementById('ccCount').textContent = ccCount + '건';
+
+document.getElementById('ws3').textContent = ws3total;
+document.getElementById('ws4').textContent = ws4total;
+document.getElementById('ws5').textContent = ws5total;
+
+
+// ══════════════════════════════════════════
+//  렌더: 팀 카드
+// ══════════════════════════════════════════
+const grid = document.getElementById('teamGrid');
+grid.innerHTML = '';
+TEAM_ORDER.forEach(team => {
+  const meta   = TEAM_META[team] || { color: '#718096', label: team };
+  const rspArr = rsp26[team] || [];
+  const ccArr  = cc26[team]  || [];
+  const y25arr = y25[team]   || [];
+  const hasData = rspArr.length > 0 || ccArr.length > 0;
+
+  const ccAmt   = siSum(ccArr, 'cost');
+  const ccVol   = siSum(ccArr, 'vol');
+  const y25cnt  = y25arr.length;
+  const y25cost = siSum(y25arr, 'cost');
+  const y25vol  = siSum(y25arr, 'vol');
+
+  // CC 진행률 vs 25Y
+  const ccPctVsY25 = y25cnt > 0 ? siPct(ccArr.length, y25cnt) : 0;
+
+  const card = document.createElement('div');
+  card.className = 'si-team-card';
+  card.style.borderLeftColor = meta.color;
+  card.innerHTML = `
+    <div class="si-team-name" style="color:${meta.color}">${meta.label}</div>
+    <div class="si-stat-row">
+      <div class="si-stat">
+        <div class="si-stat-lbl">RSP Setting</div>
+        <div class="si-stat-val" style="color:${rspArr.length > 0 ? meta.color : 'var(--muted)'}">${rspArr.length}<span style="font-size:12px;color:var(--muted)">건</span></div>
+      </div>
+      <div class="si-stat">
+        <div class="si-stat-lbl">26Y CC</div>
+        <div class="si-stat-val" style="color:${ccArr.length > 0 ? meta.color : 'var(--muted)'}">${ccArr.length}<span style="font-size:12px;color:var(--muted)">건</span></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">${ccVol > 0 ? ccVol + ' BOX' : '—'}</div>
+      </div>
+      <div class="si-stat">
+        <div class="si-stat-lbl">26Y CC 금액</div>
+        <div class="si-stat-val" style="font-size:14px;color:${ccAmt > 0 ? meta.color : 'var(--muted)'}">${ccAmt > 0 ? siFmt(ccAmt) : '—'}</div>
+      </div>
+    </div>
+    <div class="si-ref">
+      <span style="color:#718096;font-size:11px">
+        25Y CC 실적&nbsp;
+        <b style="color:#4a5568">${y25cnt}건</b>&nbsp;/&nbsp;${y25vol} BOX&nbsp;/&nbsp;${siFmt(y25cost)}원
+        ${y25cnt > 0 ? `<span style="margin-left:6px;padding:1px 6px;background:#e2e8f0;border-radius:8px;font-size:10px">${ccPctVsY25.toFixed(0)}% 달성</span>` : ''}
+      </span>
+      <span class="status-badge ${hasData ? 'badge-ok' : 'badge-empty'}">${hasData ? '입력중' : '미입력'}</span>
+    </div>
+    ${!hasData ? '<div class="si-overlay"><span>26Y 미입력</span></div>' : ''}
+  `;
+  grid.appendChild(card);
+});
+
+// ══════════════════════════════════════════
+//  렌더: 비교 차트
+// ══════════════════════════════════════════
+const siChartCtx = document.getElementById('compareChart').getContext('2d');
+const chartLabels  = TEAM_ORDER.map(t => TEAM_META[t]?.label.split(' ')[0] || t);
+const y25ccCounts  = TEAM_ORDER.map(t => (y25[t]   || []).length);
+const y26ccCounts  = TEAM_ORDER.map(t => (cc26[t]  || []).length);
+const y26rspCounts = TEAM_ORDER.map(t => (rsp26[t] || []).length);
+const teamColors   = TEAM_ORDER.map(t => TEAM_META[t]?.color || '#718096');
+
+if (siChart) {
+  siChart.data.datasets[0].data = y25ccCounts;
+  siChart.data.datasets[1].data = y26ccCounts;
+  siChart.data.datasets[2].data = y26rspCounts;
+  siChart.update();
+} else {
+siChart = new Chart(siChartCtx, {
+  type: 'bar',
+  data: {
+    labels: chartLabels,
+    datasets: [
+      {
+        label: '25Y CC 실적',
+        data: y25ccCounts,
+        backgroundColor: 'rgba(113,128,150,0.35)',
+        borderColor: 'rgba(113,128,150,0.7)',
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: '26Y CC',
+        data: y26ccCounts,
+        backgroundColor: teamColors.map(c => c + 'cc'),
+        borderColor: teamColors,
+        borderWidth: 1,
+        borderRadius: 4,
+      },
+      {
+        label: '26Y RSP Setting',
+        data: y26rspCounts,
+        backgroundColor: teamColors.map(c => c + '44'),
+        borderColor: teamColors.map(c => c + 'aa'),
+        borderWidth: 1,
+        borderRadius: 4,
+        borderDash: [4, 4],
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { labels: { color: '#1a202c', font: { family: 'Malgun Gothic' } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}건`
+        }
+      }
+    },
+    scales: {
+      x: { ticks: { color: '#4a5568' }, grid: { color: 'rgba(0,0,0,0.06)' } },
+      y: {
+        ticks: { color: '#4a5568', stepSize: 1 },
+        grid: { color: 'rgba(0,0,0,0.06)' },
+        beginAtZero: true,
+        title: { display: true, text: '건수', color: '#718096', font: { size: 11 } }
+      }
+    }
+  }
+});
+} // end siChart else
+
+// ══════════════════════════════════════════
+//  렌더: RSP 프로모션 상세 테이블
+// ══════════════════════════════════════════
+const rspBody = document.getElementById('rspTableBody');
+rspBody.innerHTML = '';
+rspData.forEach((r, rspIdx) => {
+  const meta = TEAM_META[r.team] || { color: '#718096' };
+  const isNew = r.before === '신규';
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${rspIdx + 1}</td>
+    <td><span class="team-tag" style="background:${meta.color}22;color:${meta.color}">${r.team}</span></td>
+    <td style="font-weight:600">${r.sr}</td>
+    <td style="font-size:12px;color:var(--muted)">${r.ws}</td>
+    <td>${r.outlet}</td>
+    <td style="font-size:12px;color:var(--muted)">${r.area1} ${r.area2}</td>
+    <td class="num-cell">${r.spt} BOX</td>
+    <td class="num-cell" style="color:var(--muted)">${isNew ? '<span class="status-badge badge-ok" style="margin:0">신규</span>' : siFmt(r.before) + '원'}</td>
+    <td class="num-cell" style="font-weight:600;color:var(--accent)">${siFmt(r.after)}원</td>
+    <td>${r.after < (isNew ? 9999 : Number(r.before)) ? '<span class="theme-tag theme-discount">인하</span>' : '<span class="theme-tag theme-price">유지</span>'}</td>
+  `;
+  rspBody.appendChild(tr);
+});
+
+// ══════════════════════════════════════════
+//  렌더: CC 상세 테이블
+// ══════════════════════════════════════════
+const themeClass = t =>
+  t === 'Discount' ? 'theme-discount' :
+  t === 'Set Menu' ? 'theme-set' : 'theme-price';
+
+const ccBody = document.getElementById('ccTableBody');
+ccBody.innerHTML = '';
+ccData.forEach((r, ccIdx) => {
+  const tr = document.createElement('tr');
+  const meta = TEAM_META[r.team] || { color: '#718096' };
+  tr.innerHTML = `
+    <td>${ccIdx + 1}</td>
+    <td>${r.sr}</td>
+    <td>${r.outlet}</td>
+    <td style="font-size:12px;color:var(--muted)">${r.area1} ${r.area2}</td>
+    <td><span class="theme-tag ${themeClass(r.theme)}">${r.theme}</span></td>
+    <td class="num-cell">${r.vol} BOX</td>
+    <td class="num-cell" style="color:var(--accent)">${siFmt(r.cost)}원</td>
+  `;
+  ccBody.appendChild(tr);
+});
+
+  } catch(e) { console.error("Snow Incentive error:", e); }
+}
+
+// Snow Incentive Upload Status
+function renderSIUploadStatus() {
+  const s = getSIData();
+  const SI_TEAM_ORDER = ['Seoul','Busan','Daegu','Daejeon','Gwangju'];
+  const setStatus = (id, delId, saved, label) => {
+    const el = document.getElementById(id);
+    const del = document.getElementById(delId);
+    if (!el) return;
+    if (saved) {
+      el.innerHTML = '✅ ' + label + ' 반영됨 — ' + (saved.count !== undefined ? saved.count + '건 ' : '') + '(' + saved.date + ')';
+      el.style.color = 'var(--green)';
+      if (del) del.style.display = 'inline-block';
+    } else {
+      el.innerHTML = '기본 데이터 사용 중';
+      el.style.color = 'var(--muted)';
+      if (del) del.style.display = 'none';
+    }
+  };
+  setStatus('statusSIRsp', 'delSIRsp', s.rsp, 'RSP');
+  const rspGrid = document.getElementById('statusSIRspGrid');
+  if (rspGrid) {
+    const rspData = getSIRsp();
+    rspGrid.innerHTML = rspData.length > 0
+      ? SI_TEAM_ORDER.map(t => { const cnt = rspData.filter(d => d.team === t).length; return cnt > 0 ? `<div class="status-card uploaded"><div class="sc-branch">${rtag(t)}</div><div class="sc-count">${cnt}개 아울렛</div></div>` : ''; }).join('') || ''
+      : '';
+  }
+  setStatus('statusSICc', 'delSICc', s.cc, 'CC');
+  const ccGrid = document.getElementById('statusSICcGrid');
+  if (ccGrid) {
+    const ccData = getSICc();
+    ccGrid.innerHTML = ccData.length > 0
+      ? SI_TEAM_ORDER.map(t => { const cnt = ccData.filter(d => d.team === t).length; return cnt > 0 ? `<div class="status-card uploaded"><div class="sc-branch">${rtag(t)}</div><div class="sc-count">${cnt}건</div></div>` : ''; }).join('') || ''
+      : '';
+  }
+  const wsEl = document.getElementById('statusSIWs');
+  const wsDel = document.getElementById('delSIWs');
+  if (wsEl) {
+    if (s.ws) {
+      wsEl.innerHTML = '✅ WS 반영됨 (' + s.ws.date + ')';
+      wsEl.style.color = 'var(--green)';
+      if (wsDel) wsDel.style.display = 'inline-block';
+    } else {
+      wsEl.innerHTML = '기본 데이터 (미입력)';
+      wsEl.style.color = 'var(--muted)';
+      if (wsDel) wsDel.style.display = 'none';
+    }
+  }
+}
+function siTriggerDownload(wb, filename) {
+  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'base64'});
+  const a = document.createElement('a');
+  a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + wbout;
+  a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+function siDownloadRsp() {
+  const data = getSIRsp(); const today = new Date().toISOString().slice(0,10);
+  const hdr = ['팀','SR','WS','아울렛','지역1','지역2','주소','SPT수량','기존가격','변경가격'];
+  const rows = data.map(r => [r.team,r.sr,r.ws,r.outlet,r.area1,r.area2,r.area3||'',r.spt,r.before,r.after]);
+  const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]); const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'RSP'); siTriggerDownload(wb,'SI_RSP_'+today+'.xlsx');
+}
+function siDownloadCc() {
+  const data = getSICc(); const today = new Date().toISOString().slice(0,10);
+  const hdr = ['팀','SR','WS','아울렛','지역1','지역2','수량','금액','테마'];
+  const rows = data.map(r => [r.team,r.sr,r.ws,r.outlet,r.area1,r.area2,r.vol,r.cost,r.theme]);
+  const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]); const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'CC'); siTriggerDownload(wb,'SI_CC_'+today+'.xlsx');
+}
+function siDownloadWs() {
+  const data = getSIWs(); const today = new Date().toISOString().slice(0,10);
+  const hdr = ['팀','3월','4월','5월'];
+  const teams = ['Seoul','Busan','Daegu','Daejeon','Gwangju'];
+  const rows = teams.map(t => { const r = data.find(d=>d.team===t)||{m3:0,m4:0,m5:0}; return [t,r.m3||0,r.m4||0,r.m5||0]; });
+  const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]); const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'WS'); siTriggerDownload(wb,'SI_WS_'+today+'.xlsx');
+}
+let siParsedRsp=[];
+function siReadRsp(input) {
+  const file=input.files[0]; if(!file) return;
+  document.getElementById('fnSIRsp').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=function(ev) {
+    try {
+      const wb=XLSX.read(ev.target.result,{type:'array'}); let ws=null;
+      for(const name of wb.SheetNames){const s=wb.Sheets[name];const r=XLSX.utils.sheet_to_json(s,{header:1,defval:'',range:0});if(r.length&&r[0].includes('아울렛')&&r[0].includes('SPT수량')){ws=s;break;}}
+      if(!ws){alert('⚠ RSP 파일 확인');input.value='';return;}
+      const allRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const hdr=allRows[0]; const ix=k=>hdr.indexOf(k);
+      siParsedRsp=allRows.slice(1).filter(r=>String(r[ix('아울렛')]||'').trim()).map(r=>({
+        team:String(r[ix('팀')]||'').trim(),sr:String(r[ix('SR')]||'').trim(),
+        ws:String(r[ix('WS')]||'').trim(),outlet:String(r[ix('아울렛')]||'').trim(),
+        area1:String(r[ix('지역1')]||'').trim(),area2:String(r[ix('지역2')]||'').trim(),
+        area3:String(r[ix('주소')]||'').trim(),spt:Number(r[ix('SPT수량')])||1,
+        before:String(r[ix('기존가격')]||'신규').trim(),after:Number(r[ix('변경가격')])||6000,
+      }));
+      document.getElementById('pcSIRsp').textContent=siParsedRsp.length+'건';
+      document.getElementById('pbSIRsp').innerHTML=siParsedRsp.slice(0,50).map(r=>`<tr><td>${r.team}</td><td>${r.sr}</td><td style="font-size:11px">${r.ws}</td><td>${r.outlet}</td><td style="font-size:11px">${r.area1} ${r.area2}</td><td class="r">${r.spt}</td><td class="r">${r.before}</td><td class="r">${r.after}</td></tr>`).join('');
+      document.getElementById('pvSIRsp').style.display='block';
+    } catch(err){alert('오류: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function siConfirmRsp(){if(!siParsedRsp.length){alert('파일을 먼저 업로드하세요');return;}try{await sDel('snow_incentive_rsp','id=gte.0');const rows=siParsedRsp.map((r,i)=>({no:i+1,sap:r.sap||null,ws:r.ws||'',sr:r.sr||'',team:r.team||'',outlet:r.outlet||'',area1:r.area1||'',area2:r.area2||'',area3:r.area3||'',spt:r.spt||1,before_price:String(r.before||'신규'),after_price:Number(r.after)||6000}));await sIns('snow_incentive_rsp',rows);RSP_DATA_BASE=await sGet('snow_incentive_rsp','order=no');RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));RSP_DATA_BASE.forEach(r=>{r.team=normalizeTeam(r.team);});alert('✅ RSP '+rows.length+'개 저장됨');siCancelRsp();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
+function siCancelRsp(){siParsedRsp=[];document.getElementById('pvSIRsp').style.display='none';document.getElementById('fnSIRsp').textContent='';document.getElementById('fSIRsp').value='';}
+function siDeleteRsp(){if(!confirm('RSP 기본값 복원?'))return;const d=getSIData();delete d.rsp;setSIData(d);renderSIUploadStatus();initSnowIncentive();}
+let siParsedCc=[];
+function siReadCc(input) {
+  const file=input.files[0]; if(!file) return;
+  document.getElementById('fnSICc').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=function(ev) {
+    try {
+      const wb=XLSX.read(ev.target.result,{type:'array'}); let ws=null;
+      for(const name of wb.SheetNames){const s=wb.Sheets[name];const r=XLSX.utils.sheet_to_json(s,{header:1,defval:'',range:0});if(r.length&&r[0].includes('아울렛')&&r[0].includes('테마')){ws=s;break;}}
+      if(!ws){alert('⚠ CC 파일 확인');input.value='';return;}
+      const allRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const hdr=allRows[0]; const ix=k=>hdr.indexOf(k);
+      siParsedCc=allRows.slice(1).filter(r=>String(r[ix('아울렛')]||'').trim()).map((r,i)=>({
+        no:i+1,team:String(r[ix('팀')]||'').trim(),sr:String(r[ix('SR')]||'').trim(),
+        ws:String(r[ix('WS')]||'').trim(),outlet:String(r[ix('아울렛')]||'').trim(),
+        area1:String(r[ix('지역1')]||'').trim(),area2:String(r[ix('지역2')]||'').trim(),
+        vol:Number(r[ix('수량')])||0,cost:Number(r[ix('금액')])||0,
+        theme:String(r[ix('테마')]||'Discount').trim(),
+      }));
+      document.getElementById('pcSICc').textContent=siParsedCc.length+'건';
+      document.getElementById('pbSICc').innerHTML=siParsedCc.slice(0,50).map(r=>`<tr><td>${r.team}</td><td>${r.sr}</td><td style="font-size:11px">${r.ws}</td><td>${r.outlet}</td><td style="font-size:11px">${r.area1} ${r.area2}</td><td>${r.theme}</td><td class="r">${r.vol}</td><td class="r">${r.cost.toLocaleString()}</td></tr>`).join('');
+      document.getElementById('pvSICc').style.display='block';
+    } catch(err){alert('오류: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function siConfirmCc(){if(!siParsedCc.length){alert('파일을 먼저 업로드하세요');return;}try{await sDel('snow_incentive_cc','id=gte.0');const rows=siParsedCc.map((r,i)=>({no:i+1,sap:r.sap||null,ws:r.ws||'',sr:r.sr||'',team:r.team||'',outlet:r.outlet||'',area1:r.area1||'',area2:r.area2||'',vol:Number(r.vol)||0,cost:Number(r.cost)||0,theme:r.theme||'Discount'}));await sIns('snow_incentive_cc',rows);CC_DATA_BASE=await sGet('snow_incentive_cc','order=no');CC_DATA_BASE.forEach(r=>{r.team=normalizeTeam(r.team);});alert('✅ CC '+rows.length+'개 저장됨');siCancelCc();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
+function siCancelCc(){siParsedCc=[];document.getElementById('pvSICc').style.display='none';document.getElementById('fnSICc').textContent='';document.getElementById('fSICc').value='';}
+function siDeleteCc(){if(!confirm('CC 기본값 복원?'))return;const d=getSIData();delete d.cc;setSIData(d);renderSIUploadStatus();initSnowIncentive();}
+let siParsedWs=[];
+function siReadWs(input) {
+  const file=input.files[0]; if(!file) return;
+  document.getElementById('fnSIWs').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=function(ev) {
+    try {
+      const wb=XLSX.read(ev.target.result,{type:'array'}); let ws=null;
+      for(const name of wb.SheetNames){const s=wb.Sheets[name];const r=XLSX.utils.sheet_to_json(s,{header:1,defval:'',range:0});if(r.length&&r[0].includes('팀')&&r[0].some(h=>String(h).endsWith('월'))){ws=s;break;}}
+      if(!ws){alert('⚠ WS 파일 확인');input.value='';return;}
+      const allRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const hdr=allRows[0]; const ix=k=>hdr.indexOf(k);
+      siParsedWs=allRows.slice(1).filter(r=>String(r[ix('팀')]||'').trim()).map(r=>({
+        team:String(r[ix('팀')]||'').trim(),
+        m3:Number(r[ix('3월')])||0,m4:Number(r[ix('4월')])||0,m5:Number(r[ix('5월')])||0,
+      }));
+      document.getElementById('pcSIWs').textContent=siParsedWs.length+'팀';
+      document.getElementById('pbSIWs').innerHTML=siParsedWs.map(r=>`<tr><td>${r.team}</td><td class="r">${r.m3||'–'}</td><td class="r">${r.m4||'–'}</td><td class="r">${r.m5||'–'}</td></tr>`).join('');
+      document.getElementById('pvSIWs').style.display='block';
+    } catch(err){alert('오류: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function siConfirmWs(){if(!siParsedWs.length){alert('파일을 먼저 업로드하세요');return;}try{await sDel('snow_incentive_ws','id=gte.0');const rows=siParsedWs.map(r=>({team:r.team||'',m3:r.m3||0,m4:r.m4||0,m5:r.m5||0}));await sIns('snow_incentive_ws',rows);WS_DATA_BASE=await sGet('snow_incentive_ws','order=team');alert('✅ WS 저장됨');siCancelWs();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
+function siCancelWs(){siParsedWs=[];document.getElementById('pvSIWs').style.display='none';document.getElementById('fnSIWs').textContent='';document.getElementById('fSIWs').value='';}
+function siDeleteWs(){if(!confirm('WS 기본값 복원?'))return;const d=getSIData();delete d.ws;setSIData(d);renderSIUploadStatus();initSnowIncentive();}
+(function(){const orig=switchTab;window.switchTab=function(n,el){orig(n,el);if(n==='update'){renderSIUploadStatus();renderUploadStatus();}};})();
+
+// ===== Bottle / Snow 다운로드 =====
+function downloadCurrent(type) {
+  const today = new Date().toISOString().slice(0,10);
+  if (type === 'bottle') {
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const MK     = ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
+    const hdr    = [null, 'Team', 'SR', 'Outlet', 'Sum of Quantity'];
+    const wb = XLSX.utils.book_new();
+    MONTHS.forEach((mon, i) => {
+      const key = MK[i];
+      const rows = BOTTLE_OUTLETS.filter(d => (d[key]||0) > 0)
+        .map(d => [null, d.team, d.sr, d.outlet, d[key]||0]);
+      const ws = XLSX.utils.aoa_to_sheet([hdr, ...rows]);
+      XLSX.utils.book_append_sheet(wb, ws, mon);
+    });
+    siTriggerDownload(wb, 'Volume for 33cl bottle_SR KPI.xlsx');
+  } else if (type === 'snow') {
+    const hdr = ['지점','SR','아울렛명','도매담당','도매상명','구','신규입점월'];
+    const rows = SNOW_NEW_OUTLETS.map(d => [d.region,d.sr,d.outlet,d.dde||'',d.customer||'',d.area2||'',d.first_month||'']);
+    const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Snow신규'); siTriggerDownload(wb,'Snow신규입점_현황_'+today+'.xlsx');
+  }
+}
+
+// ===== Bottle 업데이트 =====
+let parsedBottleWide = [];
+function readBottleWide(input) {
+  const file = input.files[0]; if (!file) return;
+  document.getElementById('fnBottleWide').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result,{type:'array'});
+      const mk = ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
+
+      // ── 포맷 1: 가로형 (아울렛명 & 1월 헤더) ──
+      let ws = null;
+      for (const name of wb.SheetNames) {
+        const s = wb.Sheets[name];
+        const r = XLSX.utils.sheet_to_json(s,{header:1,defval:'',range:0});
+        if (r.length && r[0].includes('아울렛명') && r[0].includes('1월')) { ws = s; break; }
+      }
+      if (ws) {
+        const allRows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        const hdr = allRows[0]; const ix = k => hdr.indexOf(k);
+        parsedBottleWide = allRows.slice(1).filter(r=>String(r[ix('아울렛명')]||'').trim()).map(r=>({
+          team:String(r[ix('지점')]||'').trim(), sr:String(r[ix('SR')]||'').trim(),
+          outlet:String(r[ix('아울렛명')]||'').trim(),
+          m1:Number(r[ix('1월')])||0,   m2:Number(r[ix('2월')])||0,   m3:Number(r[ix('3월')])||0,
+          m4:Number(r[ix('4월')])||0,   m5:Number(r[ix('5월')])||0,   m6:Number(r[ix('6월')])||0,
+          m7:Number(r[ix('7월')])||0,   m8:Number(r[ix('8월')])||0,   m9:Number(r[ix('9월')])||0,
+          m10:Number(r[ix('10월')])||0, m11:Number(r[ix('11월')])||0, m12:Number(r[ix('12월')])||0,
+        }));
+        document.getElementById('pcBottleWide').textContent = parsedBottleWide.length+'건';
+        document.getElementById('pbBottleWide').innerHTML = parsedBottleWide.slice(0,50).map(r=>
+          `<tr><td>${r.team}</td><td class="mu">${r.sr}</td><td>${r.outlet}</td>${mk.map(k=>`<td class="r">${r[k]||'–'}</td>`).join('')}</tr>`
+        ).join('');
+        document.getElementById('pvBottleWide').style.display = 'block';
+        return;
+      }
+
+      // ── 포맷 2: 월별 시트 (Jan/Feb/Mar ... 시트명) ──
+      const MONTH_MAP = {Jan:'m1',Feb:'m2',Mar:'m3',Apr:'m4',May:'m5',Jun:'m6',
+                         Jul:'m7',Aug:'m8',Sep:'m9',Oct:'m10',Nov:'m11',Dec:'m12'};
+      const monthSheets = wb.SheetNames.filter(n => MONTH_MAP[n]);
+      if (!monthSheets.length) {
+        alert('⚠ Bottle 파일 확인\n- 가로형: 헤더에 "아울렛명" & "1월" 필요\n- 월별 시트형: Jan/Feb/Mar 등 시트명 필요');
+        input.value=''; return;
+      }
+      const outletMap = {};
+      for (const sheetName of monthSheets) {
+        const mField = MONTH_MAP[sheetName];
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:''});
+        if (!rows.length) continue;
+        const hdr = rows[0];
+        const fi = candidates => { for (const c of candidates) { const i=hdr.findIndex(h=>String(h).trim()===c); if(i>=0) return i; } return -1; };
+        const iTeam   = fi(['Team','지점']);
+        const iSR     = fi(['SR']);
+        const iOutlet = fi(['Outlet','아울렛명']);
+        const iQty    = fi(['Sum of Quantity','Quantity','수량']);
+        if (iOutlet < 0 || iQty < 0) continue;
+        for (const r of rows.slice(1)) {
+          const outlet = String(r[iOutlet]||'').trim(); if (!outlet) continue;
+          const team   = iTeam>=0  ? String(r[iTeam]||'').trim()  : '';
+          const sr     = iSR>=0    ? String(r[iSR]||'').trim()    : '';
+          const qty    = Number(r[iQty])||0;
+          const key    = `${team}|${sr}|${outlet}`;
+          if (!outletMap[key]) outletMap[key] = {team, sr, outlet, m1:0,m2:0,m3:0,m4:0,m5:0,m6:0,m7:0,m8:0,m9:0,m10:0,m11:0,m12:0};
+          outletMap[key][mField] += qty;
+        }
+      }
+      parsedBottleWide = Object.values(outletMap);
+      document.getElementById('pcBottleWide').textContent =
+        '월별시트 포맷 감지 ('+monthSheets.join(', ')+') — '+parsedBottleWide.length+'건';
+      document.getElementById('pbBottleWide').innerHTML = parsedBottleWide.slice(0,50).map(r=>
+        `<tr><td>${r.team}</td><td class="mu">${r.sr}</td><td>${r.outlet}</td>${mk.map(k=>`<td class="r">${r[k]||'–'}</td>`).join('')}</tr>`
+      ).join('');
+      document.getElementById('pvBottleWide').style.display = 'block';
+    } catch(err) { alert('오류: '+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function confirmBottleWide() {
+  if (!parsedBottleWide.length) { alert('파일을 먼저 업로드하세요'); return; }
+  try {
+    await sDel('bottle_outlets','id=gte.0');
+    const rows = parsedBottleWide.map(r=>({
+      team:r.team, sr:r.sr, outlet:r.outlet,
+      m1:r.m1, m2:r.m2, m3:r.m3, m4:r.m4, m5:r.m5, m6:r.m6,
+      m7:r.m7, m8:r.m8, m9:r.m9, m10:r.m10, m11:r.m11, m12:r.m12,
+    }));
+    await sIns('bottle_outlets', rows);
+    BOTTLE_OUTLETS = await sGet('bottle_outlets','order=team');
+    alert('✅ Bottle '+rows.length+'개 저장됨');
+    cancelBottleWide(); renderUploadStatus(); initBottleView();
+  } catch(e) { alert('오류: '+e.message); }
+}
+function cancelBottleWide() {
+  parsedBottleWide = [];
+  document.getElementById('pvBottleWide').style.display = 'none';
+  document.getElementById('fnBottleWide').textContent = '';
+  document.getElementById('fBottleWide').value = '';
+}
+
+// ===== Snow 신규입점 업데이트 =====
+let parsedSnowWide = [];
+function readSnowWide(input) {
+  const file = input.files[0]; if (!file) return;
+  document.getElementById('fnSnowWide').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result,{type:'array'}); let ws = null;
+      for (const name of wb.SheetNames) {
+        const s = wb.Sheets[name];
+        const r = XLSX.utils.sheet_to_json(s,{header:1,defval:'',range:0});
+        if (r.length && r[0].includes('아울렛명') && r[0].includes('신규입점월')) { ws = s; break; }
+      }
+      if (!ws) { alert('⚠ Snow 신규 파일 확인 (헤더: 지점, SR, 아울렛명, 도매담당, 도매상명, 구, 신규입점월)'); input.value=''; return; }
+      const allRows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const hdr = allRows[0]; const ix = k => hdr.indexOf(k);
+      parsedSnowWide = allRows.slice(1).filter(r=>String(r[ix('아울렛명')]||'').trim()).map(r=>({
+        region:      String(r[ix('지점')]||'').trim(),
+        sr:          String(r[ix('SR')]||'').trim(),
+        outlet:      String(r[ix('아울렛명')]||'').trim(),
+        dde:         String(r[ix('도매담당')]||'').trim(),
+        customer:    String(r[ix('도매상명')]||'').trim(),
+        area2:       String(r[ix('구')]||'').trim(),
+        first_month: String(r[ix('신규입점월')]||'').trim(),
+      }));
+      document.getElementById('pcSnowWide').textContent = parsedSnowWide.length+'건';
+      document.getElementById('pbSnowWide').innerHTML = parsedSnowWide.slice(0,50).map(r=>
+        `<tr><td>${r.region}</td><td class="mu">${r.sr}</td><td>${r.outlet}</td><td class="mu" style="font-size:11px">${r.dde}</td><td class="mu" style="font-size:11px">${r.customer}</td><td class="mu">${r.area2}</td><td>${r.first_month}</td></tr>`
+      ).join('');
+      document.getElementById('pvSnowWide').style.display = 'block';
+    } catch(err) { alert('오류: '+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function confirmSnowWide() {
+  if (!parsedSnowWide.length) { alert('파일을 먼저 업로드하세요'); return; }
+  try {
+    await sDel('snow_new_outlets','id=gte.0');
+    const rows = parsedSnowWide.map(r=>({
+      region:r.region, sr:r.sr, outlet:r.outlet,
+      dde:r.dde, customer:r.customer, area2:r.area2, first_month:r.first_month,
+    }));
+    await sIns('snow_new_outlets', rows);
+    SNOW_NEW_OUTLETS = await sGet('snow_new_outlets','order=region');
+    alert('✅ Snow 신규입점 '+rows.length+'개 저장됨');
+    cancelSnowWide(); renderUploadStatus(); initSnowView(); refreshSnowCharts(getMergedSnowNew());
+  } catch(e) { alert('오류: '+e.message); }
+}
+function cancelSnowWide() {
+  parsedSnowWide = [];
+  document.getElementById('pvSnowWide').style.display = 'none';
+  document.getElementById('fnSnowWide').textContent = '';
+  document.getElementById('fSnowWide').value = '';
+}
+</script>

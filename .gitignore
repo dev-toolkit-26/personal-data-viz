@@ -1,0 +1,6 @@
+.claude/
+~$*
+__pycache__/
+*.pyc
+*.xlsx
+_excluded/
