@@ -3,4 +3,6 @@
 __pycache__/
 *.pyc
 *.xlsx
+!Snow_업데이트_템플릿.xlsx
+!On_Trade_BD_template.xlsx
 _excluded/
