@@ -487,6 +487,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
         <div class="kn-section-label" style="margin-top:8px;">Key Performance Indicators</div>
         <div id="sum-kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;"></div>
         <div id="sum-kpi-comment" class="kn-card" style="border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
+        <div id="sum-rofo-analysis" class="kn-card" style="margin-top:18px;border-left:3px solid #60a5fa;padding:20px 24px;color:rgba(255,255,255,.85);font-size:13px;line-height:1.7;font-weight:300;"></div>
       </div>
     </section>
 
@@ -700,6 +701,86 @@ td:first-child, td:nth-child(2) { text-align: left; }
     }
 
     document.getElementById('sum-kpi-comment').innerHTML = kpiComment;
+
+    // ── RoFo Analysis (Slide 1, KPI Comment 아래) ──
+    (function renderRofoAnalysis(){
+      var rofoEl = document.getElementById('sum-rofo-analysis');
+      if (!rofoEl) return;
+      var fcstMonIdx0 = (meta && meta.month ? meta.month : _UP_FCST_MONTH) - 1;
+      var skuRoot0 = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
+      var ttlRofoHL = ttl.rofo_monthly && ttl.rofo_monthly[fcstMonIdx0];
+      var ttlFcstHL = ttl.this_week_fcst;
+
+      if (ttlRofoHL == null) {
+        rofoEl.innerHTML = '<div class="kn-section-label" style="color:#60a5fa;letter-spacing:1.5px;margin-bottom:8px;">RoFo Analysis</div>'
+          + '<div style="color:rgba(255,255,255,.65);font-size:12.5px;">'
+          + _sumMonName + ' RoFo 데이터가 없습니다. Data Update에서 RoFo Excel을 적용하세요.'
+          + '</div>';
+        return;
+      }
+
+      // SKU별 (FCST HL - RoFo HL) 편차 계산
+      // sku_detail의 rofo_monthly는 standard cases → HL 환산 시 × 0.0792
+      // FCST(this_week_fcst)는 physical QTY → × hl_factor
+      var skuDevs = [];
+      for (var bi = 0; bi < skuRoot0.length; bi++) {
+        var b = skuRoot0[bi];
+        if (!b || !Array.isArray(b.skus)) continue;
+        for (var sj = 0; sj < b.skus.length; sj++) {
+          var s = b.skus[sj];
+          if (!s || !s.data) continue;
+          var rofoStd = s.data.rofo_monthly && s.data.rofo_monthly[fcstMonIdx0];
+          var fcstQty = s.data.this_week_fcst;
+          if (rofoStd == null || fcstQty == null) continue;
+          var f = (s.data.hl_factor != null) ? s.data.hl_factor : 0.0792;
+          var fHL = fcstQty * f;
+          var rHL = rofoStd * 0.0792;
+          if (rHL <= 0 && fHL <= 0) continue;
+          var gap = fHL - rHL;
+          var pct = (rHL > 0) ? (fHL / rHL) : null;
+          skuDevs.push({ brand: b.brand, sku: s.sku, fHL: fHL, rHL: rHL, gap: gap, pct: pct });
+        }
+      }
+      skuDevs.sort(function(a, c){ return Math.abs(c.gap) - Math.abs(a.gap); });
+      var topN = skuDevs.slice(0, 8);
+
+      // TTL summary line
+      var ttlAch = (ttlRofoHL > 0 && ttlFcstHL != null) ? ttlFcstHL / ttlRofoHL : null;
+      var ttlGap = (ttlFcstHL != null) ? ttlFcstHL - ttlRofoHL : null;
+      var achColor = _achColor(ttlAch);
+      var gapColor = (ttlGap == null) ? '#fff' : (ttlGap >= 0 ? '#4ade80' : '#f87171');
+      var gapSign  = (ttlGap == null) ? '' : (ttlGap >= 0 ? '+' : '');
+
+      var html = '<div class="kn-section-label" style="color:#60a5fa;letter-spacing:1.5px;margin-bottom:10px;">RoFo Analysis</div>';
+      html += '<div style="font-size:13px;margin-bottom:14px;">'
+            + '🎯 ' + _sumMonName + ' RoFo Target ' + hi(_fmtHL(ttlRofoHL) + ' HL', '#fff')
+            + ' vs This Wk FCST ' + hi(_fmtHL(ttlFcstHL) + ' HL', '#fff')
+            + ' = ' + hi(_fmtPct(ttlAch), achColor)
+            + ' (Gap ' + hi(gapSign + _fmtHL(ttlGap) + ' HL', gapColor) + ').'
+            + '</div>';
+
+      if (topN.length === 0) {
+        html += '<div style="color:rgba(255,255,255,.6);font-size:12px;">SKU 단위 RoFo가 매핑된 항목이 없습니다.</div>';
+      } else {
+        html += '<div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:8px;">FCST vs RoFo 편차 Top ' + topN.length + ' (절댓값 HL 기준)</div>';
+        html += '<div style="display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr .8fr;gap:10px;font-size:10.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.18);">'
+              + '<span>SKU</span><span style="text-align:right;">FCST HL</span><span style="text-align:right;">RoFo HL</span><span style="text-align:right;">Gap HL</span><span style="text-align:right;">vs RoFo</span>'
+              + '</div>';
+        html += topN.map(function(r){
+          var gc = r.gap >= 0 ? '#4ade80' : '#f87171';
+          var pc = _achColor(r.pct);
+          var gSign = r.gap >= 0 ? '+' : '';
+          return '<div style="display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr .8fr;gap:10px;font-size:12px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.06);align-items:baseline;">'
+            + '<span style="color:#fff;"><span style="color:rgba(255,255,255,.55);font-size:10.5px;">[' + r.brand + ']</span> ' + r.sku + '</span>'
+            + '<span style="text-align:right;color:#fff;">' + _fmtHL(r.fHL) + '</span>'
+            + '<span style="text-align:right;color:#fff;">' + _fmtHL(r.rHL) + '</span>'
+            + '<span style="text-align:right;color:' + gc + ';font-weight:600;">' + gSign + _fmtHL(r.gap) + '</span>'
+            + '<span style="text-align:right;color:' + pc + ';font-weight:600;">' + (r.pct != null ? _fmtPct(r.pct) : '—') + '</span>'
+            + '</div>';
+        }).join('');
+      }
+      rofoEl.innerHTML = html;
+    })();
 
     // ── Slide 5: 주요 SKU 특이사항 (전체 SKU, 브랜드별 그룹, AP / FCST / vs LM / vs LY) ──
     // SKU 표기는 FCST Status의 vs LM/LY 섹션과 동일하게 raw sku.sku 사용
