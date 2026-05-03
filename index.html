@@ -2768,13 +2768,22 @@ function achBadge(v) {
       badge: achBadge(ttl.ap_fcst_ach),
       cls: (ttl.ap_fcst_ach||0) >= 0.95 ? 'positive' : (ttl.ap_fcst_ach||0) >= 0.90 ? 'neutral' : 'negative',
     },
-    {
-      label: 'This Week FCST',
-      value: fmtHL(ttl.this_week_fcst) + ' HL',
-      sub: `vs Last Week: ${fmtDelta(ttl.differ_vs_last)} HL`,
-      badge: `FCST Growth ${achBadge(ttl.fcst_growth_lym != null ? (1 + ttl.fcst_growth_lym) : null)}`,
-      cls: (ttl.differ_vs_last||0) >= 0 ? 'positive' : 'negative',
-    },
+    (() => {
+      const rofoVal = ttl.rofo_monthly?.[fcstMon - 1] ?? null;
+      const rofoAch = (rofoVal != null && rofoVal > 0 && ttl.this_week_fcst != null)
+        ? ttl.this_week_fcst / rofoVal : null;
+      return {
+        label: 'RoFo vs FCST',
+        value: rofoAch != null ? fmtPct(rofoAch) : '—',
+        sub: rofoVal != null
+          ? `FCST ${fmtHL(ttl.this_week_fcst)} HL vs RoFo ${fmtHL(rofoVal)} HL`
+          : `${monName} RoFo 데이터 없음`,
+        badge: rofoAch != null ? achBadge(rofoAch) : '',
+        cls: rofoAch == null ? 'neutral'
+           : rofoAch >= 0.95 ? 'positive'
+           : rofoAch >= 0.90 ? 'neutral' : 'negative',
+      };
+    })(),
     {
       label: 'FCST Growth vs LYM',
       value: fmtPctDelta(ttl.fcst_growth_lym),
