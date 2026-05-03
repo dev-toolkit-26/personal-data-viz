@@ -15,6 +15,12 @@ Usage:  python update_rofo.py
 import json, sys, os
 from collections import defaultdict
 
+# Windows 콘솔 cp949 회피: print의 em-dash/화살표를 안전하게 출력
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 try:
     import openpyxl
 except ImportError:
@@ -236,8 +242,8 @@ for brand, b_entry in ott.items():
 
 # wk10_summary.hl.TTL.rofo (single FCST-month value, HL)
 fcst_idx = fcst_mon - 1
-sets.append((["wk10_summary", "hl", "TTL", "rofo"], ttl_rofo_hl[fcst_idx]))
-sets.append((["wk10_summary", "cases", "BEER TTL", "rofo"], ttl_rofo_std[fcst_idx]))
+sets.append((["wk10_summary", "hl", "TTL", "rofo_monthly"], ttl_rofo_hl))
+sets.append((["wk10_summary", "cases", "BEER TTL", "rofo_monthly"], ttl_rofo_std))
 
 # Build a single UPDATE with chained jsonb_set
 # (one statement so all-or-nothing; matches update_ap.py / sku_*.sql style)
@@ -261,7 +267,7 @@ sql_lines.append("COMMIT;")
 sql_lines.append("")
 sql_lines.append("-- Verification:")
 sql_lines.append("-- SELECT data->'sku_detail'->'On Trade Total'->0->'data'->'rofo_monthly' FROM dashboard_snapshots WHERE id=1;")
-sql_lines.append("-- SELECT data->'wk10_summary'->'hl'->'TTL'->'rofo' FROM dashboard_snapshots WHERE id=1;")
+sql_lines.append("-- SELECT data->'wk10_summary'->'hl'->'TTL'->'rofo_monthly' FROM dashboard_snapshots WHERE id=1;")
 
 with open(SQL_OUT, "w", encoding="utf-8") as f:
     f.write("\n".join(sql_lines))

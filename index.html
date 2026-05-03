@@ -754,7 +754,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
               // 셀 구조: HL+pill을 한 묶음으로 셀 가로 중앙에 정렬 (헤더 justify-self:center와 일치)
               var _cellStyle = 'display:flex;justify-content:center;align-items:baseline;';
               var _numStyle = 'color:#fff;white-space:nowrap;';
-              return '<div style="display:grid;grid-template-columns:' + GRID_COLS + ';gap:10px;align-items:baseline;font-size:14px;line-height:1.75;padding:2px 0 2px 14px;">'
+              return '<div style="display:grid;grid-template-columns:' + GRID_COLS + ';gap:10px;align-items:baseline;font-size:12px;line-height:1.75;padding:2px 0 2px 14px;">'
                 + '<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + it.label + '</span>'
                 + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(apHL) + '</span></span>'
                 + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(fcstHL) + '</span>' + _achPill(apFcstAch, _achColor, _achBadgeBg) + '</span>'
@@ -1496,6 +1496,25 @@ td:first-child, td:nth-child(2) { text-align: left; }
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
           <button class="upload-apply-btn" id="ap-apply-btn" onclick="handleAPUpload()">Apply AP</button>
           <span id="ap-upload-status" style="font-size:12px;"></span>
+        </div>
+      </div>
+
+      <!-- RoFo File (Rolling Forecast) -->
+      <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border);">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">RoFo (Rolling Forecast) Update</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">매월 RoFo Excel 교체 시 사용. 파일명에 포함된 월부터 12월까지 적용 (이전 월은 actual 유지).</div>
+        <div style="margin-bottom:14px;">
+          <div style="font-weight:700;font-size:14px;margin-bottom:6px;">RoFo Excel</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Filename: 26Y Rofo_[월].xlsx (예: 26Y Rofo_May.xlsx → 5-12월 적용)</div>
+          <label class="upload-file-btn" id="rofo-btn-label" style="display:inline-flex;" title="26Y Rofo_[월].xlsx">
+            Select File
+            <input type="file" id="rofo-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'rofo-btn-label','RoFo')">
+          </label>
+          <span id="rofo-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button class="upload-apply-btn" id="rofo-apply-btn" onclick="handleRofoUpload()">Apply RoFo</button>
+          <span id="rofo-upload-status" style="font-size:12px;"></span>
         </div>
       </div>
 
@@ -2266,7 +2285,11 @@ async function clearUploadedData() {
 
 function _upOnFileSelect(input, labelId, prefix) {
   const label = document.getElementById(labelId);
-  const fnSpanId = labelId === 'fcst-btn-label' ? 'fcst-filename' : labelId === 'rev-btn-label' ? 'rev-filename' : labelId === 'ap-btn-label' ? 'ap-filename' : 'dsr-filename';
+  const fnSpanId = labelId === 'fcst-btn-label' ? 'fcst-filename'
+                : labelId === 'rev-btn-label'   ? 'rev-filename'
+                : labelId === 'ap-btn-label'    ? 'ap-filename'
+                : labelId === 'rofo-btn-label'  ? 'rofo-filename'
+                : 'dsr-filename';
   const fnSpan = document.getElementById(fnSpanId);
   if (input.files && input.files[0]) {
     label.classList.add('has-file');
@@ -2555,6 +2578,152 @@ async function handleAPUpload() {
     statusEl.style.color = 'var(--positive)';
   } catch(err) {
     console.error('AP upload error:', err);
+    statusEl.textContent = `Error: ${err.message}`;
+    statusEl.style.color = 'var(--negative)';
+  } finally { applyBtn.disabled = false; }
+}
+
+// ── RoFo Excel 파싱 (update_rofo.py 로직 재현) ────────────────────────────────
+// 입력: "Latest RoFo" 시트, R7..R58, K(11)=Team L(12)=Channel M(13)=Brand N(14)=SKU O..Z(15..26)=Jan..Dec
+// 파일명에서 월 추출: "26Y Rofo_May.xlsx" → May → ROFO_START_IDX=4 (Jan-Apr는 null 유지, May-Dec만 기록)
+async function parseRofoExcel(file) {
+  const MONTH_MAP = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+  const m = file.name.match(/_([A-Za-z]{3,9})\.xlsx$/i);
+  if (!m || MONTH_MAP[m[1].slice(0,3).toLowerCase()] === undefined) {
+    throw new Error('파일명에서 월을 인식할 수 없습니다. 예: 26Y Rofo_May.xlsx');
+  }
+  const startIdx = MONTH_MAP[m[1].slice(0,3).toLowerCase()];
+
+  const buf = await _upReadBuffer(file);
+  const wb  = XLSX.read(buf, { type: 'array' });
+  const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('latest rofo')) || wb.SheetNames[0];
+  const ws  = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+  const BRAND_MAP = {
+    'Heineken':'Heineken', 'Heineken 0.0':'Heineken 0.0', 'Heineken Silver':'Heineken Silver',
+    'Desperados':'Desperados', 'EdelWeiss':'EdelWeiss', 'Tiger':'Tiger', 'Tiger Radler':'Tiger Radler',
+    'Paulaner':'Paulaner', 'SULHWA':'Snow', 'Birra Moretti':'BirraMoretti',
+  };
+  const SKU_RENAME = {};   // 필요 시 Excel 라벨 → 대시보드 SKU 라벨 매핑
+  const CONV = 12.6263;
+
+  // 대시보드의 On Trade Total 브랜드/SKU 인덱스 + 알려진 SKU set
+  const ott = DASHBOARD_DATA.sku_detail?.['On Trade Total'] || [];
+  const knownSkus = new Set();
+  ott.forEach(b => (b.skus || []).forEach(s => knownSkus.add(`${b.brand}|${s.sku}`)));
+
+  const skuRofo = new Map();   // key=`${dashBrand}|${dashSku}` → [12] HL (null outside startIdx..11)
+  const skipped = [], unmapped = [];
+
+  // Excel 1-indexed R7..R58 = JS 0-indexed rows[6]..rows[57]
+  for (let r = 6; r <= 57; r++) {
+    const row = rows[r];
+    if (!row) continue;
+    const brandRaw = row[12];   // M
+    const skuRaw   = row[13];   // N
+    if (brandRaw == null || brandRaw === 0 || brandRaw === '0') continue;
+    if (skuRaw == null || skuRaw === 0 || skuRaw === '0') {
+      skipped.push({ row: r + 1, brand: brandRaw, sku: skuRaw, reason: 'sku empty' });
+      continue;
+    }
+    const dashBrand = BRAND_MAP[brandRaw];
+    if (!dashBrand) { skipped.push({ row: r + 1, brand: brandRaw, sku: skuRaw, reason: 'brand not in BRAND_MAP' }); continue; }
+    const dashSku = SKU_RENAME[skuRaw] || skuRaw;
+    const key = `${dashBrand}|${dashSku}`;
+    if (!knownSkus.has(key)) { unmapped.push(key); continue; }
+
+    const monthly = new Array(12).fill(null);
+    for (let mi = startIdx; mi < 12; mi++) {
+      const v = row[14 + mi];   // O = 14
+      monthly[mi] = (typeof v === 'number') ? Math.round(v * 100) / 100 : 0;
+    }
+    if (skuRofo.has(key)) {
+      const ex = skuRofo.get(key);
+      skuRofo.set(key, ex.map((a, i) => (a == null && monthly[i] == null) ? null : (a || 0) + (monthly[i] || 0)));
+    } else {
+      skuRofo.set(key, monthly);
+    }
+  }
+
+  // HL → standard cases (× CONV)
+  const skuRofoStd = new Map();
+  for (const [k, arr] of skuRofo) {
+    skuRofoStd.set(k, arr.map(v => v == null ? null : Math.round(v * CONV * 100) / 100));
+  }
+
+  // Brand-level rollup (On Trade Total)
+  const brandRofoStd = new Map();
+  for (const [k, arr] of skuRofoStd) {
+    const brand = k.slice(0, k.indexOf('|'));
+    if (!brandRofoStd.has(brand)) brandRofoStd.set(brand, new Array(12).fill(null));
+    const acc = brandRofoStd.get(brand);
+    for (let i = 0; i < 12; i++) {
+      if (arr[i] != null) acc[i] = (acc[i] || 0) + arr[i];
+    }
+  }
+  for (const [b, arr] of brandRofoStd) brandRofoStd.set(b, arr.map(v => v == null ? null : Math.round(v * 100) / 100));
+
+  // TTL rollup
+  const ttlStd = new Array(12).fill(null);
+  for (const arr of brandRofoStd.values()) {
+    for (let i = 0; i < 12; i++) if (arr[i] != null) ttlStd[i] = (ttlStd[i] || 0) + arr[i];
+  }
+  const ttlRofoStd = ttlStd.map(v => v == null ? null : Math.round(v * 100) / 100);
+  const ttlRofoHl  = ttlRofoStd.map(v => v == null ? null : Math.round(v / CONV * 100) / 100);
+
+  return { startIdx, skuRofoStd, brandRofoStd, ttlRofoStd, ttlRofoHl, skipped, unmapped, sheetName, monthLabel: m[1] };
+}
+
+// ── RoFo 데이터 DASHBOARD_DATA에 적용 ─────────────────────────────────────────
+function applyRofoData({ skuRofoStd, brandRofoStd, ttlRofoStd, ttlRofoHl }) {
+  const D = DASHBOARD_DATA;
+  const ott = D.sku_detail?.['On Trade Total'];
+  if (!ott) throw new Error('DASHBOARD_DATA.sku_detail["On Trade Total"]가 없습니다.');
+
+  for (const brandEntry of ott) {
+    const dashBrand = brandEntry.brand;
+    const bMonthly  = brandRofoStd.get(dashBrand) || new Array(12).fill(null);
+    brandEntry.data = brandEntry.data || {};
+    brandEntry.data.rofo_monthly = bMonthly;
+    for (const skuEntry of (brandEntry.skus || [])) {
+      const sMonthly = skuRofoStd.get(`${dashBrand}|${skuEntry.sku}`) || new Array(12).fill(null);
+      skuEntry.data = skuEntry.data || {};
+      skuEntry.data.rofo_monthly = sMonthly;
+    }
+  }
+
+  if (D.wk10_summary?.hl?.TTL)            D.wk10_summary.hl.TTL.rofo_monthly            = ttlRofoHl;
+  if (D.wk10_summary?.cases?.['BEER TTL']) D.wk10_summary.cases['BEER TTL'].rofo_monthly = ttlRofoStd;
+}
+
+// ── RoFo 업로드 핸들러 ────────────────────────────────────────────────────────
+async function handleRofoUpload() {
+  const input    = document.getElementById('rofo-file-input');
+  const statusEl = document.getElementById('rofo-upload-status');
+  const applyBtn = document.getElementById('rofo-apply-btn');
+  const file     = input?.files[0];
+  if (!file) { statusEl.textContent = 'RoFo 파일을 선택하세요.'; statusEl.style.color = 'var(--negative)'; return; }
+  applyBtn.disabled = true;
+  statusEl.style.color = 'var(--text-muted)';
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    statusEl.textContent = 'RoFo Excel 파싱 중...';
+    const result = await parseRofoExcel(file);
+    applyRofoData(result);
+    _upReRenderAll();
+
+    await _upDeployToSupabase(statusEl);
+    const skipMsg = result.unmapped.length || result.skipped.length
+      ? ` (skipped ${result.skipped.length} / unmapped ${result.unmapped.length} — 콘솔 확인)`
+      : '';
+    if (result.unmapped.length || result.skipped.length) {
+      console.info('[RoFo] skipped rows:', result.skipped, 'unmapped SKUs:', result.unmapped);
+    }
+    statusEl.textContent = `✓ ${result.monthLabel} RoFo 업데이트 완료${skipMsg}`;
+    statusEl.style.color = 'var(--positive)';
+  } catch (err) {
+    console.error('RoFo upload error:', err);
     statusEl.textContent = `Error: ${err.message}`;
     statusEl.style.color = 'var(--negative)';
   } finally { applyBtn.disabled = false; }
