@@ -1106,7 +1106,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <button class="tab-btn" onclick="switchTab('sku')">SKU Detail</button>
     <button class="tab-btn" onclick="switchTab('sku-hist')">SKU History</button>
     <button class="tab-btn" onclick="switchTab('order')">Order Pattern</button>
-    <button class="tab-btn" onclick="switchTab('rofo')">RoFo</button>
     <button class="tab-btn" onclick="switchTabUpdate()" id="tab-btn-update" style="margin-left:auto;">Data Update</button>
   </div>
 
@@ -1321,28 +1320,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
       <div class="chart-title" id="op-daily-title">Daily Order Detail - March (Mar)</div>
       <div class="chart-wrap"><canvas id="chartOrderDaily"></canvas></div>
     </div>
-  </div>
-
-  <!-- Tab: RoFo -->
-  <div id="tab-rofo" class="tab-content">
-    <div class="section-title">RoFo</div>
-    <div class="filter-bar" style="margin-bottom:10px;">
-      <span><label>Section</label>
-        <select id="f-rofo-section" onchange="renderRofoTable()">
-          <option value="On Trade Total">On Trade Total</option>
-          <option value="Seoul">Seoul</option>
-          <option value="BuSan">BuSan</option>
-          <option value="DaeGu&amp;JeJu">DaeGu&amp;JeJu</option>
-          <option value="DaeJeon">DaeJeon</option>
-          <option value="GwangJu">GwangJu</option>
-        </select>
-      </span>
-      <span class="month-toggle-wrap" style="margin-left:12px;">
-        <button id="rofo-unit-cases" class="month-btn" onclick="setRofoUnit('cases')">Cases</button>
-        <button id="rofo-unit-hl"    class="month-btn off" onclick="setRofoUnit('hl')">HL</button>
-      </span>
-    </div>
-    <div class="table-wrap" style="max-height:65vh; overflow-y:auto;"><table id="tbl-rofo"></table></div>
   </div>
 
   <!-- Tab: 회의록 -->
@@ -3843,129 +3820,6 @@ function renderYTDTable() {
 }
 
 // ═══════════════════════════════════════════════
-//  TABLE — RoFo (mirrors SKU Detail; current month uses RoFo instead of AP)
-// ═══════════════════════════════════════════════
-let _rofoUnit = 'cases';   // 'cases' | 'hl' — mirrors _skuUnit
-
-function setRofoUnit(unit) {
-  _rofoUnit = unit;
-  document.getElementById('rofo-unit-cases').classList.toggle('off', unit !== 'cases');
-  document.getElementById('rofo-unit-hl').classList.toggle('off', unit !== 'hl');
-  renderRofoTable();
-}
-
-function renderRofoTable() {
-  const sec  = document.getElementById('f-rofo-section').value;
-  const data = DASHBOARD_DATA.sku_detail[sec] || [];
-  const mon  = _selectedMonth;
-  const monName = MONTH_NAMES_KR[mon - 1];
-  const fcstMonName = _UP_MONTH_NAMES[_upGetFcstMonth()] || 'Mar';
-  const isPast = mon < _upGetFcstMonth();
-
-  const brandUnit = _rofoUnit === 'hl' ? 'HL' : 'c/s';
-  const skuUnit   = _rofoUnit === 'hl' ? 'HL' : 'QTY';
-
-  // ── Header ─────────────────────────────────────────────────────────────────
-  let html;
-  if (isPast) {
-    // Past month: same layout as SKU Detail (AP vs Actual). RoFo doesn't apply to closed months.
-    html = `<thead><tr>
-      <th>Brand (${brandUnit}) / SKU (${skuUnit})</th>
-      <th>${monName} AP</th><th>${monName} Actual</th><th>Attainment(Actual/AP)</th>
-      <th>${fcstMonName} RoFo</th><th>This Wk FCST</th><th>FCST Attainment (vs RoFo)</th>
-      <th>LY Month</th>
-    </tr></thead>`;
-  } else {
-    html = `<thead><tr>
-      <th>Brand (${brandUnit}) / SKU (${skuUnit})</th>
-      <th>${fcstMonName} RoFo</th><th>This Wk FCST</th><th>Attainment(FCST/RoFo)</th>
-      <th>${fcstMonName} MTD</th><th>MTD Attainment (vs RoFo)</th>
-      <th>LY Month</th><th>Differ.(vs LY)</th><th>Last Wk FCST</th><th>Differ.(vs Last Wk)</th>
-    </tr></thead>`;
-  }
-
-  // ── Row build helper (mirrors renderSkuTable, AP→RoFo for current month) ────
-  function buildRow(d, label, isBrand) {
-    const factor = isBrand
-      ? 0.0792
-      : (d.hl_factor != null ? d.hl_factor : 0.0792);
-    const fmt   = v => _rofoUnit === 'hl' ? fmtHL(v == null ? null : v * factor) : fmtCase(v);
-    // RoFo / AP stored as standard cases; same conversion as ap_monthly
-    const fmtRofo = v => _rofoUnit === 'hl'
-      ? fmtHL(v == null ? null : v * 0.0792)
-      : isBrand ? fmtCase(v) : fmtCase(v == null ? null : v * 0.0792 / factor);
-    const nameCell = isBrand
-      ? `<td class="td-brand">${label}</td>`
-      : `<td>&nbsp;&nbsp;<span style="color:#555">${label}</span></td>`;
-    const td = isBrand ? ' class="td-brand"' : '';
-
-    const lyMonthIdx = isPast ? mon - 1 : _upGetFcstMonth() - 1;
-    const lyMonth = d.act_2025_monthly?.[lyMonthIdx] ?? d.ly_month;
-
-    if (isPast) {
-      const monAP  = d.ap_monthly  ? d.ap_monthly[mon - 1]  : null;
-      const actual = d.act_monthly ? d.act_monthly[mon - 1] : null;
-      const fcstMonRofo = d.rofo_monthly?.[_upGetFcstMonth() - 1] ?? null;
-      // ap_monthly / rofo_monthly are std cases; SKU actual/fcst are physical QTY → convert to same unit
-      const stdToQty = v => v == null ? null : (isBrand ? v : v * 0.0792 / factor);
-      const ach     = (stdToQty(monAP) && actual)              ? actual / stdToQty(monAP) : null;
-      const fcstAch = (stdToQty(fcstMonRofo) && d.this_week_fcst != null) ? d.this_week_fcst / stdToQty(fcstMonRofo) : null;
-      return `<tr>
-        ${nameCell}
-        <td${td}>${fmtRofo(monAP)}</td>
-        <td${td}>${fmt(actual)}</td>
-        <td${td}><span class="${achClass(ach)}">${fmtPct(ach)}</span></td>
-        <td${td}>${fmtRofo(fcstMonRofo)}</td>
-        <td${td}>${fmt(d.this_week_fcst)}</td>
-        <td${td}><span class="${achClass(fcstAch)}">${fmtPct(fcstAch)}</span></td>
-        <td${td}>${fmt(lyMonth)}</td>
-      </tr>`;
-    } else {
-      const differVsLY = (d.this_week_fcst != null && lyMonth != null)
-        ? d.this_week_fcst - lyMonth : null;
-      const fmtDeltaF = v => {
-        if (v == null) return '—';
-        const val = _rofoUnit === 'hl' ? v * factor : v;
-        const abs = _rofoUnit === 'hl'
-          ? Math.abs(val).toLocaleString('ko-KR', {maximumFractionDigits:1})
-          : Math.abs(val).toFixed(1);
-        return (val >= 0 ? '+' : '-') + abs;
-      };
-      // Use RoFo for the current FCST month (replacing AP)
-      const effRofo = d.rofo_monthly?.[mon - 1] ?? null;
-      const effRofoQty = effRofo == null ? null : (isBrand ? effRofo : effRofo * 0.0792 / factor);
-      const fcstAch = (effRofoQty && d.this_week_fcst != null) ? d.this_week_fcst / effRofoQty : null;
-      const mtdAch  = (effRofoQty && d.mtd != null)            ? d.mtd / effRofoQty            : null;
-      return `<tr>
-        ${nameCell}
-        <td${td}>${fmtRofo(effRofo)}</td>
-        <td${td}>${fmt(d.this_week_fcst)}</td>
-        <td${td}><span class="${achClass(fcstAch)}">${fmtPct(fcstAch)}</span></td>
-        <td${td}>${fmt(d.mtd)}</td>
-        <td${td}><span class="${achClass(mtdAch)}">${fmtPct(mtdAch)}</span></td>
-        <td${td}>${fmt(lyMonth)}</td>
-        <td class="${numClass(differVsLY)}">${fmtDeltaF(differVsLY)}</td>
-        <td${td}>${fmt(d.last_week_fcst)}</td>
-        <td class="${numClass(d.differ_vs_last)}">${fmtDeltaF(d.differ_vs_last)}</td>
-      </tr>`;
-    }
-  }
-
-  // ── Brand + SKU render ─────────────────────────────────────────────────────
-  data.forEach(brand => {
-    html += `<tbody>`;
-    html += buildRow(brand.data, brand.brand, true);
-    brand.skus.forEach(sku => {
-      html += buildRow(sku.data, sku.sku, false);
-    });
-    html += `</tbody>`;
-  });
-
-  document.getElementById('tbl-rofo').innerHTML = html;
-  makeSortable('tbl-rofo');
-}
-
-// ═══════════════════════════════════════════════
 //  TABLE — SKU Detail
 // ═══════════════════════════════════════════════
 let _skuUnit = 'cases';   // 'cases' | 'hl'
@@ -5000,7 +4854,7 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tabId).classList.add('active');
-  const tabNames = ['wk10','minutes','ytd','revenue','sku','sku-hist','order','rofo'];
+  const tabNames = ['wk10','minutes','ytd','revenue','sku','sku-hist','order'];
   const btns = document.querySelectorAll('.tab-btn');
   btns[tabNames.indexOf(tabId)]?.classList.add('active');
 
@@ -5011,14 +4865,12 @@ function switchTab(tabId) {
     if (tabId === 'sku')      { renderSkuTable(); }
     if (tabId === 'sku-hist') { renderSkuHistTable(); renderSkuHistCompare(); }
     if (tabId === 'order')    { renderOrderPattern(); }
-    if (tabId === 'rofo')     { renderRofoTable(); }
     if (tabId === 'minutes')  { minutesLoad(); }
   } else {
     if (tabId === 'ytd')          { renderYTDCharts(); renderYTDTable(); }
     else if (tabId === 'revenue') { initRevenueTab(); }
     else if (tabId === 'sku-hist'){ renderSkuHistTable(); renderSkuHistCompare(); }
     else if (tabId === 'order')   { renderOrderPattern(); }
-    else if (tabId === 'rofo')    { renderRofoTable(); }
     else if (tabId === 'minutes') { minutesLoad(); }
     else Object.values(_charts).forEach(c => c.resize && c.resize());
   }
