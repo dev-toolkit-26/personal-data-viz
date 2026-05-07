@@ -2226,7 +2226,7 @@ function renderPaulanerHQReport() {
 
   let h = `<thead><tr><th style="${P}${GH}">Category</th>`;
   MONTHS_PL.forEach(m => h += `<th style="${PR}${GH}">${m}월</th>`);
-  h += `<th style="${PR}${GH}">Total</th></tr></thead><tbody>`;
+  h += `<th style="${PR}${GH}">Total <span style="font-weight:400;font-size:10px;opacity:.85">(Unique)</span></th></tr></thead><tbody>`;
 
   // Target section
   h += `<tr><td colspan="${MONTHS_PL.length+2}" style="${P}background:#e8f4e8;${BD}color:#1a5c2a;">▶ Target</td></tr>`;
