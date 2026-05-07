@@ -721,7 +721,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       // SKU별 (FCST HL - RoFo HL) 편차 계산
       // sku_detail의 rofo_monthly는 standard cases → HL 환산 시 × 0.0792
-      // FCST(this_week_fcst)는 physical QTY → × hl_factor
+      // FCST(this_week_fcst) / MTD는 physical QTY → × hl_factor
       var skuDevs = [];
       for (var bi = 0; bi < skuRoot0.length; bi++) {
         var b = skuRoot0[bi];
@@ -737,8 +737,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
           var rHL = rofoStd * 0.0792;
           if (rHL <= 0 && fHL <= 0) continue;
           var gap = fHL - rHL;
-          var pct = (rHL > 0) ? (fHL / rHL) : null;
-          skuDevs.push({ brand: b.brand, sku: s.sku, fHL: fHL, rHL: rHL, gap: gap, pct: pct });
+          var mtdQty = s.data.mtd;
+          var mtdHL  = (mtdQty != null) ? mtdQty * f : null;
+          var vsFcst = (fHL > 0 && mtdHL != null) ? mtdHL / fHL : null;
+          skuDevs.push({ brand: b.brand, sku: s.sku, fHL: fHL, rHL: rHL, gap: gap, mtdHL: mtdHL, vsFcst: vsFcst });
         }
       }
       skuDevs.sort(function(a, c){ return Math.abs(c.gap) - Math.abs(a.gap); });
@@ -763,19 +765,20 @@ td:first-child, td:nth-child(2) { text-align: left; }
         html += '<div style="color:rgba(255,255,255,.6);font-size:12px;">SKU 단위 RoFo가 매핑된 항목이 없습니다.</div>';
       } else {
         html += '<div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:8px;">FCST vs RoFo 편차 Top ' + topN.length + ' (절댓값 HL 기준)</div>';
-        html += '<div style="display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr .8fr;gap:10px;font-size:10.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.18);">'
-              + '<span>SKU</span><span style="text-align:right;">FCST HL</span><span style="text-align:right;">RoFo HL</span><span style="text-align:right;">Gap HL</span><span style="text-align:right;">vs RoFo</span>'
+        html += '<div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .8fr .8fr;gap:10px;font-size:10.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.18);">'
+              + '<span>SKU</span><span style="text-align:right;">FCST HL</span><span style="text-align:right;">RoFo HL</span><span style="text-align:right;">Gap HL</span><span style="text-align:right;">MTD HL</span><span style="text-align:right;">vs FCST</span>'
               + '</div>';
         html += topN.map(function(r){
           var gc = r.gap >= 0 ? '#4ade80' : '#f87171';
-          var pc = _achColor(r.pct);
+          var fc = _achColor(r.vsFcst);
           var gSign = r.gap >= 0 ? '+' : '';
-          return '<div style="display:grid;grid-template-columns:1.6fr .9fr .9fr .9fr .8fr;gap:10px;font-size:12px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.06);align-items:baseline;">'
+          return '<div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .8fr .8fr;gap:10px;font-size:12px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.06);align-items:baseline;">'
             + '<span style="color:#fff;"><span style="color:rgba(255,255,255,.55);font-size:10.5px;">[' + r.brand + ']</span> ' + r.sku + '</span>'
             + '<span style="text-align:right;color:#fff;">' + _fmtHL(r.fHL) + '</span>'
             + '<span style="text-align:right;color:#fff;">' + _fmtHL(r.rHL) + '</span>'
             + '<span style="text-align:right;color:' + gc + ';font-weight:600;">' + gSign + _fmtHL(r.gap) + '</span>'
-            + '<span style="text-align:right;color:' + pc + ';font-weight:600;">' + (r.pct != null ? _fmtPct(r.pct) : '—') + '</span>'
+            + '<span style="text-align:right;color:#fff;">' + (r.mtdHL != null ? _fmtHL(r.mtdHL) : '—') + '</span>'
+            + '<span style="text-align:right;color:' + fc + ';font-weight:600;">' + (r.vsFcst != null ? _fmtPct(r.vsFcst) : '—') + '</span>'
             + '</div>';
         }).join('');
       }
