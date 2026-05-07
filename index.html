@@ -959,6 +959,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       if (actualMonths.length > 0) {
         var parts = [];
+        var ytdActSum = 0, ytdApSum = 0, ytdLySum = 0;
         for (var j = 0; j < actualMonths.length; j++) {
           var idx = actualMonths[j];
           var ach  = ap26[idx] ? act26[idx] / ap26[idx] : null;
@@ -977,6 +978,31 @@ td:first-child, td:nth-child(2) { text-align: left; }
             + '<b style="color:' + achColor + ';min-width:42px;">' + achTxt + '</b>'
             + (gapTxt ? '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">Gap</span><b style="color:' + gapColor + ';">' + gapTxt + '</b>' : '')
             + (lyTxt ? '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">vs LY</span><b style="color:' + lyColor + ';">' + lyTxt + '</b>' : '')
+            + '</div>');
+          ytdActSum += (act26[idx] || 0);
+          ytdApSum  += (ap26[idx]  || 0);
+          ytdLySum  += (act25[idx] || 0);
+        }
+        // 확정 월 YTD 누적 (현재 FCST 월 제외)
+        if (actualMonths.length > 1 && ytdApSum > 0) {
+          var ytdRange   = months[actualMonths[0]] + '~' + months[actualMonths[actualMonths.length-1]];
+          var ytdAch     = ytdActSum / ytdApSum;
+          var ytdGap     = ytdActSum - ytdApSum;
+          var ytdVsLy    = ytdLySum > 0 ? ytdActSum / ytdLySum : null;
+          var ytdAchColor= ytdAch >= 1 ? '#4ade80' : ytdAch >= 0.9 ? '#fbbf24' : '#f87171';
+          var ytdGapColor= ytdGap >= 0 ? '#4ade80' : '#f87171';
+          var ytdLyColor = ytdVsLy != null ? (ytdVsLy >= 1 ? '#4ade80' : '#f87171') : '#fff';
+          var ytdAchTxt  = Math.round(ytdAch*100) + '%';
+          var ytdGapTxt  = (ytdGap >= 0 ? '+' : '') + Math.round(ytdGap) + ' HL';
+          var ytdLyTxt   = ytdVsLy != null ? (ytdVsLy >= 1 ? '+' : '') + Math.round((ytdVsLy-1)*100) + '%' : null;
+          parts.push('<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:12px;line-height:1.65;border-top:1px dashed rgba(255,255,255,.18);padding-top:5px;margin-top:3px;">'
+            + '<span style="color:#fff;font-weight:700;min-width:36px;">YTD</span>'
+            + '<span style="color:rgba(255,255,255,.85);min-width:88px;">' + _fmtHL(ytdActSum) + ' HL</span>'
+            + '<span style="color:rgba(255,255,255,.5);font-size:11px;">AP</span>'
+            + '<b style="color:' + ytdAchColor + ';min-width:42px;">' + ytdAchTxt + '</b>'
+            + '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">Gap</span><b style="color:' + ytdGapColor + ';">' + ytdGapTxt + '</b>'
+            + (ytdLyTxt ? '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">vs LY</span><b style="color:' + ytdLyColor + ';">' + ytdLyTxt + '</b>' : '')
+            + '<span style="color:rgba(255,255,255,.4);font-size:10.5px;margin-left:auto;">' + ytdRange + ' 누적</span>'
             + '</div>');
         }
         lines.push('<div style="display:flex;align-items:flex-start;gap:10px;">'
@@ -2072,7 +2098,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
     if (fcstResult.meta.wdProgress) D.wd_progress  = fcstResult.meta.wdProgress;
   }
 
-  const fcstMonth = fcstResult?.meta?.wkMeta?.month || dsrResult?.dsrMeta?.month || _UP_FCST_MONTH;
+  const fcstMonth = fcstResult?.meta?.wkMeta?.month || dsrResult?.dsrMeta?.month || prevMonth;
   const isSameWeek = fcstResult?.meta?.wkMeta?.num === prevWkNum;  // re-upload of same week
   const mIdx = fcstMonth - 1;
   const mKey = String(fcstMonth);
@@ -2200,7 +2226,8 @@ function applyDataUpdate(fcstResult, dsrResult) {
   if (dsrResult) {
     if (dsrResult.dsrMeta) {
       // FCST가 같이 업로드됐으면 wk_meta는 FCST 기준 유지 (DSR meta는 오늘 날짜 기반이라 month 필드가 없음)
-      if (!fcstResult) D.wk_meta = dsrResult.dsrMeta.wk_meta;
+      // DSR만 단독 업로드 시 month는 직전 값(prevMonth) 유지 — 통째로 덮으면 month=undefined가 되어 4월 폴백되는 버그 방지
+      if (!fcstResult) D.wk_meta = { ...dsrResult.dsrMeta.wk_meta, month: prevMonth };
       D.wd_progress = dsrResult.dsrMeta.wd_progress;
     }
     const { regionHl, regionCases, ttlHl, ttlCases, skuQty, regionSkuQty, skuCasesMap, regionSkuCasesMap, orderPattern, monthlySkuQty, monthlyRegionSkuQty, monthlySkuCases, monthlyRegionSkuCases, monthlyTtlHl, monthlyRegionHl, monthsSeen } = dsrResult;
