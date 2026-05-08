@@ -1885,21 +1885,21 @@ async function parseDsrExcel(file, fcstMonth = null) {
   // 선택 컬럼: "Day" (1-31 정수)가 있으면 Daily 차트 일자 라벨에 우선 사용 (Date 파싱 드리프트 회피)
   const idxDay = headers.indexOf('Day');
 
-  // FCST 없이 DSR만 업로드 시: 파일 내 HL 합계가 가장 큰 월을 자동 감지
+  // FCST 없이 DSR만 업로드 시: 파일 내 가장 최근 Date의 월을 사용
+  // (DSR raw는 업로드 전날까지 누적이므로 maxDate.month = 진행 중인 월)
   if (!fcstMonth) {
-    const _mHl = {};
+    let _maxDate = null;
     for (let _i = 1; _i < rows.length; _i++) {
       const _r = rows[_i]; if (!_r) continue;
-      const _mRaw = _r[idxMonth]; if (_mRaw == null) continue;
-      let _m;
-      if (_mRaw instanceof Date) _m = _mRaw.getFullYear() < 2000 ? _mRaw.getDate() : _mRaw.getMonth()+1;
-      else if (typeof _mRaw === 'string' && _mRaw.includes('-')) _m = parseInt(_mRaw.split('-')[1]);
-      else _m = parseInt(_mRaw);
-      if (!_m || isNaN(_m)) continue;
-      _mHl[_m] = (_mHl[_m] || 0) + _upToFloat(_r[idxVolHl]);
+      const _dRaw = _r[idxDate]; if (_dRaw == null) continue;
+      let _dObj;
+      if (_dRaw instanceof Date)        _dObj = _dRaw;
+      else if (typeof _dRaw === 'number') _dObj = _upExcelDate(_dRaw);
+      else                                _dObj = new Date(_dRaw);
+      if (isNaN(_dObj)) continue;
+      if (!_maxDate || _dObj > _maxDate) _maxDate = _dObj;
     }
-    const _entries = Object.entries(_mHl).sort((a, b) => b[1] - a[1]);
-    fcstMonth = _entries.length ? parseInt(_entries[0][0]) : _UP_FCST_MONTH;
+    fcstMonth = _maxDate ? _maxDate.getMonth() + 1 : _UP_FCST_MONTH;
   }
 
   const regionHl={}, regionCases={}, regionSkuQty={}, regionSkuCasesMap={};
@@ -2230,7 +2230,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
     if (dsrResult.dsrMeta) {
       // FCST가 같이 업로드됐으면 wk_meta는 FCST 기준 유지 (DSR meta는 오늘 날짜 기반이라 month 필드가 없음)
       // DSR만 단독 업로드 시 month는 직전 값(prevMonth) 유지 — 통째로 덮으면 month=undefined가 되어 4월 폴백되는 버그 방지
-      if (!fcstResult) D.wk_meta = { ...dsrResult.dsrMeta.wk_meta, month: prevMonth };
+      if (!fcstResult) D.wk_meta = { ...dsrResult.dsrMeta.wk_meta, month: dsrResult.dsrMeta.month || prevMonth };
       D.wd_progress = dsrResult.dsrMeta.wd_progress;
     }
     const { regionHl, regionCases, ttlHl, ttlCases, skuQty, regionSkuQty, skuCasesMap, regionSkuCasesMap, orderPattern, monthlySkuQty, monthlyRegionSkuQty, monthlySkuCases, monthlyRegionSkuCases, monthlyTtlHl, monthlyRegionHl, monthsSeen } = dsrResult;
