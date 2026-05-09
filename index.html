@@ -1700,6 +1700,83 @@ function _upSafeDiv(n, d) { return (d && isFinite(d) && d !== 0) ? Math.round(n 
 function _upRound4(v)     { return Math.round(v * 10000) / 10000; }
 function _upToFloat(v)    { const f = parseFloat(v); return isFinite(f) ? f : 0.0; }
 
+// 신규 SKU 자동 마이그레이션: FCST에 등장하나 D.sku_detail에 없는 SKU를 적절한 브랜드에 추가
+// 브랜드/hl_factor는 기존 SKU에서 동적 추론 (이름의 prefix / 마지막 2단어 매치)
+function _upInferBrand(skuName, skuDetail) {
+  const parts = String(skuName).trim().split(/\s+/);
+  const candidates = [];
+  for (let n = Math.min(parts.length, 2); n >= 1; n--) candidates.push(parts.slice(0, n).join(' '));
+  for (const tabKey of Object.keys(skuDetail || {})) {
+    for (const brandObj of skuDetail[tabKey] || []) {
+      for (const skuObj of brandObj.skus || []) {
+        const sParts = String(skuObj.sku).trim().split(/\s+/);
+        for (const cand of candidates) {
+          const cn = cand.split(/\s+/).length;
+          if (sParts.length >= cn && sParts.slice(0, cn).join(' ') === cand) return brandObj.brand;
+        }
+      }
+    }
+  }
+  return null;
+}
+function _upInferHlFactor(skuName, skuDetail) {
+  const parts = String(skuName).trim().split(/\s+/);
+  if (parts.length < 2) return 0.0792;
+  const tail = parts.slice(-2).join(' ');
+  for (const tabKey of Object.keys(skuDetail || {})) {
+    for (const brandObj of skuDetail[tabKey] || []) {
+      for (const skuObj of brandObj.skus || []) {
+        const sParts = String(skuObj.sku).trim().split(/\s+/);
+        if (sParts.length >= 2 && sParts.slice(-2).join(' ') === tail) {
+          if (skuObj.data && skuObj.data.hl_factor != null) return skuObj.data.hl_factor;
+        }
+      }
+    }
+  }
+  return 0.0792;
+}
+function _upMakeDefaultSkuData(hlFactor) {
+  return {
+    ap: 0.0, mtd: 0, ly_month: 0,
+    ap_mtd_ach: null, this_week_fcst: 0,
+    ap_fcst_ach: null, fcst_mtd_ach: null,
+    fcst_growth_lym: null, last_week_fcst: 0,
+    differ_vs_last: 0.0, hl_factor: hlFactor,
+    act_monthly: new Array(12).fill(null),
+    ap_monthly: new Array(12).fill(0),
+    act_2025_monthly: new Array(12).fill(0)
+  };
+}
+function _upEnsureSkusExist(skuItemFcst, skuDetail) {
+  const created = [];
+  const _addToTab = (tab, sku) => {
+    const tabBrands = skuDetail[tab];
+    if (!tabBrands) return;
+    if (tabBrands.some(b => (b.skus || []).some(s => s.sku === sku))) return;
+    const brand = _upInferBrand(sku, skuDetail);
+    if (!brand) return;
+    const brandObj = tabBrands.find(b => b.brand === brand);
+    if (!brandObj) return;
+    const hlFactor = _upInferHlFactor(sku, skuDetail);
+    brandObj.skus.push({ sku, data: _upMakeDefaultSkuData(hlFactor) });
+    created.push({ tab, brand, sku, hlFactor });
+  };
+  // 1) 각 지역 탭에 FCST에서 등장한 SKU 추가
+  for (const tabKey of Object.keys(skuItemFcst || {})) {
+    for (const sku of Object.keys(skuItemFcst[tabKey])) _addToTab(tabKey, sku);
+  }
+  // 2) On Trade Total: 5개 지역에 존재하는 모든 SKU를 합쳐서 누락분 보충
+  const _REGIONAL = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
+  if (skuDetail['On Trade Total']) {
+    const allRegionalSkus = new Set();
+    for (const r of _REGIONAL) {
+      for (const b of (skuDetail[r] || [])) for (const s of (b.skus || [])) allRegionalSkus.add(s.sku);
+    }
+    for (const sku of allRegionalSkus) _addToTab('On Trade Total', sku);
+  }
+  return created;
+}
+
 function _upCountWorkdays(start, end) {
   let count = 0, d = new Date(start); d.setHours(0,0,0,0);
   const e = new Date(end); e.setHours(0,0,0,0);
@@ -2146,6 +2223,9 @@ function applyDataUpdate(fcstResult, dsrResult) {
 
   if (fcstResult) {
     const { hlFcst, casesFcst, skuBrandFcst, skuItemFcst } = fcstResult;
+    // 신규 SKU 자동 마이그레이션: FCST에 등장한 SKU가 D.sku_detail에 없으면 적절한 브랜드에 자동 추가
+    const _newSkus = _upEnsureSkusExist(skuItemFcst, D.sku_detail);
+    if (_newSkus.length > 0) console.log('[SKU 자동 추가]', _newSkus);
     const hlSum = D.wk10_summary.hl, casesSum = D.wk10_summary.cases;
     // AP / LY 먼저 갱신 → 이후 _upUpdateFcstEntry에서 올바른 비율 계산
     const regAP   = D.monthly_regional_ap;
