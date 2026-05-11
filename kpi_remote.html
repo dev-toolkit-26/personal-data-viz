@@ -157,8 +157,13 @@ td.sr-cell{white-space:nowrap}
 .si-bar-lbl{margin-top:5px;font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
 .si-month-row{display:flex;gap:8px;margin-top:10px}
 .si-month{flex:1;background:var(--surface2);border-radius:8px;padding:8px 6px;text-align:center;border:1px solid var(--border)}
-.si-month .ml{font-size:10px;color:var(--muted)}
+.si-month .ml{font-size:10px;color:var(--muted);font-weight:700;margin-bottom:4px}
 .si-month .mv{font-size:16px;font-weight:700;margin-top:3px;color:var(--muted)}
+.si-msub{margin-top:5px;padding-top:4px;border-top:1px dashed var(--border)}
+.si-msub:first-of-type{border-top:none;padding-top:0;margin-top:2px}
+.si-msub .msl{font-size:9px;color:var(--muted);line-height:1.2}
+.si-msub .msv{font-size:13px;font-weight:700;color:var(--text);line-height:1.2}
+.si-msub .mss{font-size:9px;color:var(--muted);margin-left:2px;font-weight:500}
 .si-team-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
 .si-team-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden;border-left-width:4px}
 .si-team-name{font-size:14px;font-weight:700;margin-bottom:10px}
@@ -646,7 +651,7 @@ td.sr-cell{white-space:nowrap}
       <h3 style="margin:0">Snow Incentive — WS Incentive 업데이트</h3>
       <button class="dl-btn" onclick="siDownloadWs()">⬇ WS 다운로드</button>
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">팀별 WS 인센티브 수량 입력 (팀, 3월, 4월, 5월)</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">팀별 WS 인센티브 (팀, 월별 아울렛수·판매량·비용) — outlet 단위 엑셀(예: 26Y Snow Incentive_WS) 자동 인식</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
       <input type="file" id="fSIWs" accept=".xlsx,.xls" style="display:none" onchange="siReadWs(this)">
       <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="document.getElementById('fSIWs').click()">📁 WS 파일 업로드</button>
@@ -663,8 +668,22 @@ td.sr-cell{white-space:nowrap}
         </div>
       </div>
       <div class="ow" style="max-height:200px">
-        <table class="utable"><thead><tr><th>팀</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th></tr></thead>
-        <tbody id="pbSIWs"></tbody></table>
+        <table class="utable">
+          <thead>
+            <tr>
+              <th rowspan="2">팀</th>
+              <th colspan="3" class="r">아울렛 수</th>
+              <th colspan="3" class="r">판매량 (HL)</th>
+              <th colspan="3" class="r">비용 (KRW)</th>
+            </tr>
+            <tr>
+              <th class="r">3월</th><th class="r">4월</th><th class="r">5월</th>
+              <th class="r">3월</th><th class="r">4월</th><th class="r">5월</th>
+              <th class="r">3월</th><th class="r">4월</th><th class="r">5월</th>
+            </tr>
+          </thead>
+          <tbody id="pbSIWs"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -752,9 +771,24 @@ td.sr-cell{white-space:nowrap}
     <div class="si-card">
       <div class="si-lbl"><span class="si-dot" style="background:#9333ea"></span>WS Incentive</div>
       <div class="si-month-row">
-        <div class="si-month"><div class="ml">3월</div><div class="mv" id="ws3">0</div><div style="font-size:10px;color:var(--muted);margin-top:3px">미입력</div></div>
-        <div class="si-month"><div class="ml">4월</div><div class="mv" id="ws4">0</div><div style="font-size:10px;color:var(--muted);margin-top:3px">미입력</div></div>
-        <div class="si-month"><div class="ml">5월</div><div class="mv" id="ws5">0</div><div style="font-size:10px;color:var(--muted);margin-top:3px">미입력</div></div>
+        <div class="si-month">
+          <div class="ml">3월</div>
+          <div class="si-msub"><div class="msl">아울렛</div><div class="msv" id="wsOut3">0</div></div>
+          <div class="si-msub"><div class="msl">판매량</div><div class="msv" id="wsVol3">0</div></div>
+          <div class="si-msub"><div class="msl">비용</div><div class="msv" id="wsCost3">0</div></div>
+        </div>
+        <div class="si-month">
+          <div class="ml">4월</div>
+          <div class="si-msub"><div class="msl">아울렛</div><div class="msv" id="wsOut4">0</div></div>
+          <div class="si-msub"><div class="msl">판매량</div><div class="msv" id="wsVol4">0</div></div>
+          <div class="si-msub"><div class="msl">비용</div><div class="msv" id="wsCost4">0</div></div>
+        </div>
+        <div class="si-month">
+          <div class="ml">5월</div>
+          <div class="si-msub"><div class="msl">아울렛</div><div class="msv" id="wsOut5">0</div></div>
+          <div class="si-msub"><div class="msl">판매량</div><div class="msv" id="wsVol5">0</div></div>
+          <div class="si-msub"><div class="msl">비용</div><div class="msv" id="wsCost5">0</div></div>
+        </div>
       </div>
     </div>
   </div>
@@ -1132,9 +1166,15 @@ const rspTotal  = rspData.length;
 const rspSptQty = siSum(rspData, 'spt');
 const ccTotal  = siSum(ccData, 'cost');
 const ccCount  = ccData.length;
-const ws3total = siSum(wsData, 'm3');
-const ws4total = siSum(wsData, 'm4');
-const ws5total = siSum(wsData, 'm5');
+const wsVol3 = siSum(wsData, 'm3');
+const wsVol4 = siSum(wsData, 'm4');
+const wsVol5 = siSum(wsData, 'm5');
+const wsOut3 = siSum(wsData, 'outlets3');
+const wsOut4 = siSum(wsData, 'outlets4');
+const wsOut5 = siSum(wsData, 'outlets5');
+const wsCost3 = siSum(wsData, 'cost3');
+const wsCost4 = siSum(wsData, 'cost4');
+const wsCost5 = siSum(wsData, 'cost5');
 
 const rspPct = siPct(rspTotal, RSP_TARGET);
 const ccPct  = siPct(ccTotal,  CC_BUDGET);
@@ -1151,9 +1191,13 @@ document.getElementById('ccBar').style.background = siBarColor(ccPct);
 document.getElementById('ccPct').textContent = ccPct.toFixed(1) + '%';
 document.getElementById('ccCount').textContent = ccCount + '건';
 
-document.getElementById('ws3').textContent = ws3total;
-document.getElementById('ws4').textContent = ws4total;
-document.getElementById('ws5').textContent = ws5total;
+const setWsCell = (id, val, suffix) => {
+  const el = document.getElementById(id); if (!el) return;
+  el.innerHTML = siFmt(val) + (suffix ? `<span class="mss">${suffix}</span>` : '');
+};
+setWsCell('wsOut3', wsOut3); setWsCell('wsVol3', wsVol3, 'HL'); setWsCell('wsCost3', wsCost3, '원');
+setWsCell('wsOut4', wsOut4); setWsCell('wsVol4', wsVol4, 'HL'); setWsCell('wsCost4', wsCost4, '원');
+setWsCell('wsOut5', wsOut5); setWsCell('wsVol5', wsVol5, 'HL'); setWsCell('wsCost5', wsCost5, '원');
 
 
 // ══════════════════════════════════════════
@@ -1403,9 +1447,12 @@ function siDownloadCc() {
 }
 function siDownloadWs() {
   const data = getSIWs(); const today = new Date().toISOString().slice(0,10);
-  const hdr = ['팀','3월','4월','5월'];
+  const hdr = ['팀','아울렛3월','아울렛4월','아울렛5월','3월','4월','5월','비용3월','비용4월','비용5월'];
   const teams = ['Seoul','Busan','Daegu','Daejeon','Gwangju'];
-  const rows = teams.map(t => { const r = data.find(d=>d.team===t)||{m3:0,m4:0,m5:0}; return [t,r.m3||0,r.m4||0,r.m5||0]; });
+  const rows = teams.map(t => {
+    const r = data.find(d=>d.team===t)||{};
+    return [t,r.outlets3||0,r.outlets4||0,r.outlets5||0,r.m3||0,r.m4||0,r.m5||0,r.cost3||0,r.cost4||0,r.cost5||0];
+  });
   const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]); const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'WS'); siTriggerDownload(wb,'SI_WS_'+today+'.xlsx');
 }
@@ -1474,23 +1521,86 @@ function siReadWs(input) {
   const reader=new FileReader();
   reader.onload=function(ev) {
     try {
-      const wb=XLSX.read(ev.target.result,{type:'array'}); let ws=null;
-      for(const name of wb.SheetNames){const s=wb.Sheets[name];const r=XLSX.utils.sheet_to_json(s,{header:1,defval:'',range:0});if(r.length&&r[0].includes('팀')&&r[0].some(h=>String(h).endsWith('월'))){ws=s;break;}}
-      if(!ws){alert('⚠ WS 파일 확인');input.value='';return;}
-      const allRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      const hdr=allRows[0]; const ix=k=>hdr.indexOf(k);
-      siParsedWs=allRows.slice(1).filter(r=>String(r[ix('팀')]||'').trim()).map(r=>({
-        team:String(r[ix('팀')]||'').trim(),
-        m3:Number(r[ix('3월')])||0,m4:Number(r[ix('4월')])||0,m5:Number(r[ix('5월')])||0,
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      let allRows=null, hdrRow=-1;
+      for(const name of wb.SheetNames){
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+        for(let r=0;r<Math.min(15,rows.length);r++){
+          const cells=(rows[r]||[]).map(x=>String(x).replace(/\s+/g,' ').trim());
+          const hasTeam=cells.some(x=>x==='팀'||x==='Team');
+          const hasMonth=cells.some(x=>/^[3-5]\s*월/.test(x));
+          if(hasTeam&&hasMonth){allRows=rows;hdrRow=r;break;}
+        }
+        if(allRows)break;
+      }
+      if(!allRows){alert('⚠ WS 파일 확인 (팀/3월/4월/5월 헤더 필요)');input.value='';return;}
+      const hdr=allRows[hdrRow].map(x=>String(x).replace(/\s+/g,' ').trim());
+      const findIx=(re)=>hdr.findIndex(h=>re.test(h));
+      const ixTeam  =findIx(/^(팀|Team)$/i);
+      const ix3     =findIx(/^3\s*월/);
+      const ix4     =findIx(/^4\s*월/);
+      const ix5     =findIx(/^5\s*월/);
+      const ixOutlet=findIx(/Outlet|아울렛/i);
+      const ixCost  =findIx(/Incentive|단가/i);
+      if(ixTeam<0||(ix3<0&&ix4<0&&ix5<0)){alert('⚠ WS 파일 확인 (팀/월 컬럼 인식 실패)');input.value='';return;}
+      const byTeam={};
+      for(let r=hdrRow+1;r<allRows.length;r++){
+        const row=allRows[r]||[];
+        const teamRaw=String(row[ixTeam]||'').trim();
+        if(!teamRaw)continue;
+        const team=normalizeTeam(teamRaw);
+        if(!team)continue;
+        const q3=ix3>=0?(Number(row[ix3])||0):0;
+        const q4=ix4>=0?(Number(row[ix4])||0):0;
+        const q5=ix5>=0?(Number(row[ix5])||0):0;
+        const rowCost=ixCost>=0?(Number(row[ixCost])||0):0;
+        const rowTotal=q3+q4+q5;
+        if(!byTeam[team])byTeam[team]={team,m3:0,m4:0,m5:0,outlets3:0,outlets4:0,outlets5:0,cost3:0,cost4:0,cost5:0};
+        const agg=byTeam[team];
+        agg.m3+=q3; agg.m4+=q4; agg.m5+=q5;
+        if(ixOutlet>=0){
+          if(q3>0)agg.outlets3+=1;
+          if(q4>0)agg.outlets4+=1;
+          if(q5>0)agg.outlets5+=1;
+        }
+        if(rowTotal>0&&rowCost>0){
+          agg.cost3+=rowCost*q3/rowTotal;
+          agg.cost4+=rowCost*q4/rowTotal;
+          agg.cost5+=rowCost*q5/rowTotal;
+        }
+      }
+      siParsedWs=Object.values(byTeam).map(a=>({
+        ...a,
+        cost3:Math.round(a.cost3),cost4:Math.round(a.cost4),cost5:Math.round(a.cost5),
       }));
       document.getElementById('pcSIWs').textContent=siParsedWs.length+'팀';
-      document.getElementById('pbSIWs').innerHTML=siParsedWs.map(r=>`<tr><td>${r.team}</td><td class="r">${r.m3||'–'}</td><td class="r">${r.m4||'–'}</td><td class="r">${r.m5||'–'}</td></tr>`).join('');
+      document.getElementById('pbSIWs').innerHTML=siParsedWs.map(r=>
+        `<tr><td>${r.team}</td>`+
+        `<td class="r">${r.outlets3||0}</td><td class="r">${r.outlets4||0}</td><td class="r">${r.outlets5||0}</td>`+
+        `<td class="r">${r.m3||0}</td><td class="r">${r.m4||0}</td><td class="r">${r.m5||0}</td>`+
+        `<td class="r">${(r.cost3||0).toLocaleString()}</td><td class="r">${(r.cost4||0).toLocaleString()}</td><td class="r">${(r.cost5||0).toLocaleString()}</td>`+
+        `</tr>`).join('');
       document.getElementById('pvSIWs').style.display='block';
     } catch(err){alert('오류: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
 }
-async function siConfirmWs(){if(!siParsedWs.length){alert('파일을 먼저 업로드하세요');return;}try{await sDel('snow_incentive_ws','id=gte.0');const rows=siParsedWs.map(r=>({team:r.team||'',m3:r.m3||0,m4:r.m4||0,m5:r.m5||0}));await sIns('snow_incentive_ws',rows);WS_DATA_BASE=await sGet('snow_incentive_ws','order=team');alert('✅ WS 저장됨');siCancelWs();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
+async function siConfirmWs(){if(!siParsedWs.length){alert('파일을 먼저 업로드하세요');return;}try{
+  await sDel('snow_incentive_ws','id=gte.0');
+  const _wsAt=new Date().toISOString();
+  const rows=siParsedWs.map(r=>({
+    team:normalizeTeam(r.team||''),
+    m3:Number(r.m3)||0,m4:Number(r.m4)||0,m5:Number(r.m5)||0,
+    outlets3:Number(r.outlets3)||0,outlets4:Number(r.outlets4)||0,outlets5:Number(r.outlets5)||0,
+    cost3:Math.round(Number(r.cost3)||0),cost4:Math.round(Number(r.cost4)||0),cost5:Math.round(Number(r.cost5)||0),
+    uploaded_at:_wsAt,
+  }));
+  await sIns('snow_incentive_ws',rows);
+  WS_DATA_BASE=await sGet('snow_incentive_ws','order=team');
+  WS_DATA_BASE.forEach(r=>{if(r.team)r.team=normalizeTeam(r.team);});
+  alert('✅ WS 저장됨');
+  siCancelWs();renderSIUploadStatus();initSnowIncentive();
+}catch(e){alert('오류: '+e.message);}}
 function siCancelWs(){siParsedWs=[];document.getElementById('pvSIWs').style.display='none';document.getElementById('fnSIWs').textContent='';document.getElementById('fSIWs').value='';}
 function siDeleteWs(){if(!confirm('WS 기본값 복원?'))return;const d=getSIData();delete d.ws;setSIData(d);renderSIUploadStatus();initSnowIncentive();}
 (function(){const orig=switchTab;window.switchTab=function(n,el){orig(n,el);if(n==='update'){renderSIUploadStatus();renderUploadStatus();}};})();
