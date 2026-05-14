@@ -133,6 +133,18 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 .chart-wrap.tall { height: 320px; }
 .chart-wrap.short { height: 200px; }
 
+/* ── Small multiples grid (Order Pattern daily) — sorted desc, 1col ── */
+.sm-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.sm-cell { background: #fff; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 8px 12px; }
+.sm-cell.total { border-color: rgba(32,85,39,0.35); background: #fafaf7; }
+.sm-cell-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; margin-bottom: 4px; gap: 8px; }
+.sm-cell-title { font-weight: 600; color: #205527; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-cell-stats { color: #666; font-size: 11px; flex-shrink: 0; }
+.sm-cell-canvas { position: relative; height: 140px; }
+
+/* OP filter bar sticky */
+.filter-bar.op-sticky { position: sticky; top: 0; z-index: 30; }
+
 /* ── Tables ── */
 .table-wrap { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); overflow: auto; -webkit-overflow-scrolling: touch; margin-bottom: 16px; }
 table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -1319,7 +1331,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
   <!-- Tab: Order Pattern -->
   <div id="tab-order" class="tab-content">
-    <div class="filter-bar" style="margin-bottom:12px;gap:16px;flex-wrap:wrap;">
+    <div class="filter-bar op-sticky" style="margin-bottom:12px;gap:16px;flex-wrap:wrap;">
       <span>
         <label>Branch</label>
         <select id="op-group" onchange="renderOrderPattern()">
@@ -1347,7 +1359,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <!-- Daily chart (Mar) -->
     <div class="chart-card full" style="margin-top:16px;">
       <div class="chart-title" id="op-daily-title">Daily Order Detail - March (Mar)</div>
-      <div class="chart-wrap"><canvas id="chartOrderDaily"></canvas></div>
+      <div id="opDailyGrid" class="sm-grid"></div>
     </div>
   </div>
 
@@ -5774,6 +5786,146 @@ function _opBuildDatasets(seriesData, labels, group, sku, monthKey) {
   }
 }
 
+function _opRenderDailySmallMultiples(seriesData, labels, group, sku, unit, unitLabel) {
+  const op = DASHBOARD_DATA.order_pattern;
+  const len = labels.length;
+  const grid = document.getElementById('opDailyGrid');
+  if (!grid) return;
+
+  // Destroy previous mini charts
+  if (Array.isArray(_opCharts.daily)) {
+    _opCharts.daily.forEach(function(c) { try { c.destroy(); } catch (e) {} });
+  }
+  _opCharts.daily = [];
+  grid.innerHTML = '';
+
+  function seriesForGroupSku(g, sk) {
+    return Array.from({length: len}, function(_, i) {
+      return (seriesData[g] && seriesData[g][sk]) ? seriesData[g][sk][i] : 0;
+    });
+  }
+  function seriesForGroupAllSku(g, skuList) {
+    return Array.from({length: len}, function(_, i) {
+      return skuList.reduce(function(ss, sk) {
+        return ss + ((seriesData[g] && seriesData[g][sk]) ? seriesData[g][sk][i] : 0);
+      }, 0);
+    });
+  }
+  function fmt(v) {
+    return v.toLocaleString(undefined, { maximumFractionDigits: unit === 'hl' ? 1 : 0 });
+  }
+
+  // Build category list: each entry { label, color, data }
+  const cells = [];
+
+  // Total cell — always first
+  const totalData = _opAggregate(seriesData, group === 'ALL' ? 'ALL' : group, sku, len);
+  cells.push({ label: 'Total', color: '#205527', data: totalData, isTotal: true });
+
+  if (group === 'ALL') {
+    const skuList = sku === 'ALL' ? op.skus : [sku];
+    const MERGE = { 'Daegu/Jeju': ['Daegu', 'Jeju'] };
+    const mergedMembers = new Set();
+    Object.keys(MERGE).forEach(function(k) { MERGE[k].forEach(function(m) { mergedMembers.add(m); }); });
+
+    op.groups.forEach(function(g, idx) {
+      if (mergedMembers.has(g)) return;  // handled below
+      const col = OP_GROUP_COLORS[g] || OP_PALETTE[idx % OP_PALETTE.length];
+      cells.push({ label: g, color: col, data: seriesForGroupAllSku(g, skuList) });
+    });
+    // Append merged groups (only if at least one member exists in op.groups)
+    Object.keys(MERGE).forEach(function(mergedLabel) {
+      const members = MERGE[mergedLabel].filter(function(m) { return op.groups.indexOf(m) >= 0; });
+      if (members.length === 0) return;
+      const data = Array.from({length: len}, function(_, i) {
+        return members.reduce(function(ss, m) { return ss + seriesForGroupAllSku(m, skuList)[i]; }, 0);
+      });
+      const col = OP_GROUP_COLORS[members[0]] || '#e30613';
+      cells.push({ label: mergedLabel, color: col, data: data });
+    });
+  } else if (sku === 'ALL') {
+    op.skus.forEach(function(sk, idx) {
+      const col = OP_PALETTE[idx % OP_PALETTE.length];
+      cells.push({ label: sk, color: col, data: seriesForGroupSku(group, sk) });
+    });
+  } else {
+    const col = OP_GROUP_COLORS[group] || OP_PALETTE[0];
+    cells.push({ label: group + ' / ' + sku, color: col, data: seriesForGroupSku(group, sku) });
+  }
+
+  // Sort non-Total cells by total volume desc; keep Total first
+  const totalCells = cells.filter(function(c) { return c.isTotal; });
+  const otherCells = cells.filter(function(c) { return !c.isTotal; });
+  otherCells.forEach(function(c) {
+    c._sum = c.data.reduce(function(a, b) { return a + b; }, 0);
+  });
+  otherCells.sort(function(a, b) { return b._sum - a._sum; });
+  const orderedCells = totalCells.concat(otherCells);
+
+  // Render each cell
+  orderedCells.forEach(function(cell) {
+    const sum = cell.data.reduce(function(a, b) { return a + b; }, 0);
+    const peak = cell.data.reduce(function(a, b) { return b > a ? b : a; }, 0);
+    const peakIdx = cell.data.indexOf(peak);
+    const peakLabel = peakIdx >= 0 ? labels[peakIdx] : '';
+    const avg = len > 0 ? sum / len : 0;
+
+    const cellEl = document.createElement('div');
+    cellEl.className = 'sm-cell' + (cell.isTotal ? ' total' : '');
+    cellEl.innerHTML =
+      '<div class="sm-cell-head">' +
+        '<span class="sm-cell-title" style="color:' + cell.color + '">' + cell.label + '</span>' +
+        '<span class="sm-cell-stats">peak ' + fmt(peak) + (peakLabel ? ' (' + peakLabel + ')' : '') + ' · avg ' + fmt(avg) + '</span>' +
+      '</div>' +
+      '<div class="sm-cell-canvas"><canvas></canvas></div>';
+    grid.appendChild(cellEl);
+
+    const ctx = cellEl.querySelector('canvas').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: cell.label,
+          data: cell.data,
+          borderColor: cell.color,
+          backgroundColor: cell.color + '22',
+          borderWidth: cell.isTotal ? 2.2 : 1.8,
+          tension: 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          fill: true,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            intersect: false, mode: 'index',
+            callbacks: {
+              label: function(ctx) { return ' ' + fmt(ctx.parsed.y) + ' ' + unitLabel; },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, color: '#888' },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { font: { size: 9 }, maxTicksLimit: 4, color: '#888' },
+            grid: { color: 'rgba(0,0,0,0.04)' },
+          },
+        },
+      },
+    });
+    _opCharts.daily.push(chart);
+  });
+}
+
 function renderOrderPattern() {
   const op = DASHBOARD_DATA.order_pattern;
   if (!op) { console.warn('No order_pattern'); return; }
@@ -5844,42 +5996,8 @@ function renderOrderPattern() {
     },
   });
 
-  // ── Daily chart (Mar) ───────────────────────────────────────
-  const dDatasets = _opBuildDatasets(dSeries, op.daily_labels, group, sku, null);
-  const ctx2 = document.getElementById('chartOrderDaily').getContext('2d');
-  if (_opCharts.daily) _opCharts.daily.destroy();
-  _opCharts.daily = new Chart(ctx2, {
-    type: 'bar',
-    data: { labels: op.daily_labels, datasets: dDatasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } },
-        tooltip: {
-          mode: 'index',
-          callbacks: {
-            label: function(ctx) {
-              return ' ' + ctx.dataset.label + ': '
-                + ctx.parsed.y.toLocaleString(undefined, {maximumFractionDigits: unit === 'hl' ? 2 : 0})
-                + ' ' + unitLabel;
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          stacked: isStacked,
-          ticks: { font: { size: 10 }, color: '#e30613' },
-          grid: { display: false },
-        },
-        y: {
-          stacked: isStacked, beginAtZero: true, min: 0,
-          ticks: { font: { size: 11 } },
-          title: { display: true, text: unitLabel, font: { size: 11 } },
-        },
-      },
-    },
-  });
+  // ── Daily small multiples (Mar) ──────────────────────────────
+  _opRenderDailySmallMultiples(dSeries, op.daily_labels, group, sku, unit, unitLabel);
 }
 </script>
 </body>
