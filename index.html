@@ -121,6 +121,51 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 .min-action-del { background:none; border:none; color:#d1d5db; font-size:14px; cursor:pointer; padding:0 2px; line-height:1; flex-shrink:0; }
 .min-action-del:hover { color:#ef4444; }
 .min-actions-empty { padding:16px; font-size:12px; color:#d1d5db; text-align:center; }
+/* 회의록 카테고리 필터 — 3열 × 2행 */
+.min-cat-bar { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; padding:6px 10px 8px; }
+.min-cat-btn { padding:6px 8px; border:1px solid rgba(0,0,0,.08); border-radius:6px; background:#fff; color:#6b7280; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+.min-cat-btn:hover { background:#f3f4f6; color:#1f2937; }
+.min-cat-btn.active { background:#205527; color:#fff; border-color:#205527; }
+/* 회의록 에디터 — Month 드롭다운(제목 역할) */
+.min-month-select { border:none; border-bottom:2px solid rgba(32,85,39,.25); background:transparent; font-size:32px; font-weight:700; color:#1f2937; font-family:inherit; cursor:pointer; outline:none; padding:2px 24px 2px 4px; min-width:120px; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%239ca3af' d='M2 4l4 4 4-4z'/></svg>"); background-repeat:no-repeat; background-position:right 4px center; }
+.min-month-select:focus { border-bottom-color:#205527; }
+/* 카드 내 소제목 (좌측) */
+.min-card-subtitle { flex:1; min-width:0; border:none; outline:none; background:transparent; font-size:13px; font-weight:700; color:#1f2937; font-family:inherit; padding:2px 0; }
+.min-card-subtitle::placeholder { color:#c4c9d4; font-weight:500; }
+/* 카드 내 카테고리 select (우측) */
+.min-card-catsel { flex:0 0 auto; border:none; outline:none; background:transparent; font-size:12px; font-weight:600; color:#205527; font-family:inherit; padding:2px 18px 2px 8px; cursor:pointer; appearance:none; -webkit-appearance:none; text-align:right; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><path fill='%236b7280' d='M2 4l3 3 3-3z'/></svg>"); background-repeat:no-repeat; background-position:right 4px center; }
+.min-card-catsel:invalid, .min-card-catsel option[value=""] { color:#c4c9d4; }
+/* 브라우즈 모드 카드 */
+.min-browse-card { border:1px solid rgba(0,0,0,.08); border-radius:10px; background:#fff; overflow:hidden; transition:border-color .12s, box-shadow .12s; }
+.min-browse-card:focus-within { border-color:rgba(32,85,39,.45); box-shadow:0 2px 10px rgba(32,85,39,.08); }
+.min-browse-card-head { display:flex; align-items:center; gap:10px; padding:8px 14px; background:#fafafa; border-bottom:1px solid rgba(0,0,0,.06); font-size:12px; color:#6b7280; }
+.min-browse-card-month { font-weight:700; color:#205527; }
+.min-browse-card-date { color:#9ca3af; }
+.min-browse-card-open { margin-left:auto; background:none; border:1px solid rgba(0,0,0,.1); color:#6b7280; font-size:11px; padding:3px 8px; border-radius:5px; cursor:pointer; font-family:inherit; }
+.min-browse-card-open:hover { background:#f3f4f6; color:#205527; border-color:#205527; }
+.min-browse-card-body { padding:12px 14px; font-size:14px; line-height:1.8; color:#1f2937; }
+.min-browse-card-body h1,.min-browse-card-body h2,.min-browse-card-body h3 { font-weight:700; margin:8px 0 4px; }
+.min-browse-card-body h1 { font-size:18px; }
+.min-browse-card-body h2 { font-size:15px; }
+.min-browse-card-body h3 { font-size:14px; }
+.min-browse-card-body p { margin:3px 0; }
+/* 회의록 카드 */
+.min-cards-wrap { display:flex; flex-direction:column; gap:12px; }
+.min-card { border:1px solid rgba(0,0,0,.08); border-radius:10px; background:#fff; overflow:hidden; transition:border-color .12s, box-shadow .12s; }
+.min-card:focus-within { border-color:rgba(32,85,39,.45); box-shadow:0 2px 10px rgba(32,85,39,.08); }
+.min-card-head { display:flex; align-items:center; gap:8px; padding:8px 12px; background:#fafafa; border-bottom:1px solid rgba(0,0,0,.06); }
+.min-card-tag { flex:1; border:none; outline:none; background:transparent; font-size:12px; font-weight:600; color:#205527; font-family:inherit; padding:2px 0; }
+.min-card-tag::placeholder { color:#c4c9d4; font-weight:500; }
+.min-card-del { background:none; border:none; color:#d1d5db; font-size:14px; cursor:pointer; padding:0 4px; line-height:1; flex-shrink:0; transition:color .12s; }
+.min-card-del:hover { color:#ef4444; }
+.min-card-body { min-height:80px; padding:12px 14px; font-size:14px; line-height:1.8; outline:none; word-break:break-word; color:#1f2937; }
+.min-card-body:empty::before { content:attr(data-placeholder); color:#c4c9d4; pointer-events:none; }
+.min-card-body h1 { font-size:22px; font-weight:700; color:#1f2937; margin:14px 0 6px; padding-bottom:6px; border-bottom:2px solid rgba(32,85,39,.15); line-height:1.3; }
+.min-card-body h2 { font-size:17px; font-weight:700; color:#374151; margin:12px 0 5px; line-height:1.3; }
+.min-card-body h3 { font-size:14px; font-weight:600; color:#4b5563; margin:10px 0 4px; }
+.min-card-body p { margin:4px 0; }
+.min-card-add { margin-top:4px; padding:10px; border:1px dashed rgba(0,0,0,.15); border-radius:10px; background:transparent; color:#6b7280; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; }
+.min-card-add:hover { background:rgba(32,85,39,.04); color:#205527; border-color:rgba(32,85,39,.35); }
 
 
 /* ── Charts ── */
@@ -1507,12 +1552,17 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       <!-- 왼쪽 목록 (Notion-style sidebar) -->
       <div id="minutes-list-panel" style="width:240px;flex-shrink:0;border-right:1px solid rgba(0,0,0,.08);overflow-y:auto;padding:0;background:#f7f7f5;">
-        <div style="padding:18px 14px 8px;position:sticky;top:0;background:#f7f7f5;z-index:1;">
-          <span style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#9ca3af;text-transform:uppercase;">회의록</span>
+        <div id="min-cat-bar" class="min-cat-bar" style="padding-top:14px;">
+          <button class="min-cat-btn active" data-cat="all"      onclick="minutesFilterByCategory('all')">전체</button>
+          <button class="min-cat-btn"        data-cat="on_trade" onclick="minutesFilterByCategory('on_trade')">On Trade</button>
+          <button class="min-cat-btn"        data-cat="tm"       onclick="minutesFilterByCategory('tm')">TM</button>
+          <button class="min-cat-btn"        data-cat="bottle"   onclick="minutesFilterByCategory('bottle')">Bottle</button>
+          <button class="min-cat-btn"        data-cat="draught"  onclick="minutesFilterByCategory('draught')">Draught</button>
+          <button class="min-cat-btn"        data-cat="can"      onclick="minutesFilterByCategory('can')">Can</button>
         </div>
         <button onclick="minutesNew()" class="min-new-btn">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          새 회의록 추가
+          Month 추가
         </button>
         <div id="minutes-list" style="padding:2px 0 12px;"></div>
       </div>
@@ -1529,57 +1579,31 @@ td:first-child, td:nth-child(2) { text-align: left; }
             &#8592; 목록으로
           </button>
 
-          <!-- 날짜 + 주차 (인라인, 투명) -->
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-            <input type="date" id="min-date" onchange="minutesAutoWeek(this.value)"
+          <!-- Month 드롭다운(제목 역할) + 업로드 날짜 -->
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap;">
+            <select id="min-month" class="min-month-select" title="월 선택">
+              <option value="">월 선택…</option>
+              <option value="Jan">Jan</option>
+              <option value="Feb">Feb</option>
+              <option value="Mar">Mar</option>
+              <option value="Apr">Apr</option>
+              <option value="May">May</option>
+              <option value="Jun">Jun</option>
+              <option value="Jul">Jul</option>
+              <option value="Aug">Aug</option>
+              <option value="Sep">Sep</option>
+              <option value="Oct">Oct</option>
+              <option value="Nov">Nov</option>
+              <option value="Dec">Dec</option>
+            </select>
+            <input type="date" id="min-date"
               style="border:none;background:transparent;color:#9ca3af;font-size:13px;font-family:inherit;cursor:pointer;outline:none;padding:0;">
-            <span id="min-week" style="font-size:13px;color:#9ca3af;font-weight:500;"></span>
           </div>
 
-          <!-- 페이지 타이틀 (Notion-style) -->
-          <input type="text" id="min-title-input" placeholder="제목 없음"
-            style="width:100%;border:none;outline:none;font-size:34px;font-weight:700;color:#1f2937;background:transparent;
-                   font-family:inherit;margin-bottom:24px;padding:0;box-sizing:border-box;line-height:1.2;"
-            oninput="this.style.height='auto'"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('min-agenda').focus();}">
-
-          <!-- 메타 카드 (참석자 + 이미지) -->
-          <div style="border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:14px 18px;margin-bottom:28px;background:#fafafa;">
-            <div style="display:flex;align-items:center;gap:10px;">
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;color:#9ca3af;">
-                <circle cx="6" cy="5" r="2.5" stroke="currentColor" stroke-width="1.4"/>
-                <path d="M1 13.5c0-2.485 2.239-4.5 5-4.5s5 2.015 5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-                <circle cx="12" cy="5" r="2" stroke="currentColor" stroke-width="1.3"/>
-                <path d="M13 9.2c1.4.5 2.5 1.8 2.5 3.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-              </svg>
-              <span style="font-size:12px;font-weight:600;color:#9ca3af;min-width:56px;">참석자</span>
-              <input type="text" id="min-attendees" placeholder="홍길동, 김철수, ..."
-                style="flex:1;border:none;outline:none;background:transparent;font-size:13px;color:#1f2937;font-family:inherit;padding:0;">
-            </div>
-            <div style="height:1px;background:rgba(0,0,0,.06);margin:10px 0;"></div>
-            <div style="display:flex;align-items:center;gap:10px;">
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;color:#9ca3af;">
-                <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/>
-                <circle cx="5.5" cy="7" r="1.5" stroke="currentColor" stroke-width="1.2"/>
-                <path d="M1 11l3.5-3 3 2.5 2.5-2 4 3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span style="font-size:12px;font-weight:600;color:#9ca3af;min-width:56px;">이미지</span>
-              <button onclick="document.getElementById('min-img-input').click()"
-                style="border:none;background:none;font-size:12px;color:#9ca3af;cursor:pointer;padding:0;font-family:inherit;">
-                이미지 삽입 (Ctrl+V 붙여넣기 가능)
-              </button>
-              <input type="file" id="min-img-input" accept="image/*" style="display:none" onchange="minutesInsertFromPicker(this)">
-            </div>
-          </div>
-
-          <!-- 안건 / 주요 내용 섹션 -->
+          <!-- 카드식 본문 -->
           <div style="margin-bottom:28px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-              <span style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#9ca3af;text-transform:uppercase;">안건 / 주요 내용</span>
-            </div>
-
-            <!-- 포맷 툴바 -->
-            <div class="min-toolbar">
+            <!-- 포맷 툴바 (현재 포커스된 카드에 작용) — 한 줄 -->
+            <div class="min-toolbar" style="border-radius:10px;border-bottom:1px solid rgba(0,0,0,.08);margin-bottom:10px;flex-wrap:nowrap;overflow-x:auto;">
               <button class="min-tb-btn" id="tb-h1" onclick="minFmtBlock('H1')" title="제목 1 (H1)" style="font-size:11px;width:auto;padding:0 6px;font-weight:700;">H1</button>
               <button class="min-tb-btn" id="tb-h2" onclick="minFmtBlock('H2')" title="제목 2 (H2)" style="font-size:11px;width:auto;padding:0 6px;font-weight:700;">H2</button>
               <button class="min-tb-btn" id="tb-h3" onclick="minFmtBlock('H3')" title="제목 3 (H3)" style="font-size:11px;width:auto;padding:0 6px;">H3</button>
@@ -1588,16 +1612,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
               <button class="min-tb-btn" id="tb-italic" onclick="minFmt('italic')"        title="기울임 (Ctrl+I)"><i>I</i></button>
               <button class="min-tb-btn" id="tb-under"  onclick="minFmt('underline')"     title="밑줄 (Ctrl+U)"><u>U</u></button>
               <button class="min-tb-btn" id="tb-strike" onclick="minFmt('strikeThrough')" title="취소선"><s>S</s></button>
-              <div class="min-tb-sep"></div>
-              <select class="min-tb-select" onchange="minFmtSize(this.value)" title="글자 크기">
-                <option value="">크기</option>
-                <option value="1">아주 작게</option>
-                <option value="2">작게</option>
-                <option value="3">보통</option>
-                <option value="4">크게</option>
-                <option value="5">더 크게</option>
-                <option value="6">매우 크게</option>
-              </select>
               <div class="min-tb-sep"></div>
               <button class="min-color-btn" id="tb-color-btn" onmousedown="minSaveSelection(event)" onclick="minPaletteToggle('foreColor',this)" title="글자 색">
                 <span class="lbl">A</span><span class="bar" id="tb-color-bar" style="background:#e53e3e;"></span>
@@ -1610,9 +1624,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
               <button class="min-tb-btn" onclick="minFmt('justifyCenter')" title="가운데 정렬">&#8596;</button>
               <button class="min-tb-btn" onclick="minFmt('justifyRight')"  title="오른쪽 정렬">&#8677;</button>
               <div class="min-tb-sep"></div>
-              <button class="min-tb-btn" onclick="minFmt('insertUnorderedList')" title="글머리 기호">&#8226; 목록</button>
-              <button class="min-tb-btn" onclick="minFmt('insertOrderedList')"   title="번호 목록">1. 목록</button>
-              <div class="min-tb-sep"></div>
               <button class="min-tb-btn" onmousedown="minSaveSelection(event)" onclick="minSymbolToggle(this)" title="기호 삽입" style="font-size:11px;width:auto;padding:0 6px;">기호 &#9662;</button>
               <div class="min-tb-sep"></div>
               <button class="min-tb-btn" onclick="minFmt('removeFormat')" title="서식 지우기" style="font-size:11px;">지우기</button>
@@ -1620,16 +1631,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
               <div id="min-symbol-popup" class="min-symbol-popup"></div>
             </div>
 
-            <div id="min-agenda"
-              contenteditable="true"
-              onpaste="minutesAgendaPaste(event)"
-              ondragover="event.preventDefault()"
-              ondrop="minutesAgendaDrop(event)"
-              onmouseup="minToolbarSync()" onkeyup="minToolbarSync()"
-              class="min-editor"
-              data-placeholder="안건 및 회의 내용을 입력하세요..."
-              style="min-height:220px;padding:18px;border:1px solid rgba(0,0,0,.08);border-top:none;border-radius:0 0 8px 8px;
-                     font-size:14px;line-height:1.8;outline:none;box-sizing:border-box;word-break:break-word;"></div>
+            <!-- 카드 컨테이너 -->
+            <div id="min-cards" class="min-cards-wrap"></div>
+            <button type="button" onclick="minutesAddCard()" class="min-card-add" style="width:100%;margin-top:10px;">+ 카드 추가</button>
           </div>
 
           <!-- Action Items -->
@@ -1665,6 +1669,16 @@ td:first-child, td:nth-child(2) { text-align: left; }
         <div style="font-size:48px;opacity:.15;margin-bottom:14px;">&#128203;</div>
         <div style="font-size:15px;font-weight:600;color:#374151;margin-bottom:6px;">회의록을 선택하거나 새로 만드세요</div>
         <div style="font-size:13px;color:#9ca3af;">왼쪽 사이드바에서 항목을 선택하거나 새 회의록을 추가하세요.</div>
+      </div>
+
+      <!-- 카테고리 브라우즈 패널 (카테고리 버튼 클릭 시 카드 펼침 보기) -->
+      <div id="minutes-browse" style="flex:1;overflow-y:auto;display:none;background:#fff;">
+        <div style="max-width:820px;margin:0 auto;padding:36px 48px 64px;">
+          <div id="min-browse-title" style="font-size:24px;font-weight:700;color:#1f2937;margin-bottom:4px;"></div>
+          <div id="min-browse-meta" style="font-size:13px;color:#9ca3af;margin-bottom:24px;"></div>
+          <div id="min-browse-cards" style="display:flex;flex-direction:column;gap:14px;"></div>
+          <div id="min-browse-empty" style="display:none;font-size:13px;color:#9ca3af;text-align:center;padding:60px 0;">이 카테고리에 해당하는 카드가 없습니다.</div>
+        </div>
       </div>
 
     </div>
@@ -5292,6 +5306,206 @@ function switchTab(tabId) {
 // ── 회의록 ────────────────────────────────────────────────────────────────────────
 let _minutesCurrentId = null;
 let _minutesActions = []; // [{id, text, assignee, due, done}]
+let _minActiveEditor = null; // 현재 포커스된 카드 body element
+const MINUTES_CATEGORIES = [
+  { key: 'on_trade', label: 'On Trade' },
+  { key: 'tm',       label: 'TM' },
+  { key: 'bottle',   label: 'Bottle' },
+  { key: 'draught',  label: 'Draught' },
+  { key: 'can',      label: 'Can' },
+];
+const MINUTES_CAT_LABEL = Object.fromEntries(MINUTES_CATEGORIES.map(c => [c.key, c.label]));
+const MINUTES_CAT_COLOR = {
+  on_trade: '#c2410c',
+  tm:       '#6d28d9',
+  bottle:   '#0e7490',
+  draught:  '#a16207',
+  can:      '#b91c1c',
+};
+const MINUTES_CAT_BG = {
+  on_trade: '#fff7ed',
+  tm:       '#f5f3ff',
+  bottle:   '#ecfeff',
+  draught:  '#fefce8',
+  can:      '#fef2f2',
+};
+let _minutesCurrentCategory = 'all'; // 'all' | category key
+
+function minutesFilterByCategory(key) {
+  _minutesCurrentCategory = key;
+  document.querySelectorAll('#min-cat-bar .min-cat-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.cat === key);
+  });
+  if (key === 'all') {
+    // 전체: 사이드바 월 목록 + 빈 상태/에디터 유지
+    _minutesShowPanel('empty');
+    minutesLoad();
+  } else {
+    // 카테고리: 브라우즈 뷰로 전환 (모든 월의 해당 카드 평탄화)
+    _minutesShowPanel('browse');
+    minutesLoad();           // 사이드바도 동기화
+    minutesBrowse(key);      // 메인 패널 브라우즈
+  }
+}
+
+// 우측 패널 표시 모드: 'editor' | 'empty' | 'browse'
+function _minutesShowPanel(mode) {
+  const ed = document.getElementById('minutes-editor');
+  const em = document.getElementById('minutes-empty');
+  const br = document.getElementById('minutes-browse');
+  if (ed) ed.style.display = (mode === 'editor') ? '' : 'none';
+  if (em) em.style.display = (mode === 'empty')  ? '' : 'none';
+  if (br) br.style.display = (mode === 'browse') ? '' : 'none';
+}
+
+async function minutesBrowse(catKey) {
+  const titleEl = document.getElementById('min-browse-title');
+  const metaEl  = document.getElementById('min-browse-meta');
+  const wrapEl  = document.getElementById('min-browse-cards');
+  const emptyEl = document.getElementById('min-browse-empty');
+  titleEl.textContent = MINUTES_CAT_LABEL[catKey] || catKey;
+  metaEl.textContent = '로딩 중...';
+  wrapEl.innerHTML = '';
+  emptyEl.style.display = 'none';
+
+  const { data, error } = await _supabase
+    .from('meeting_minutes')
+    .select('id, week_label, meeting_date, agenda')
+    .order('meeting_date', { ascending: false });
+  if (error) { metaEl.textContent = `로드 실패: ${error.message}`; return; }
+
+  const _esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const flat = [];
+  (data || []).forEach(row => {
+    let cards = [];
+    try { const p = JSON.parse(row.agenda || '[]'); if (Array.isArray(p)) cards = p; } catch {}
+    cards.forEach(c => {
+      const cat = c.category || c.tag || '';
+      if (cat === catKey) {
+        flat.push({
+          entryId:  row.id,
+          month:    row.week_label || '',
+          date:     row.meeting_date || '',
+          subtitle: c.subtitle || '',
+          content:  c.content || '',
+        });
+      }
+    });
+  });
+
+  metaEl.textContent = `총 ${flat.length}개 카드`;
+  if (flat.length === 0) { emptyEl.style.display = ''; return; }
+
+  wrapEl.innerHTML = flat.map(c => `
+    <div class="min-browse-card">
+      <div class="min-browse-card-head">
+        <span class="min-browse-card-month">${_esc(c.month) || '(월 미지정)'}</span>
+        ${c.subtitle ? `<span style="font-weight:700;color:#1f2937;font-size:13px;">${_esc(c.subtitle)}</span>` : ''}
+        <span class="min-browse-card-date">${_esc(c.date)}</span>
+        <button class="min-browse-card-open" onclick="minutesSelect(${c.entryId})">월 열기 →</button>
+      </div>
+      <div class="min-browse-card-body">${typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(c.content) : c.content}</div>
+    </div>
+  `).join('');
+}
+
+/* ---- 카드식 에디터 ---- */
+function _minGetActiveEditor() {
+  if (_minActiveEditor && document.body.contains(_minActiveEditor)) return _minActiveEditor;
+  return document.querySelector('#min-cards .min-card-body');
+}
+
+function _minCreateCardEl({ id, subtitle, category, content }) {
+  const wrap = document.createElement('div');
+  wrap.className = 'min-card';
+  wrap.dataset.id = id;
+
+  const head = document.createElement('div');
+  head.className = 'min-card-head';
+
+  // 좌측: 소제목 입력
+  const subtitleInput = document.createElement('input');
+  subtitleInput.type = 'text';
+  subtitleInput.className = 'min-card-subtitle';
+  subtitleInput.placeholder = '소제목';
+  subtitleInput.value = subtitle || '';
+
+  // 우측: 카테고리 select
+  const catSel = document.createElement('select');
+  catSel.className = 'min-card-catsel';
+  catSel.title = '카드 카테고리';
+  catSel.innerHTML =
+    '<option value="">카테고리 선택…</option>' +
+    MINUTES_CATEGORIES.map(c => `<option value="${c.key}" style="color:${MINUTES_CAT_COLOR[c.key]};font-weight:600;">${c.label}</option>`).join('');
+  catSel.value = category || '';
+  const _syncCatColor = () => {
+    catSel.style.color = MINUTES_CAT_COLOR[catSel.value] || '#c4c9d4';
+    catSel.style.fontWeight = catSel.value ? '700' : '500';
+    head.style.background = MINUTES_CAT_BG[catSel.value] || '#fafafa';
+  };
+  _syncCatColor();
+  catSel.addEventListener('change', _syncCatColor);
+
+  const delBtn = document.createElement('button');
+  delBtn.type = 'button';
+  delBtn.className = 'min-card-del';
+  delBtn.title = '카드 삭제';
+  delBtn.textContent = '✕';
+  delBtn.onclick = () => { if (confirm('이 카드를 삭제하시겠습니까?')) wrap.remove(); };
+
+  head.appendChild(subtitleInput);
+  head.appendChild(catSel);
+  head.appendChild(delBtn);
+
+  const body = document.createElement('div');
+  body.className = 'min-card-body';
+  body.contentEditable = 'true';
+  body.setAttribute('data-placeholder', '내용을 입력하세요...');
+  body.innerHTML = (typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(content || '') : (content || ''));
+  body.addEventListener('focus', () => { _minActiveEditor = body; });
+  body.addEventListener('mouseup', minToolbarSync);
+  body.addEventListener('keyup', minToolbarSync);
+
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function minutesRenderCards(cards) {
+  const wrap = document.getElementById('min-cards');
+  wrap.innerHTML = '';
+  const list = (Array.isArray(cards) && cards.length) ? cards : [{ id: Date.now(), subtitle: '', category: '', content: '' }];
+  // legacy: tag → category 자동 마이그레이션
+  list.forEach(c => {
+    if (c.category === undefined && c.tag !== undefined) c.category = c.tag;
+    wrap.appendChild(_minCreateCardEl(c));
+  });
+  _minActiveEditor = wrap.querySelector('.min-card-body');
+}
+
+function minutesAddCard() {
+  const wrap = document.getElementById('min-cards');
+  // 사이드바에 선택된 카테고리가 있으면 프리필
+  const preCat = (_minutesCurrentCategory && _minutesCurrentCategory !== 'all') ? _minutesCurrentCategory : '';
+  const card = _minCreateCardEl({ id: Date.now(), subtitle: '', category: preCat, content: '' });
+  wrap.appendChild(card);
+  const subtitle = card.querySelector('.min-card-subtitle');
+  subtitle.focus();
+}
+
+function minutesFocusFirstCard() {
+  const subtitle = document.querySelector('#min-cards .min-card-subtitle');
+  if (subtitle) subtitle.focus();
+}
+
+function _minutesCollectCards() {
+  return Array.from(document.querySelectorAll('#min-cards .min-card')).map(el => ({
+    id:       parseInt(el.dataset.id) || Date.now(),
+    subtitle: (el.querySelector('.min-card-subtitle').value || '').trim(),
+    category: (el.querySelector('.min-card-catsel').value || '').trim(),
+    content:  el.querySelector('.min-card-body').innerHTML,
+  })).filter(c => c.subtitle || c.category || (c.content && c.content.replace(/<[^>]*>/g, '').trim()));
+}
 
 function minutesRenderActions() {
   const wrap = document.getElementById('min-actions-list');
@@ -5352,26 +5566,29 @@ function minutesAutoWeek(dateStr) {
   if (titleEl && !titleEl.value.trim()) titleEl.value = `WK${wk} (${mm}/${dd}) 회의록`;
 }
 
-/* 에디터에 이미지+캡션 블록 삽입 */
-/* 툴바 포맷 명령 */
+/* 툴바 포맷 명령 — 현재 포커스된 카드(_minActiveEditor)에 작용 */
 function minFmt(cmd) {
-  document.getElementById('min-agenda').focus();
+  const ed = _minGetActiveEditor();
+  if (ed) ed.focus();
   document.execCommand(cmd, false, null);
   minToolbarSync();
 }
 function minFmtBlock(tag) {
-  document.getElementById('min-agenda').focus();
+  const ed = _minGetActiveEditor();
+  if (ed) ed.focus();
   const cur = document.queryCommandValue('formatBlock').toUpperCase();
   document.execCommand('formatBlock', false, cur === tag ? 'P' : tag);
   minToolbarSync();
 }
 function minFmtSize(val) {
   if (!val) return;
-  document.getElementById('min-agenda').focus();
+  const ed = _minGetActiveEditor();
+  if (ed) ed.focus();
   document.execCommand('fontSize', false, val);
 }
 function minFmtColor(cmd, color) {
-  document.getElementById('min-agenda').focus();
+  const ed = _minGetActiveEditor();
+  if (ed) ed.focus();
   document.execCommand(cmd, false, color);
 }
 function minToolbarSync() {
@@ -5410,8 +5627,8 @@ function minSaveSelection(e) {
 
 function minRestoreSelection() {
   if (!_minSavedRange) return;
-  const editor = document.getElementById('min-agenda');
-  editor.focus();
+  const editor = _minGetActiveEditor();
+  if (editor) editor.focus();
   const sel = window.getSelection();
   sel.removeAllRanges();
   sel.addRange(_minSavedRange);
@@ -5515,110 +5732,6 @@ function minInsertSymbol(sym) {
   document.execCommand('insertText', false, sym);
 }
 
-function _minutesInsertFigure(dataUrl) {
-  const editor = document.getElementById('min-agenda');
-  editor.focus();
-  const fig = document.createElement('figure');
-  const img = document.createElement('img');
-  img.src = dataUrl;
-  const cap = document.createElement('figcaption');
-  fig.appendChild(img);
-  fig.appendChild(cap);
-  const sel = window.getSelection();
-  if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
-    const range = sel.getRangeAt(0);
-    range.deleteContents();
-    range.insertNode(fig);
-  } else {
-    editor.appendChild(fig);
-  }
-  // figure 뒤에 빈 줄 추가해서 계속 입력 가능하게
-  const p = document.createElement('p');
-  p.innerHTML = '<br>';
-  fig.after(p);
-  const newRange = document.createRange();
-  newRange.setStart(cap, 0);
-  newRange.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(newRange);
-}
-
-function minutesAgendaPaste(e) {
-  const cd = e.clipboardData || e.originalEvent?.clipboardData;
-  if (!cd) return;
-
-  // 1. clipboardData.items 에서 image/* 확인
-  const items = cd.items;
-  if (items) {
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          e.preventDefault();
-          const reader = new FileReader();
-          reader.onload = ev => _minutesInsertFigure(ev.target.result);
-          reader.readAsDataURL(file);
-          return;
-        }
-      }
-    }
-  }
-
-  // 2. clipboardData.files 확인 (Excel/Windows 에서 이미지를 Files 로 노출하는 경우)
-  const files = cd.files;
-  if (files && files.length > 0) {
-    for (const file of Array.from(files)) {
-      if (file.type.startsWith('image/') || file.type === '') {
-        e.preventDefault();
-        const reader = new FileReader();
-        reader.onload = ev => {
-          // readAsDataURL 결과가 유효한 이미지 data URL 인지 확인
-          if (ev.target.result && ev.target.result.startsWith('data:image')) {
-            _minutesInsertFigure(ev.target.result);
-          }
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-    }
-  }
-
-  // 3. HTML 클립보드에서 base64 <img> 추출 (Excel 차트 등)
-  const html = cd.getData('text/html');
-  if (html && html.includes('<img')) {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    const imgs = tmp.querySelectorAll('img');
-    for (const img of imgs) {
-      const src = img.getAttribute('src') || '';
-      if (src.startsWith('data:image')) {
-        e.preventDefault();
-        _minutesInsertFigure(src);
-        return;
-      }
-    }
-  }
-}
-
-function minutesAgendaDrop(e) {
-  e.preventDefault();
-  for (const file of Array.from(e.dataTransfer.files)) {
-    if (!file.type.startsWith('image/')) continue;
-    const reader = new FileReader();
-    reader.onload = ev => _minutesInsertFigure(ev.target.result);
-    reader.readAsDataURL(file);
-  }
-}
-
-function minutesInsertFromPicker(input) {
-  const file = input.files[0];
-  if (!file) return;
-  input.value = '';
-  const reader = new FileReader();
-  reader.onload = e => _minutesInsertFigure(e.target.result);
-  reader.readAsDataURL(file);
-}
-
 async function minutesLoad() {
   const listEl = document.getElementById('minutes-list');
   listEl.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">불러오는 중...</div>';
@@ -5641,15 +5754,14 @@ async function minutesLoad() {
   const _esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   listEl.innerHTML = data.map(r => `
     <div class="min-list-item" id="min-item-${r.id}" onclick="minutesSelect(${r.id})">
-      <div class="min-list-title">${_esc(r.week_label) || '(제목 없음)'}</div>
+      <div class="min-list-title">${_esc(r.week_label) || '(월 미지정)'}</div>
       <div class="min-list-meta">${_esc(r.meeting_date)}</div>
     </div>`).join('');
 }
 
 function minutesShowList() {
   document.getElementById('minutes-list-panel').style.display = '';
-  document.getElementById('minutes-editor').style.display = 'none';
-  document.getElementById('minutes-empty').style.display = 'none';
+  _minutesShowPanel('empty');
 }
 
 function _minutesMobileShowEditor() {
@@ -5670,51 +5782,67 @@ async function minutesSelect(id) {
 
   _minutesCurrentId = id;
   document.getElementById('min-date').value = data.meeting_date || '';
-  document.getElementById('min-week').textContent = data.week_label ? '' : '';
-  if (data.meeting_date) minutesAutoWeek(data.meeting_date);
-  document.getElementById('min-title-input').value = data.week_label || '';
-  document.getElementById('min-attendees').value = data.attendees || '';
-  document.getElementById('min-agenda').innerHTML = DOMPurify.sanitize(data.agenda || '');
+  // week_label이 Jan~Dec면 드롭다운에 매칭, 아니면 빈 값
+  const _monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('min-month').value = _monthOpts.includes(data.week_label) ? data.week_label : '';
+  // agenda → 카드 배열로 파싱 (구버전 HTML이면 단일 카드로 감싸기)
+  let _cards = [];
+  if (data.agenda) {
+    try {
+      const parsed = JSON.parse(data.agenda);
+      if (Array.isArray(parsed)) _cards = parsed;
+    } catch { /* legacy HTML — wrap as single card */ }
+    if (_cards.length === 0 && typeof data.agenda === 'string' && data.agenda.trim() && !data.agenda.trim().startsWith('[')) {
+      _cards = [{ id: Date.now(), category: '', content: data.agenda }];
+    }
+  }
+  minutesRenderCards(_cards);
   try { _minutesActions = JSON.parse(data.action_items || '[]'); } catch { _minutesActions = []; }
   if (!Array.isArray(_minutesActions)) _minutesActions = [];
   minutesRenderActions();
   document.getElementById('min-status').textContent = '';
   document.getElementById('min-delete-btn').style.display = '';
-  document.getElementById('minutes-empty').style.display = 'none';
-  document.getElementById('minutes-editor').style.display = '';
+  // 월 클릭 시에는 항상 에디터로 전환 (브라우즈 중이어도)
+  _minutesShowPanel('editor');
   _minutesMobileShowEditor();
 }
 
 function minutesNew() {
   _minutesCurrentId = null;
   document.querySelectorAll('.min-list-item').forEach(el => el.classList.remove('active'));
-  document.getElementById('min-date').value = '';
-  document.getElementById('min-week').textContent = '';
-  document.getElementById('min-title-input').value = '';
-  document.getElementById('min-attendees').value = '';
-  document.getElementById('min-agenda').innerHTML = '';
+  // 오늘 날짜 + 현재 월 자동 선택
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const _monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('min-date').value = `${yyyy}-${mm}-${dd}`;
+  document.getElementById('min-month').value = _monthOpts[today.getMonth()];
+  minutesRenderCards([]);
   _minutesActions = [];
   minutesRenderActions();
   document.getElementById('min-status').textContent = '';
   document.getElementById('min-delete-btn').style.display = 'none';
-  document.getElementById('minutes-empty').style.display = 'none';
-  document.getElementById('minutes-editor').style.display = '';
+  _minutesShowPanel('editor');
   _minutesMobileShowEditor();
-  document.getElementById('min-title-input').focus();
+  document.getElementById('min-month').focus();
 }
 
 async function minutesSave() {
   const statusEl = document.getElementById('min-status');
   const meeting_date = document.getElementById('min-date').value;
   if (!meeting_date) { statusEl.textContent = '날짜를 입력하세요.'; statusEl.style.color = '#e53e3e'; return; }
+  const month = document.getElementById('min-month').value;
+  if (!month) { statusEl.textContent = '월을 선택하세요.'; statusEl.style.color = '#e53e3e'; return; }
   statusEl.textContent = '저장 중...'; statusEl.style.color = 'var(--text-muted)';
   const payload = {
     token:        sessionStorage.getItem('auth_token'),
     id:           _minutesCurrentId || undefined,
     meeting_date,
-    week_label:   document.getElementById('min-title-input').value.trim(),
-    attendees:    document.getElementById('min-attendees').value.trim(),
-    agenda:       document.getElementById('min-agenda').innerHTML,
+    category:     null,           // entry-level category 미사용 (카드별로 이동)
+    week_label:   month,          // 월(Jan~Dec)이 제목 역할
+    attendees:    '',
+    agenda:       JSON.stringify(_minutesCollectCards()),
     action_items: JSON.stringify(_minutesActions),
   };
   const res = await fetch(SUPABASE_URL + '/functions/v1/save-minutes', {
@@ -5746,8 +5874,7 @@ async function minutesDelete() {
   const result = await res.json();
   if (!result.ok) { document.getElementById('min-status').textContent = `삭제 실패: ${result.error || res.status}`; return; }
   _minutesCurrentId = null;
-  document.getElementById('minutes-editor').style.display = 'none';
-  document.getElementById('minutes-empty').style.display = '';
+  _minutesShowPanel('empty');
   await minutesLoad();
 }
 
