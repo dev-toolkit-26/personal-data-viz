@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
+<script src="tts-dictionary.js"></script>
 <style>
 :root {
   --primary: #205527;
@@ -681,7 +682,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
         <div class="kn-section-label" style="margin-top:8px;">Key Performance Indicators</div>
         <div id="sum-kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;"></div>
         <div id="sum-kpi-comment" class="kn-card" style="border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
-        <div id="sum-rofo-analysis" class="kn-card" style="margin-top:18px;border-left:3px solid #60a5fa;padding:20px 24px;color:rgba(255,255,255,.85);font-size:13px;line-height:1.7;font-weight:300;"></div>
+        <div id="sum-overview-narrative" class="kn-card" style="margin-top:18px;border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.88);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
@@ -896,87 +897,270 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
     document.getElementById('sum-kpi-comment').innerHTML = kpiComment;
 
-    // ── RoFo Analysis (Slide 1, KPI Comment 아래) ──
-    (function renderRofoAnalysis(){
-      var rofoEl = document.getElementById('sum-rofo-analysis');
-      if (!rofoEl) return;
+    // ── Monthly Summary Narrative (English, TTS-friendly) ──
+    (function renderOverviewNarrative(){
+      var narEl = document.getElementById('sum-overview-narrative');
+      if (!narEl) return;
+
       var fcstMonIdx0 = (meta && meta.month ? meta.month : _UP_FCST_MONTH) - 1;
       var skuRoot0 = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
-      var ttlRofoHL = ttl.rofo_monthly && ttl.rofo_monthly[fcstMonIdx0];
-      var ttlFcstHL = ttl.this_week_fcst;
 
-      if (ttlRofoHL == null) {
-        rofoEl.innerHTML = '<div class="kn-section-label" style="color:#60a5fa;letter-spacing:1.5px;margin-bottom:8px;">RoFo Analysis</div>'
-          + '<div style="color:rgba(255,255,255,.65);font-size:12.5px;">'
-          + _sumMonName + ' RoFo 데이터가 없습니다. Data Update에서 RoFo Excel을 적용하세요.'
+      function _num(v, digits) { return v == null ? null : Number(v).toLocaleString('en-US', {maximumFractionDigits: (digits == null ? 1 : digits)}); }
+      function _pctWord(v, digits) { return v == null ? null : (v * 100).toFixed(digits == null ? 1 : digits) + ' percent'; }
+      function _pctDeltaWord(v, digits) {
+        if (v == null) return null;
+        var n = (v * 100).toFixed(digits == null ? 1 : digits);
+        return (v >= 0 ? 'up ' : 'down ') + Math.abs(parseFloat(n)).toFixed(digits == null ? 1 : digits) + ' percent';
+      }
+      var REGION_DISPLAY = { 'Seoul':'Seoul', 'Busan':'Busan', 'DaeGu & JeJu':'Daegu and Jeju', 'DaeJeon':'Daejeon', 'GwangJu':'Gwangju' };
+      var P = function(text){ return '<p style="margin:0 0 12px 0;">' + text + '</p>'; };
+
+      var ttsSupported = ('speechSynthesis' in window) && ('SpeechSynthesisUtterance' in window);
+      var btnStyle = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;padding:6px 12px;border-radius:6px;font:600 12px Inter,sans-serif;cursor:pointer;transition:background .15s,border-color .15s;';
+      var btnStyleDisabled = btnStyle + 'opacity:.4;cursor:not-allowed;';
+      var selStyle = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;padding:5px 8px;border-radius:6px;font:500 11.5px Inter,sans-serif;cursor:pointer;max-width:200px;';
+      var toolbarHtml = '';
+      if (ttsSupported) {
+        toolbarHtml =
+            '<div id="sum-tts-bar" title="Microsoft Edge recommended for best voice quality" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">'
+          +   '<button id="sum-tts-play"  type="button" style="' + btnStyle + '">▶ Read Aloud</button>'
+          +   '<button id="sum-tts-pause" type="button" style="' + btnStyleDisabled + '" disabled>⏸ Pause</button>'
+          +   '<button id="sum-tts-stop"  type="button" style="' + btnStyleDisabled + '" disabled>⏹ Stop</button>'
+          +   '<select id="sum-tts-voice" style="' + selStyle + '" title="Voice"></select>'
+          +   '<select id="sum-tts-rate"  style="' + selStyle + '" title="Speed">'
+          +     '<option value="0.8">0.8x</option><option value="1" selected>1.0x</option><option value="1.2">1.2x</option>'
+          +   '</select>'
           + '</div>';
-        return;
+      }
+      var html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">'
+               + '<div class="kn-section-label" style="color:#4ade80;letter-spacing:1.5px;">Monthly Summary</div>'
+               + toolbarHtml
+               + '</div>'
+               + '<div id="sum-tts-body">';
+
+      var wdPct = (wd && wd.pct != null) ? wd.pct : null;
+      var apMtdAch_ttl = (ttl && ttl.ap > 0 && ttl.mtd_actual != null) ? ttl.mtd_actual / ttl.ap : null;
+      var apFcstAch_ttl = (ttl && ttl.ap_fcst_ach != null) ? ttl.ap_fcst_ach : null;
+
+      function _pace(gapPp) {
+        if (gapPp == null) return null;
+        if (Math.abs(gapPp) < 1.5) return 'roughly in line with';
+        return gapPp >= 0 ? 'ahead of' : 'behind';
+      }
+      function _forecastArc(ach) {
+        if (ach == null) return null;
+        if (ach >= 1.0) return 'overshoots the annual plan';
+        if (ach >= 0.97) return 'lands essentially on the annual plan';
+        if (ach >= 0.92) return 'comes in just below the annual plan';
+        return 'falls short of the annual plan';
       }
 
-      // SKU별 (FCST HL - RoFo HL) 편차 계산
-      // sku_detail의 rofo_monthly는 standard cases → HL 환산 시 × 0.0792
-      // FCST(this_week_fcst) / MTD는 physical QTY → × hl_factor
-      var skuDevs = [];
-      for (var bi = 0; bi < skuRoot0.length; bi++) {
-        var b = skuRoot0[bi];
-        if (!b || !Array.isArray(b.skus)) continue;
-        for (var sj = 0; sj < b.skus.length; sj++) {
-          var s = b.skus[sj];
-          if (!s || !s.data) continue;
-          var rofoStd = s.data.rofo_monthly && s.data.rofo_monthly[fcstMonIdx0];
-          var fcstQty = s.data.this_week_fcst;
-          if (rofoStd == null || fcstQty == null) continue;
-          var f = (s.data.hl_factor != null) ? s.data.hl_factor : 0.0792;
-          var fHL = fcstQty * f;
-          var rHL = rofoStd * 0.0792;
-          if (rHL <= 0 && fHL <= 0) continue;
-          var gap = fHL - rHL;
-          var mtdQty = s.data.mtd;
-          var mtdHL  = (mtdQty != null) ? mtdQty * f : null;
-          var vsFcst = (fHL > 0 && mtdHL != null) ? mtdHL / fHL : null;
-          skuDevs.push({ brand: b.brand, sku: s.sku, fHL: fHL, rHL: rHL, gap: gap, mtdHL: mtdHL, vsFcst: vsFcst });
+      // ── Paragraph 1: Headline (pace-focused, no hectoliter recital) ──
+      if (wdPct != null && apMtdAch_ttl != null) {
+        var gapPp = (apMtdAch_ttl - wdPct) * 100;
+        var pace = _pace(gapPp);
+        var p1 = 'For ' + _sumMonName + ', with ' + _pctWord(wdPct) + ' of working days elapsed, month-to-date attainment of the monthly target stands at ' + _pctWord(apMtdAch_ttl);
+        if (pace === 'roughly in line with') {
+          p1 += ' — ' + pace + ' the working-day pace. ';
+        } else {
+          p1 += ' — ' + pace + ' the working-day pace by ' + Math.abs(gapPp).toFixed(1) + ' points. ';
+        }
+        var arc = _forecastArc(apFcstAch_ttl);
+        if (arc) p1 += 'The latest rolling forecast ' + arc + ' at ' + _pctWord(apFcstAch_ttl) + '.';
+        html += P(p1);
+      } else {
+        html += P('For ' + _sumMonName + ', headline data is not yet available.');
+      }
+
+      // ── Paragraph 2: Year-over-year (one sentence, no hectoliter recital) ──
+      if (ttl && ttl.fcst_growth_lym != null) {
+        html += P('Year over year, the month-end forecast is trending ' + _pctDeltaWord(ttl.fcst_growth_lym) + ' versus the same month last year.');
+      }
+
+      // ── Paragraph 3: SKU section — Top 5 by this-month MTD volume, one sentence per SKU ──
+      var skuBlock = '';
+      if (skuRoot0.length > 0 && wdPct != null) {
+        var humanize = (typeof window.humanizeSkuName === 'function') ? window.humanizeSkuName : function(x){ return x; };
+        var skuList = [];
+        for (var bi = 0; bi < skuRoot0.length; bi++) {
+          var b = skuRoot0[bi];
+          if (!b || !Array.isArray(b.skus)) continue;
+          for (var sj = 0; sj < b.skus.length; sj++) {
+            var s = b.skus[sj];
+            if (!s || !s.data) continue;
+            var f = (s.data.hl_factor != null) ? s.data.hl_factor : 0.0792;
+            var apHL  = (s.data.ap != null) ? s.data.ap * 0.0792 : null;
+            var mtdHL = (s.data.mtd != null) ? s.data.mtd * f : null;
+            if (mtdHL == null || mtdHL <= 0) continue;
+            var mtdVsTarget = (apHL != null && apHL > 0) ? mtdHL / apHL : null;
+            if (mtdVsTarget == null) continue;
+            skuList.push({ name: humanize(s.sku), volHL: mtdHL, ratio: mtdVsTarget });
+          }
+        }
+        skuList.sort(function(a, c){ return c.volHL - a.volHL; });
+        var top5 = skuList.slice(0, 5);
+
+        function _paceClause(gp) {
+          if (Math.abs(gp) < 1.5) return 'in line with the working-day pace';
+          return (gp >= 0 ? 'ahead of the working-day pace by ' : 'behind the working-day pace by ') + Math.abs(gp).toFixed(1) + ' points';
+        }
+
+        for (var ti = 0; ti < top5.length; ti++) {
+          var t = top5[ti];
+          var tGap = (t.ratio - wdPct) * 100;
+          skuBlock += P(t.name + ' is at ' + _pctWord(t.ratio) + ' of target, ' + _paceClause(tGap) + '.');
         }
       }
-      skuDevs.sort(function(a, c){ return Math.abs(c.gap) - Math.abs(a.gap); });
-      var topN = skuDevs.slice(0, 8);
-
-      // TTL summary line
-      var ttlAch = (ttlRofoHL > 0 && ttlFcstHL != null) ? ttlFcstHL / ttlRofoHL : null;
-      var ttlGap = (ttlFcstHL != null) ? ttlFcstHL - ttlRofoHL : null;
-      var achColor = _achColor(ttlAch);
-      var gapColor = (ttlGap == null) ? '#fff' : (ttlGap >= 0 ? '#4ade80' : '#f87171');
-      var gapSign  = (ttlGap == null) ? '' : (ttlGap >= 0 ? '+' : '');
-
-      var html = '<div class="kn-section-label" style="color:#60a5fa;letter-spacing:1.5px;margin-bottom:10px;">RoFo Analysis</div>';
-      html += '<div style="font-size:13px;margin-bottom:14px;">'
-            + '🎯 ' + _sumMonName + ' RoFo Target ' + hi(_fmtHL(ttlRofoHL) + ' HL', '#fff')
-            + ' vs This Wk FCST ' + hi(_fmtHL(ttlFcstHL) + ' HL', '#fff')
-            + ' = ' + hi(_fmtPct(ttlAch), achColor)
-            + ' (Gap ' + hi(gapSign + _fmtHL(ttlGap) + ' HL', gapColor) + ').'
-            + '</div>';
-
-      if (topN.length === 0) {
-        html += '<div style="color:rgba(255,255,255,.6);font-size:12px;">SKU 단위 RoFo가 매핑된 항목이 없습니다.</div>';
-      } else {
-        html += '<div style="font-size:11px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:8px;">FCST vs RoFo 편차 Top ' + topN.length + ' (절댓값 HL 기준)</div>';
-        html += '<div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .8fr .8fr;gap:10px;font-size:10.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.18);">'
-              + '<span>SKU</span><span style="text-align:right;">FCST HL</span><span style="text-align:right;">RoFo HL</span><span style="text-align:right;">Gap HL</span><span style="text-align:right;">MTD HL</span><span style="text-align:right;">vs FCST</span>'
-              + '</div>';
-        html += topN.map(function(r){
-          var gc = r.gap >= 0 ? '#4ade80' : '#f87171';
-          var fc = _achColor(r.vsFcst);
-          var gSign = r.gap >= 0 ? '+' : '';
-          return '<div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .8fr .8fr;gap:10px;font-size:12px;padding:5px 10px;border-bottom:1px solid rgba(255,255,255,.06);align-items:baseline;">'
-            + '<span style="color:#fff;"><span style="color:rgba(255,255,255,.55);font-size:10.5px;">[' + r.brand + ']</span> ' + r.sku + '</span>'
-            + '<span style="text-align:right;color:#fff;">' + _fmtHL(r.fHL) + '</span>'
-            + '<span style="text-align:right;color:#fff;">' + _fmtHL(r.rHL) + '</span>'
-            + '<span style="text-align:right;color:' + gc + ';font-weight:600;">' + gSign + _fmtHL(r.gap) + '</span>'
-            + '<span style="text-align:right;color:#fff;">' + (r.mtdHL != null ? _fmtHL(r.mtdHL) : '—') + '</span>'
-            + '<span style="text-align:right;color:' + fc + ';font-weight:600;">' + (r.vsFcst != null ? _fmtPct(r.vsFcst) : '—') + '</span>'
-            + '</div>';
-        }).join('');
+      if (skuBlock) {
+        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">Top SKUs This Month</div>' + skuBlock;
       }
-      rofoEl.innerHTML = html;
+
+      // ── Paragraphs 4-8: Per branch (one tight sentence each) ──
+      var regionsBlock = '';
+      var regionsList = ['Seoul', 'Busan', 'DaeGu & JeJu', 'DaeJeon', 'GwangJu'];
+      for (var ri = 0; ri < regionsList.length; ri++) {
+        var key = regionsList[ri];
+        var r = hl[key];
+        if (!r) continue;
+        var displayName = REGION_DISPLAY[key] || key;
+        var rApMtdAch = (r.ap > 0 && r.mtd_actual != null) ? r.mtd_actual / r.ap : null;
+
+        var sentence = null;
+        if (rApMtdAch != null && wdPct != null) {
+          var rGap = (rApMtdAch - wdPct) * 100;
+          var rPace = _pace(rGap);
+          sentence = 'In ' + displayName + ', MTD is at ' + _pctWord(rApMtdAch) + ' of target, ';
+          if (rPace === 'roughly in line with') {
+            sentence += rPace + ' the working-day pace';
+          } else {
+            sentence += rPace + ' the working-day pace by ' + Math.abs(rGap).toFixed(1) + ' points';
+          }
+          if (r.fcst_growth_lym != null) sentence += ', with the forecast ' + _pctDeltaWord(r.fcst_growth_lym) + ' year over year';
+          sentence += '.';
+        } else if (r.fcst_growth_lym != null) {
+          sentence = 'In ' + displayName + ', the forecast is ' + _pctDeltaWord(r.fcst_growth_lym) + ' year over year.';
+        }
+        if (sentence) regionsBlock += P(sentence);
+      }
+
+      if (regionsBlock) {
+        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">Regional Breakdown</div>' + regionsBlock;
+      }
+
+      html += '</div>'; // close #sum-tts-body
+      narEl.innerHTML = html;
+
+      // ── TTS wiring ──
+      if (!ttsSupported) return;
+      var bodyEl  = document.getElementById('sum-tts-body');
+      var playBtn = document.getElementById('sum-tts-play');
+      var pauseBtn= document.getElementById('sum-tts-pause');
+      var stopBtn = document.getElementById('sum-tts-stop');
+      var voiceSel= document.getElementById('sum-tts-voice');
+      var rateSel = document.getElementById('sum-tts-rate');
+      if (!bodyEl || !playBtn) return;
+
+      window.__sumTTS = window.__sumTTS || { rate: 1.0, voiceName: null };
+      rateSel.value = String(window.__sumTTS.rate || 1);
+
+      function _populateVoices(){
+        var all = (window.speechSynthesis.getVoices() || []).filter(function(v){ return v.lang && v.lang.toLowerCase().indexOf('en') === 0; });
+        if (!all.length) {
+          voiceSel.innerHTML = '<option value="-1">(loading voices…)</option>';
+          voiceSel._voices = [];
+          return;
+        }
+        // Surface "Natural" voices first
+        all.sort(function(a, b){
+          var an = (a.name||'').indexOf('Natural') !== -1 ? 0 : 1;
+          var bn = (b.name||'').indexOf('Natural') !== -1 ? 0 : 1;
+          if (an !== bn) return an - bn;
+          return (a.name||'').localeCompare(b.name||'');
+        });
+        voiceSel.innerHTML = all.map(function(v, i){
+          return '<option value="' + i + '">' + (v.name || 'Voice ' + i) + ' (' + v.lang + ')</option>';
+        }).join('');
+        voiceSel._voices = all;
+        var idx = -1;
+        if (window.__sumTTS.voiceName) {
+          idx = all.findIndex(function(v){ return v.name === window.__sumTTS.voiceName; });
+        }
+        if (idx < 0) {
+          var preferred = window.pickPreferredVoice ? window.pickPreferredVoice(all) : all[0];
+          idx = preferred ? all.indexOf(preferred) : 0;
+        }
+        voiceSel.value = String(Math.max(0, idx));
+      }
+      _populateVoices();
+      if (typeof window.speechSynthesis.onvoiceschanged !== 'undefined') {
+        window.speechSynthesis.onvoiceschanged = _populateVoices;
+      }
+
+      function _setBtnState(state){
+        // state: 'idle' | 'playing' | 'paused'
+        function apply(btn, disabled, label){
+          btn.disabled = !!disabled;
+          btn.style.opacity = disabled ? '.4' : '1';
+          btn.style.cursor  = disabled ? 'not-allowed' : 'pointer';
+          if (label != null) btn.textContent = label;
+        }
+        if (state === 'playing') {
+          apply(playBtn, true,  '▶ Playing…');
+          apply(pauseBtn, false, '⏸ Pause');
+          apply(stopBtn, false, '⏹ Stop');
+        } else if (state === 'paused') {
+          apply(playBtn, true,  '▶ Paused');
+          apply(pauseBtn, false, '▶ Resume');
+          apply(stopBtn, false, '⏹ Stop');
+        } else {
+          apply(playBtn, false, '▶ Read Aloud');
+          apply(pauseBtn, true,  '⏸ Pause');
+          apply(stopBtn, true,  '⏹ Stop');
+        }
+      }
+
+      function _startSpeech(){
+        try { window.speechSynthesis.cancel(); } catch(e){}
+        var raw = (bodyEl.innerText || bodyEl.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!raw) return;
+        var spoken = (typeof window.convertForTTS === 'function') ? window.convertForTTS(raw) : raw;
+        var u = new window.SpeechSynthesisUtterance(spoken);
+        var voices = voiceSel._voices || [];
+        var chosen = voices[parseInt(voiceSel.value, 10)] || null;
+        if (chosen) { u.voice = chosen; u.lang = chosen.lang || 'en-US'; }
+        else { u.lang = 'en-US'; }
+        u.rate = parseFloat(rateSel.value) || 1.0;
+        u.pitch = 1.0;
+        u.onend = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
+        u.onerror = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
+        window.__sumTTS.utterance = u;
+        window.speechSynthesis.speak(u);
+        _setBtnState('playing');
+      }
+
+      playBtn.addEventListener('click', _startSpeech);
+      pauseBtn.addEventListener('click', function(){
+        var ss = window.speechSynthesis;
+        if (ss.paused) { ss.resume(); _setBtnState('playing'); }
+        else if (ss.speaking) { ss.pause(); _setBtnState('paused'); }
+      });
+      stopBtn.addEventListener('click', function(){
+        try { window.speechSynthesis.cancel(); } catch(e){}
+        window.__sumTTS.utterance = null;
+        _setBtnState('idle');
+      });
+      voiceSel.addEventListener('change', function(){
+        var idx = parseInt(voiceSel.value, 10);
+        var v = voiceSel._voices && voiceSel._voices[idx];
+        window.__sumTTS.voiceName = v ? v.name : null;
+      });
+      rateSel.addEventListener('change', function(){
+        window.__sumTTS.rate = parseFloat(rateSel.value) || 1.0;
+      });
+
+      // Cancel any leftover speech from a previous render
+      try { window.speechSynthesis.cancel(); } catch(e){}
+      _setBtnState('idle');
     })();
 
     // ── Slide 5: 주요 SKU 특이사항 (전체 SKU, 브랜드별 그룹, AP / FCST / vs LM / vs LY) ──
