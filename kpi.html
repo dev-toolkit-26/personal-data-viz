@@ -2158,35 +2158,44 @@ function readPaulaner(input) {
   reader.onload = function(ev) {
     try {
       const wb = XLSX.read(ev.target.result, {type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
       const MONTH_LABELS = {'3월':3,'4월':4,'5월':5,'6월':6,'7월':7,'8월':8,'9월':9,'10월':10,'11월':11,'12월':12};
-      const hdrIdx = allRows.findIndex(r => r.some(c=>String(c).trim()==='Group') && (r.some(c=>String(c).trim()==='거래처명')||r.some(c=>String(c).trim()==='Outlet')));
-      if (hdrIdx < 0) { alert('⚠ 파울라너 파일 형식 오류\n헤더: Group, WS, 거래처명, System, 3월~12월'); input.value=''; return; }
-      const hdr = allRows[hdrIdx].map(c=>String(c).trim());
-      const ix = k => hdr.indexOf(k);
-      const iGroup=ix('Group'), iWs=ix('WS');
-      const iOut=hdr.findIndex(h=>h==='거래처명'||h==='Outlet');
-      const iSys=ix('System');
-      const iCh=ix('Channel');
-      const monthCols={};
-      hdr.forEach((h,i)=>{ if(MONTH_LABELS[h]!==undefined) monthCols[MONTH_LABELS[h]]=i; });
-      const mList=Object.keys(monthCols).map(Number).sort((a,b)=>a-b);
-      if(!mList.length){ alert('⚠ 월 컬럼(3월~12월)을 찾을 수 없습니다. 파일 형식을 확인하세요.'); input.value=''; return; }
-      parsedPaulaner = allRows.slice(hdrIdx+1).filter(r=>String(r[iGroup]||'').trim()&&String(r[iOut]||'').trim()).map(r=>{
-        const rawGroup=String(r[iGroup]||'').trim();
-        const rawCh=iCh>=0?String(r[iCh]||'').trim():'';
-        // 구 템플릿 호환: Channel='NKA'면 region='NKA'로 자동 승격
-        const region=rawCh==='NKA'?'NKA':(PL_REGION_NORM[rawGroup]||rawGroup);
-        const row={
-          region:region,
-          ws:iWs>=0?String(r[iWs]||'').trim():'',
-          outlet:String(r[iOut]||'').trim(),
-          system:iSys>=0?String(r[iSys]||'').trim():'',
-        };
-        for(const [m,ci] of Object.entries(monthCols)){const v=parseFloat(r[ci]);row['m'+m]=isNaN(v)?null:v;}
-        return row;
-      });
+      const accumulated = [];
+      const monthSet = new Set();
+      for (const sheetName of wb.SheetNames) {
+        const ws = wb.Sheets[sheetName];
+        if (!ws) continue;
+        const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+        const hdrIdx = allRows.findIndex(r => r.some(c=>String(c).trim()==='Group') && (r.some(c=>String(c).trim()==='거래처명')||r.some(c=>String(c).trim()==='Outlet')));
+        if (hdrIdx < 0) continue;
+        const hdr = allRows[hdrIdx].map(c=>String(c).trim());
+        const ix = k => hdr.indexOf(k);
+        const iGroup=ix('Group'), iWs=ix('WS');
+        const iOut=hdr.findIndex(h=>h==='거래처명'||h==='Outlet');
+        const iSys=ix('System');
+        const iCh=ix('Channel');
+        const monthCols={};
+        hdr.forEach((h,i)=>{ if(MONTH_LABELS[h]!==undefined) monthCols[MONTH_LABELS[h]]=i; });
+        if (!Object.keys(monthCols).length) continue;
+        Object.keys(monthCols).forEach(m=>monthSet.add(Number(m)));
+        const sheetRows = allRows.slice(hdrIdx+1).filter(r=>String(r[iGroup]||'').trim()&&String(r[iOut]||'').trim()).map(r=>{
+          const rawGroup=String(r[iGroup]||'').trim();
+          const rawCh=iCh>=0?String(r[iCh]||'').trim():'';
+          // 구 템플릿 호환: Channel='NKA'면 region='NKA'로 자동 승격
+          const region=rawCh==='NKA'?'NKA':(PL_REGION_NORM[rawGroup]||rawGroup);
+          const row={
+            region:region,
+            ws:iWs>=0?String(r[iWs]||'').trim():'',
+            outlet:String(r[iOut]||'').trim(),
+            system:iSys>=0?String(r[iSys]||'').trim():'',
+          };
+          for(const [m,ci] of Object.entries(monthCols)){const v=parseFloat(r[ci]);row['m'+m]=isNaN(v)?null:v;}
+          return row;
+        });
+        accumulated.push(...sheetRows);
+      }
+      if (!accumulated.length) { alert('⚠ 파울라너 파일 형식 오류\n각 시트는 다음 헤더가 필요합니다:\nGroup, WS, 거래처명, System, 3월~12월'); input.value=''; return; }
+      parsedPaulaner = accumulated;
+      const mList=[...monthSet].sort((a,b)=>a-b);
       document.getElementById('pcPaulaner').textContent = parsedPaulaner.length+'건';
       document.getElementById('pbPaulaner').innerHTML = parsedPaulaner.slice(0,50).map(r=>
         `<tr><td style="${r.region==='NKA'?'color:#9333ea;font-weight:700':''}">${r.region}</td><td style="font-size:11px">${r.ws}</td><td>${r.outlet}</td><td>${r.system}</td>${mList.map(m=>`<td class="r">${r['m'+m]??'–'}</td>`).join('')}</tr>`
