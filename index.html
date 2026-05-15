@@ -124,7 +124,7 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 .min-actions-empty { padding:16px; font-size:12px; color:#d1d5db; text-align:center; }
 /* 회의록 카테고리 필터 — 3열 × 2행 */
 .min-cat-bar { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; padding:6px 10px 8px; }
-.min-cat-btn { padding:6px 8px; border:1px solid rgba(0,0,0,.08); border-radius:6px; background:#fff; color:#6b7280; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+.min-cat-btn { display:flex; align-items:center; justify-content:center; text-align:center; padding:6px 8px; border:1px solid rgba(0,0,0,.08); border-radius:6px; background:#fff; color:#6b7280; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
 .min-cat-btn:hover { background:#f3f4f6; color:#1f2937; }
 .min-cat-btn.active { background:#205527; color:#fff; border-color:#205527; }
 /* 회의록 에디터 — Month 드롭다운(제목 역할) */
