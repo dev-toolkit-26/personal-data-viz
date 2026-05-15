@@ -168,6 +168,21 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 .min-card-add { margin-top:4px; padding:10px; border:1px dashed rgba(0,0,0,.15); border-radius:10px; background:transparent; color:#6b7280; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; }
 .min-card-add:hover { background:rgba(32,85,39,.04); color:#205527; border-color:rgba(32,85,39,.35); }
 
+/* ── Minutes: 카드 내부 이미지 + 클릭 시 크기 조정 툴바 ── */
+.min-card-body img { max-width:100%; height:auto; display:inline-block; vertical-align:top; border-radius:6px; cursor:pointer; transition:outline .12s; box-shadow:0 1px 4px rgba(0,0,0,.08); }
+.min-card-body img.min-img-selected { outline:2px solid #205527; outline-offset:2px; }
+.min-card-body figure { margin:12px 0; }
+.min-card-body figure img { width:100%; }
+
+#min-img-toolbar { position:fixed; display:none; z-index:1200; background:#fff; border:1px solid rgba(0,0,0,.14); border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.18); padding:5px; gap:3px; align-items:center; font-family:inherit; }
+#min-img-toolbar.open { display:flex; }
+#min-img-toolbar button { border:1px solid rgba(0,0,0,.08); background:#fff; border-radius:5px; padding:4px 9px; font-size:12px; cursor:pointer; color:#374151; font-family:inherit; font-weight:600; transition:background .1s, color .1s, border-color .1s; min-width:30px; }
+#min-img-toolbar button:hover { background:#f3f4f6; border-color:rgba(0,0,0,.18); }
+#min-img-toolbar button.active { background:#205527; color:#fff; border-color:#205527; }
+#min-img-toolbar .sep { width:1px; height:18px; background:rgba(0,0,0,.1); margin:0 2px; }
+#min-img-toolbar .min-img-del { color:#dc2626; }
+#min-img-toolbar .min-img-del:hover { background:#fee2e2; border-color:#fca5a5; color:#b91c1c; }
+
 
 /* ── Charts ── */
 .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
@@ -989,12 +1004,17 @@ td:first-child, td:nth-child(2) { text-align: left; }
             var s = b.skus[sj];
             if (!s || !s.data) continue;
             var f = (s.data.hl_factor != null) ? s.data.hl_factor : 0.0792;
-            var apHL  = (s.data.ap != null) ? s.data.ap * 0.0792 : null;
-            var mtdHL = (s.data.mtd != null) ? s.data.mtd * f : null;
+            var mtdHL  = (s.data.mtd != null) ? s.data.mtd * f : null;
             if (mtdHL == null || mtdHL <= 0) continue;
-            var mtdVsTarget = (apHL != null && apHL > 0) ? mtdHL / apHL : null;
-            if (mtdVsTarget == null) continue;
-            skuList.push({ name: humanize(s.sku), volHL: mtdHL, ratio: mtdVsTarget });
+            var mtdVsFcst;
+            if (s.data.fcst_mtd_ach != null) {
+              mtdVsFcst = s.data.fcst_mtd_ach;
+            } else {
+              var fcstHL = (s.data.this_week_fcst != null) ? s.data.this_week_fcst * f : null;
+              mtdVsFcst = (fcstHL != null && fcstHL > 0) ? mtdHL / fcstHL : null;
+            }
+            if (mtdVsFcst == null) continue;
+            skuList.push({ name: humanize(s.sku), volHL: mtdHL, ratio: mtdVsFcst });
           }
         }
         skuList.sort(function(a, c){ return c.volHL - a.volHL; });
@@ -1008,7 +1028,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
         for (var ti = 0; ti < top5.length; ti++) {
           var t = top5[ti];
           var tGap = (t.ratio - wdPct) * 100;
-          skuBlock += P(t.name + ' is at ' + _pctWord(t.ratio) + ' of target, ' + _paceClause(tGap) + '.');
+          skuBlock += P(t.name + ' is at ' + _pctWord(t.ratio) + ' of forecast, ' + _paceClause(tGap) + '.');
         }
       }
       if (skuBlock) {
@@ -1121,20 +1141,36 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       function _startSpeech(){
         try { window.speechSynthesis.cancel(); } catch(e){}
-        var raw = (bodyEl.innerText || bodyEl.textContent || '').replace(/\s+/g, ' ').trim();
-        if (!raw) return;
-        var spoken = (typeof window.convertForTTS === 'function') ? window.convertForTTS(raw) : raw;
-        var u = new window.SpeechSynthesisUtterance(spoken);
+        // Split narrative into one utterance per paragraph/sentence.
+        // The TTS engine inserts a natural gap between utterances, so this
+        // gives a reliable pause that single-string-plus-period does not.
+        var lines = (bodyEl.innerText || bodyEl.textContent || '')
+          .replace(/[ \t]+/g, ' ')
+          .split(/\n+/)
+          .map(function(line){ return line.trim(); })
+          .filter(function(line){ return line.length > 0; })
+          .map(function(line){ return /[.!?]$/.test(line) ? line : line + '.'; });
+        if (!lines.length) return;
+
         var voices = voiceSel._voices || [];
         var chosen = voices[parseInt(voiceSel.value, 10)] || null;
-        if (chosen) { u.voice = chosen; u.lang = chosen.lang || 'en-US'; }
-        else { u.lang = 'en-US'; }
-        u.rate = parseFloat(rateSel.value) || 1.0;
-        u.pitch = 1.0;
-        u.onend = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
-        u.onerror = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
-        window.__sumTTS.utterance = u;
-        window.speechSynthesis.speak(u);
+        var rate = parseFloat(rateSel.value) || 1.0;
+        var lastIdx = lines.length - 1;
+
+        lines.forEach(function(line, i){
+          var spoken = (typeof window.convertForTTS === 'function') ? window.convertForTTS(line) : line;
+          var u = new window.SpeechSynthesisUtterance(spoken);
+          if (chosen) { u.voice = chosen; u.lang = chosen.lang || 'en-US'; }
+          else { u.lang = 'en-US'; }
+          u.rate = rate;
+          u.pitch = 1.0;
+          if (i === lastIdx) {
+            u.onend   = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
+            u.onerror = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
+          }
+          window.speechSynthesis.speak(u);
+        });
+        window.__sumTTS.utterance = lines;
         _setBtnState('playing');
       }
 
@@ -1818,6 +1854,20 @@ td:first-child, td:nth-child(2) { text-align: left; }
             <!-- 카드 컨테이너 -->
             <div id="min-cards" class="min-cards-wrap"></div>
             <button type="button" onclick="minutesAddCard()" class="min-card-add" style="width:100%;margin-top:10px;">+ 카드 추가</button>
+          </div>
+
+          <!-- 이미지 클릭 시 표시되는 떠다니는 크기/정렬 툴바 (position:fixed) -->
+          <div id="min-img-toolbar" role="toolbar" aria-label="이미지 크기 조정">
+            <button type="button" data-w="25"  onclick="minImgResize(25)"  title="작게 (25%)">S</button>
+            <button type="button" data-w="50"  onclick="minImgResize(50)"  title="중간 (50%)">M</button>
+            <button type="button" data-w="75"  onclick="minImgResize(75)"  title="크게 (75%)">L</button>
+            <button type="button" data-w="100" onclick="minImgResize(100)" title="원본 (100%)">XL</button>
+            <div class="sep"></div>
+            <button type="button" onclick="minImgAlign('left')"   title="왼쪽 정렬">&#8676;</button>
+            <button type="button" onclick="minImgAlign('center')" title="가운데 정렬">&#8596;</button>
+            <button type="button" onclick="minImgAlign('right')"  title="오른쪽 정렬">&#8677;</button>
+            <div class="sep"></div>
+            <button type="button" class="min-img-del" onclick="minImgDelete()" title="삭제 (Del)">✕</button>
           </div>
 
           <!-- Action Items -->
@@ -5683,6 +5733,7 @@ function minutesFocusFirstCard() {
 }
 
 function _minutesCollectCards() {
+  _minImgClearSelectionForSave();
   return Array.from(document.querySelectorAll('#min-cards .min-card')).map(el => ({
     id:       parseInt(el.dataset.id) || Date.now(),
     subtitle: (el.querySelector('.min-card-subtitle').value || '').trim(),
@@ -5787,6 +5838,109 @@ function minToolbarSync() {
     const el = document.getElementById('tb-' + h.toLowerCase());
     if (el) el.classList.toggle('active', block === h);
   });
+}
+
+/* ─── Minutes: 카드 본문에 붙은 이미지 클릭 시 크기/정렬 조정 ─── */
+let _minSelectedImg = null;
+let _minImgBound    = false;
+
+function _minImgEnsureBound() {
+  if (_minImgBound) return;
+  _minImgBound = true;
+  document.addEventListener('click', _minHandleImgClick, true);
+  document.addEventListener('keydown', _minHandleImgKey);
+  window.addEventListener('scroll',  _minRepositionImgToolbar, true);
+  window.addEventListener('resize',  _minRepositionImgToolbar);
+}
+
+function _minHandleImgClick(e) {
+  const t = e.target;
+  if (t && t.tagName === 'IMG' && t.closest('.min-card-body')) {
+    e.preventDefault();
+    _minSelectImg(t);
+    return;
+  }
+  if (t && t.closest && t.closest('#min-img-toolbar')) return;
+  _minDeselectImg();
+}
+
+function _minHandleImgKey(e) {
+  if (!_minSelectedImg) return;
+  if (e.key === 'Escape') {
+    _minDeselectImg();
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    minImgDelete();
+  }
+}
+
+function _minSelectImg(img) {
+  if (_minSelectedImg && _minSelectedImg !== img) _minSelectedImg.classList.remove('min-img-selected');
+  _minSelectedImg = img;
+  img.classList.add('min-img-selected');
+  _minSyncImgToolbar(img);
+  _minRepositionImgToolbar();
+}
+
+function _minDeselectImg() {
+  if (_minSelectedImg) _minSelectedImg.classList.remove('min-img-selected');
+  _minSelectedImg = null;
+  const tb = document.getElementById('min-img-toolbar');
+  if (tb) tb.classList.remove('open');
+}
+
+function _minRepositionImgToolbar() {
+  if (!_minSelectedImg) return;
+  const tb = document.getElementById('min-img-toolbar');
+  if (!tb) return;
+  tb.classList.add('open');
+  const r  = _minSelectedImg.getBoundingClientRect();
+  const tr = tb.getBoundingClientRect();
+  let top  = r.top - tr.height - 8;
+  if (top < 8) top = r.bottom + 8;
+  let left = r.left + (r.width - tr.width) / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+  tb.style.top  = top  + 'px';
+  tb.style.left = left + 'px';
+}
+
+function _minSyncImgToolbar(img) {
+  const tb = document.getElementById('min-img-toolbar');
+  if (!tb) return;
+  const pct = parseInt(img.style.width || '', 10);
+  tb.querySelectorAll('button[data-w]').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.w, 10) === pct);
+  });
+}
+
+function minImgResize(pct) {
+  if (!_minSelectedImg) return;
+  _minSelectedImg.style.width  = pct + '%';
+  _minSelectedImg.style.height = 'auto';
+  _minSyncImgToolbar(_minSelectedImg);
+  _minRepositionImgToolbar();
+}
+
+function minImgAlign(dir) {
+  if (!_minSelectedImg) return;
+  const img = _minSelectedImg;
+  img.style.display = 'block';
+  if (dir === 'left')        { img.style.marginLeft = '0';    img.style.marginRight = 'auto'; }
+  else if (dir === 'center') { img.style.marginLeft = 'auto'; img.style.marginRight = 'auto'; }
+  else if (dir === 'right')  { img.style.marginLeft = 'auto'; img.style.marginRight = '0'; }
+  _minRepositionImgToolbar();
+}
+
+function minImgDelete() {
+  if (!_minSelectedImg) return;
+  const fig = _minSelectedImg.closest('figure');
+  (fig || _minSelectedImg).remove();
+  _minDeselectImg();
+}
+
+// Save 직전, 선택 클래스가 직렬화되지 않도록 정리.
+function _minImgClearSelectionForSave() {
+  document.querySelectorAll('.min-card-body img.min-img-selected').forEach(el => el.classList.remove('min-img-selected'));
 }
 
 /* ---- 색상 팔레트 ---- */
@@ -5917,6 +6071,7 @@ function minInsertSymbol(sym) {
 }
 
 async function minutesLoad() {
+  _minImgEnsureBound();
   const listEl = document.getElementById('minutes-list');
   listEl.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">불러오는 중...</div>';
   const { data, error } = await _supabase
@@ -6542,6 +6697,10 @@ async function todoAdd() {
       text, done: false,
       start_date: start,
       due_date:   due,
+      // Legacy `todo_date` column still has a NOT NULL constraint in the DB
+      // (will be dropped by migrations/todos_drop_legacy_date_constraint.sql).
+      // Fall through: due → start → today so the insert never violates the constraint.
+      todo_date:  due || start || _todoToday(),
       importance,
       note,
       owner_label:  me,
