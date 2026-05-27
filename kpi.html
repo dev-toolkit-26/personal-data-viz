@@ -87,7 +87,7 @@ header h1 span{color:var(--accent)}
 .sr-scroll{max-height:540px;overflow-y:auto;overflow-x:auto}
 .sr-scroll thead{position:sticky;top:0;z-index:3}
 .sr-scroll thead th{position:static;background:var(--surface2)}
-.ow{max-height:480px;overflow-y:auto}
+.ow{max-height:480px;overflow-y:auto;overflow-x:auto}
 .si-scroll{max-height:540px;overflow-y:auto;overflow-x:auto}
 .si-scroll thead th{position:sticky;top:0;background:var(--surface);z-index:2}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -113,6 +113,7 @@ tr:last-child td{border-bottom:none}
 .tag-Daejeon{background:rgba(217,119,6,.12);color:#d97706}
 .tag-Gwangju{background:rgba(220,38,38,.12);color:#dc2626}
 td.sr-cell{white-space:nowrap}
+.btbl th{white-space:nowrap}
 .rrow td{background:var(--surface2);font-weight:700;color:var(--accent)}
 .frow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
 .frow label{font-size:11px;font-weight:700;color:var(--muted)}
@@ -294,10 +295,10 @@ td.sr-cell{white-space:nowrap}
       <span class="fc" id="bCount"></span>
     </div>
     <div class="ow">
-      <table>
+      <table class="btbl">
         <thead><tr>
           <th>지점</th><th>SR</th><th>아울렛명</th>
-          <th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th>
+          <th class="r">YTD</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th>
         </tr></thead>
         <tbody id="bBody"></tbody>
       </table>
@@ -1037,9 +1038,9 @@ function renderBottle(data){
   const r=bF.region,sr=document.getElementById('bSrSel').value,q=document.getElementById('bSearch').value.trim().toLowerCase();
   const mKeys=['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
   const mSum=d=>mKeys.reduce((s,k)=>s+(d[k]||0),0);
-  const rows=data.filter(d=>(r==='전체'||d.team===r)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>mSum(b)-mSum(a));
+  const rows=data.filter(d=>(r==='전체'||d.team===r)&&(!sr||(d._srs?d._srs.includes(sr):d.sr===sr))&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>mSum(b)-mSum(a));
   document.getElementById('bCount').textContent=`총 ${rows.length}개`;
-  document.getElementById('bBody').innerHTML=rows.map(d=>`<tr><td>${rtag(d.team)}</td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td>${mKeys.map(k=>qc(d[k])).join('')}</tr>`).join('');
+  document.getElementById('bBody').innerHTML=rows.map(d=>{const ytd=mSum(d);return`<tr><td>${rtag(d.team)}</td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td><td class="r bo">${ytd>0?ytd.toLocaleString():'–'}</td>${mKeys.map(k=>qc(d[k])).join('')}</tr>`;}).join('');
 }
 function renderBottleKPI(){
   const mk=['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
@@ -1219,8 +1220,30 @@ initSnowAllView();
 
 // ===== 데이터 업데이트 로직 =====
 
-// 머지 함수
-function getMergedBottleOutlets(){return BOTTLE_OUTLETS;}
+// 머지 함수: 같은 업장(팀+아울렛)이 SR 변경으로 여러 레코드로 쪼개진 것을 한 줄로 합산.
+// 월별 값은 더하고, SR은 매출이 처음 발생한 월 순서로 '이전 → 현재' 형태로 표기.
+function getMergedBottleOutlets(){
+  const MK=['m1','m2','m3','m4','m5','m6','m7','m8','m9','m10','m11','m12'];
+  const map={};
+  BOTTLE_OUTLETS.forEach(d=>{
+    const key=(d.team||'')+'|'+(d.outlet||'');
+    let g=map[key];
+    if(!g){ g=map[key]={team:d.team,outlet:d.outlet,_srFirst:{}}; MK.forEach(k=>g[k]=0); }
+    MK.forEach(k=>{ g[k]+=(d[k]||0); });
+    const sr=(d.sr||'').trim();
+    if(sr){
+      let fm=99; for(let i=0;i<MK.length;i++){ if((d[MK[i]]||0)>0){ fm=i; break; } }
+      if(g._srFirst[sr]==null||fm<g._srFirst[sr]) g._srFirst[sr]=fm;
+    }
+  });
+  return Object.values(map).map(g=>{
+    const srs=Object.keys(g._srFirst).sort((a,b)=>g._srFirst[a]-g._srFirst[b]);
+    g._srs=srs;                 // 필터 매칭용 (옛/새 담당자 모두 포함)
+    g.sr=srs.join(' → ');       // 표시용: 이전 → 현재
+    delete g._srFirst;
+    return g;
+  });
+}
 
 // 신규입점 자동 감지: 25년 매출 없음 + 26년 매출 있음
 function computeSnowTrueNew(){
