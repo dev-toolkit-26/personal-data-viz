@@ -2765,9 +2765,17 @@ function renderOtShrChart(canvasId,shrData,volData,prevChart){
   } else if(volData&&volData.length){
     const skus=[...new Set(volData.map(d=>d.sku))];
     const totals=OT_MK.map(k=>volData.reduce((s,d)=>s+(d[k]||0),0));
-    datasets=skus.map((sku,i)=>{
+    const total25=volData.reduce((s,d)=>s+(d.y2025||0),0);   // 2025 섹션 합계(연간 볼륨)
+    skus.forEach((sku,i)=>{
+      const col=OT_COLORS[i%OT_COLORS.length];
       const skuRows=volData.filter(d=>d.sku===sku);
-      return{label:fmtSku(sku),data:OT_MK.map((k,mi)=>totals[mi]?skuRows.reduce((s,d)=>s+(d[k]||0),0)/totals[mi]*100:0),borderColor:OT_COLORS[i%OT_COLORS.length],backgroundColor:'transparent',tension:0.3,borderWidth:2,pointRadius:3};
+      // 2026 월별 점유율 (실선)
+      datasets.push({label:fmtSku(sku),data:OT_MK.map((k,mi)=>totals[mi]?skuRows.reduce((s,d)=>s+(d[k]||0),0)/totals[mi]*100:0),borderColor:col,backgroundColor:'transparent',tension:0.3,borderWidth:2,pointRadius:3});
+      // 2025 기준선 (y2025 기반 점유율, 수평 점선) — 2026 변화 비교 기준
+      if(total25>0){
+        const shr25=skuRows.reduce((s,d)=>s+(d.y2025||0),0)/total25*100;
+        datasets.push({label:fmtSku(sku)+" '25",data:OT_MK.map(()=>shr25),borderColor:col,backgroundColor:'transparent',borderDash:[5,4],borderWidth:1.5,pointRadius:0,tension:0});
+      }
     });
   }
   if(!datasets.length)return null;
