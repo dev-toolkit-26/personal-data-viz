@@ -2344,20 +2344,27 @@ function detectRevenueMonthIdx(rows, fileName) {
     may:4,jun:5,june:5,jul:6,july:6,aug:7,august:7,sep:8,sept:8,september:8,
     oct:9,october:9,nov:10,november:10,dec:11,december:11};
   const look = w => { const k=String(w).trim().toLowerCase(); return NAMES[k]!==undefined?NAMES[k]:null; };
-  // 1) 시트 어느 셀이든 "MONTH NAME is <월>" 패턴 탐색 (대소문자·구분자 변형 허용)
+  // 1) "MONTH NAME ..." 셀을 찾아 그 뒤 영문 토큰 중 첫 월 이름을 사용.
+  //    한국형 export "MONTH NAME Apr임", 영문 "MONTH NAME is Apr" 모두 대응 ("is" 유무 무관).
   for (const row of (rows||[])) {
     if (!row) continue;
     for (const cell of row) {
       if (cell==null) continue;
-      const m = String(cell).match(/MONTH[\s_]*NAME[\s_]*is[^A-Za-z]*([A-Za-z]+)/i);
-      if (m) { const idx=look(m[1]); if (idx!==null) return idx; }
+      const s = String(cell);
+      const mk = s.search(/MONTH[\s_]*NAME/i);
+      if (mk < 0) continue;
+      const toks = s.slice(mk).match(/[A-Za-z]+/g) || [];   // ["MONTH","NAME","Apr",...]
+      for (const t of toks) { const idx=look(t); if (idx!==null) return idx; }
     }
   }
-  // 2) 파일명 폴백 (예: ..._Apr / ..._April / ..._4월 / ..._04)
+  // 2) 파일명 폴백 (예: ..._[4월] / ..._4월 / ..._Apr / ..._April / ..._04)
   if (fileName) {
-    const em = String(fileName).match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/i);
+    const fn = String(fileName);
+    const km = fn.match(/(\d{1,2})\s*월/);                   // 한국형: 4월
+    if (km) { const n=Number(km[1]); if (n>=1 && n<=12) return n-1; }
+    const em = fn.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/i);
     if (em) { const idx=look(em[0]); if (idx!==null) return idx; }
-    const nm = String(fileName).match(/[_\-\s](\d{1,2})\s*월?/);
+    const nm = fn.match(/[_\-\s\[](\d{1,2})(?=[_\-\s.\]])/);  // ..._04 / _[4]
     if (nm) { const n=Number(nm[1]); if (n>=1 && n<=12) return n-1; }
   }
   return null;
@@ -2377,15 +2384,32 @@ async function parseRevenueExcel(file) {
   const COL_HL  = 3;   // Column D
   const COL_NR  = 13;  // Column N (Net Revenue KRW)
 
-  const branches = { TTL: { nr: null, hl: null }, Seoul: { nr: null, hl: null },
-    Busan: { nr: null, hl: null }, Gwangju: { nr: null, hl: null },
-    Daejeon: { nr: null, hl: null }, 'D&J': { nr: 0, hl: 0 } };
+  // pl_detail item → {엑셀 열, 단위변환 div}. Volume=HL 원값, 나머지 금액=KRW→MKRW.
+  // (헤더 기준: D=Sales Volume(HL), F=Gross Sales Revenue, G=Range DC, H=PtC, I=Discount, M=Excise Tax, N=Net Revenue)
+  const PL_COLS = {
+    'Volume':           { col: 3,  div: 1   },
+    'Gross Revenue':    { col: 5,  div: 1e6 },
+    'RangeDiscount':    { col: 6,  div: 1e6 },
+    'PtC_Controllable': { col: 7,  div: 1e6 },
+    'Discount':         { col: 8,  div: 1e6 },
+    'Excise Tax':       { col: 12, div: 1e6 },
+    'Net Revenue':      { col: 13, div: 1e6 },
+  };
+  const addPL = (b, row) => {
+    if (!b.pl) b.pl = Object.fromEntries(Object.keys(PL_COLS).map(k => [k, 0]));
+    for (const [k, { col, div }] of Object.entries(PL_COLS)) b.pl[k] += (row[col] || 0) / div;
+  };
+
+  const branches = { TTL: { nr: null, hl: null, pl: null }, Seoul: { nr: null, hl: null, pl: null },
+    Busan: { nr: null, hl: null, pl: null }, Gwangju: { nr: null, hl: null, pl: null },
+    Daejeon: { nr: null, hl: null, pl: null }, 'D&J': { nr: 0, hl: 0, pl: null } };
 
   // Row2 (index 1) = ON Total
   const ttlRow = rows[1];
   if (ttlRow) {
     branches.TTL.nr = (ttlRow[COL_NR] || 0) / 1e6;
     branches.TTL.hl = ttlRow[COL_HL] || 0;
+    addPL(branches.TTL, ttlRow);
   }
 
   // Rows 4-9 (index 3-8): 지점별, Column C (idx 2) = Account group name
@@ -2405,6 +2429,7 @@ async function parseRevenueExcel(file) {
       branches[key].nr = nr;
       branches[key].hl = hl;
     }
+    addPL(branches[key], row);   // D&J는 Daegu+Jeju 누적
   }
 
   return { monthIdx, branches };
@@ -2423,6 +2448,22 @@ function applyRevenueData(result) {
     if (!b.actual_hl) b.actual_hl = new Array(12).fill(null);
     b.actual[monthIdx]    = vals.nr != null ? Math.round(vals.nr * 10000) / 10000 : null;
     b.actual_hl[monthIdx] = vals.hl != null ? Math.round(vals.hl * 100)  / 100   : null;
+  }
+
+  // P&L Detail actual 반영: Revenue 엑셀의 전체 P&L 항목을 해당 월 칸에 기록
+  // (기존엔 branches.actual(Net Revenue/HL)만 채워 P&L Detail 표의 해당 월이 빈칸이었음)
+  const pd = rev.pl_detail;
+  if (pd && pd.branches) {
+    for (const [key, vals] of Object.entries(branches)) {
+      if (!vals.pl) continue;                 // 파일에 없던 지점은 건너뜀(빈칸 유지)
+      const b = pd.branches[key];
+      if (!b) continue;
+      if (!b.actual || typeof b.actual !== 'object' || Array.isArray(b.actual)) b.actual = {};
+      for (const [item, v] of Object.entries(vals.pl)) {
+        if (!Array.isArray(b.actual[item])) b.actual[item] = new Array(12).fill(null);
+        b.actual[item][monthIdx] = v != null ? Math.round(v * 10000) / 10000 : null;
+      }
+    }
   }
 
   // actual_months: 연속된 실적 개수 (앞에서부터)
