@@ -2336,21 +2336,43 @@ function _upReadBuffer(file) {
 // 파일: 2️⃣ Sales Budget Actual by Segment_[월].xlsx
 // Row1=헤더, Row2=ON Total, Row4-9=지점별, Row12=필터 메타(월 정보)
 // Col D(idx3)=HL, Col N(idx13)=Net Revenue(KRW)
+
+// "MONTH NAME is Apr"/"April" 등 표기 변형 + 파일명에서 월 인덱스(0=Jan) 추출.
+// 사이트 다운로드 형식이라 행 위치·표기가 바뀌어도 안 깨지도록 너그럽게 탐색.
+function detectRevenueMonthIdx(rows, fileName) {
+  const NAMES = {jan:0,january:0,feb:1,february:1,mar:2,march:2,apr:3,april:3,
+    may:4,jun:5,june:5,jul:6,july:6,aug:7,august:7,sep:8,sept:8,september:8,
+    oct:9,october:9,nov:10,november:10,dec:11,december:11};
+  const look = w => { const k=String(w).trim().toLowerCase(); return NAMES[k]!==undefined?NAMES[k]:null; };
+  // 1) 시트 어느 셀이든 "MONTH NAME is <월>" 패턴 탐색 (대소문자·구분자 변형 허용)
+  for (const row of (rows||[])) {
+    if (!row) continue;
+    for (const cell of row) {
+      if (cell==null) continue;
+      const m = String(cell).match(/MONTH[\s_]*NAME[\s_]*is[^A-Za-z]*([A-Za-z]+)/i);
+      if (m) { const idx=look(m[1]); if (idx!==null) return idx; }
+    }
+  }
+  // 2) 파일명 폴백 (예: ..._Apr / ..._April / ..._4월 / ..._04)
+  if (fileName) {
+    const em = String(fileName).match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*/i);
+    if (em) { const idx=look(em[0]); if (idx!==null) return idx; }
+    const nm = String(fileName).match(/[_\-\s](\d{1,2})\s*월?/);
+    if (nm) { const n=Number(nm[1]); if (n>=1 && n<=12) return n-1; }
+  }
+  return null;
+}
+
 async function parseRevenueExcel(file) {
   const buf  = await _upReadBuffer(file);
   const wb   = XLSX.read(buf, { type: 'array' });
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
 
-  // 월 이름 추출: Row12 (index 11) "MONTH NAME is Jan"
-  const META_NAMES = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-  let monthIdx = null;
-  const metaRow = rows[11];
-  if (metaRow && metaRow[0]) {
-    const m = String(metaRow[0]).match(/MONTH NAME is (\w+)/);
-    if (m && META_NAMES[m[1]] !== undefined) monthIdx = META_NAMES[m[1]];
-  }
-  if (monthIdx === null) throw new Error('Revenue Excel: 월 정보를 읽을 수 없습니다 (Row 12).');
+  // 월 이름 추출: 시트 전체에서 "MONTH NAME is <월>" 탐색(풀네임/약어·대소문자 무관),
+  // 실패 시 파일명에서 추출 (사이트 다운로드 형식 변동 대응)
+  const monthIdx = detectRevenueMonthIdx(rows, file && file.name);
+  if (monthIdx === null) throw new Error('Revenue Excel: 월 정보를 읽을 수 없습니다 (시트 메타·파일명 모두 인식 실패).');
 
   const COL_HL  = 3;   // Column D
   const COL_NR  = 13;  // Column N (Net Revenue KRW)
