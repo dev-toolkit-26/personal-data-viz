@@ -1584,8 +1584,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </div>
     <div class="chart-grid">
       <div class="chart-card full">
-        <div class="chart-title" id="d-chart-title">D. Monthly Trend — 2025 Actual / 2026 AP / 2026 DSR Actual (HL, On Trade Total)</div>
+        <div class="chart-title" id="d-chart-title">D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual / 2026 RoFo (HL, On Trade Total)</div>
         <div class="chart-wrap tall"><canvas id="chartD"></canvas></div>
+        <div id="d-progress-row"
+             style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;padding:14px 0 4px;margin-top:10px;border-top:1px solid var(--border);"></div>
       </div>
     </div>
     <div class="section-title">Regional Summary (HL)</div>
@@ -3687,7 +3689,7 @@ function renderChartD() {
   const fcstMonIdx = fcstMon - 1;
   const months     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  let act2025, ap2026, act2026, fcstVal, titleText;
+  let act2025, ap2026, act2026, rofo2026, fcstVal, titleText;
 
   // SKU 선택 파싱
   let selectedBrand = null, selectedSku = null;
@@ -3713,8 +3715,11 @@ function renderChartD() {
     }
     for (let m = fcstMonIdx + 1; m < 12; m++) act2026[m] = null;
 
+    const rofoTtl = DASHBOARD_DATA.wk10_summary?.hl?.TTL?.rofo_monthly;
+    rofo2026 = Array.isArray(rofoTtl) ? [...rofoTtl] : null;
+
     fcstVal   = DASHBOARD_DATA.wk10_summary?.hl?.TTL?.this_week_fcst ?? null;
-    titleText = 'D. Monthly Trend — 2025 Actual / 2026 AP / 2026 DSR Actual (HL, On Trade Total)';
+    titleText = 'D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual / 2026 RoFo (HL, On Trade Total)';
 
   } else if (!selectedBrand) {
     // ─ CASE 2: 특정 지점 + 전체 (AP: monthly_regional_ap / 실적: dsr_by_month DSR 기준)
@@ -3741,8 +3746,10 @@ function renderChartD() {
       act2025[m] = has ? s25 * 0.0792 : null;
     }
 
+    rofo2026 = null;  // RoFo는 On Trade Total 기준으로만 저장 — 지역 분해 없음
+
     fcstVal   = DASHBOARD_DATA.wk10_summary?.hl?.[regKey]?.this_week_fcst ?? null;
-    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 DSR Actual (HL, ${branch})`;
+    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual (HL, ${branch})`;
 
   } else if (selectedBrand && !selectedSku) {
     // ─ CASE 3: 특정 브랜드
@@ -3753,8 +3760,11 @@ function renderChartD() {
     ap2026  = (bd.ap_monthly       || []).map(v => v != null ? v * 0.0792 : null);
     act2026 = (bd.act_monthly      || []).map(v => v != null ? v * 0.0792 : null);
     for (let m = fcstMon; m < 12; m++) act2026[m] = null;
+    rofo2026 = (branch === 'On Trade Total' && Array.isArray(bd.rofo_monthly))
+      ? bd.rofo_monthly.map(v => v != null ? v * 0.0792 : null)
+      : null;
     fcstVal   = bd.this_week_fcst != null ? bd.this_week_fcst * 0.0792 : null;
-    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 DSR Actual (HL, ${selectedBrand} / ${branch})`;
+    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual${rofo2026 ? ' / 2026 RoFo' : ''} (HL, ${selectedBrand} / ${branch})`;
 
   } else {
     // ─ CASE 4: 특정 SKU
@@ -3768,32 +3778,129 @@ function renderChartD() {
     ap2026  = (sd.ap_monthly       || []).map(v => v != null ? v * 0.0792  : null);
     act2026 = (sd.act_monthly      || []).map(v => v != null ? v * f       : null);
     for (let m = fcstMon; m < 12; m++) act2026[m] = null;
+    rofo2026 = (branch === 'On Trade Total' && Array.isArray(sd.rofo_monthly))
+      ? sd.rofo_monthly.map(v => v != null ? v * 0.0792 : null)
+      : null;
     fcstVal   = sd.this_week_fcst != null ? sd.this_week_fcst * f : null;
-    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 DSR Actual (HL, ${selectedSku} / ${branch})`;
+    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual${rofo2026 ? ' / 2026 RoFo' : ''} (HL, ${selectedSku} / ${branch})`;
   }
 
   // 현재 FCST 월 교체
   if (fcstVal != null) act2026[fcstMonIdx] = fcstVal;
 
+  // RoFo 가용성: 배열 + 최소 1개 non-null 값
+  const hasRofo = Array.isArray(rofo2026) && rofo2026.some(v => v != null);
+  const rofoCurMonth = hasRofo ? (rofo2026[fcstMonIdx] ?? null) : null;
+
   // 타이틀 업데이트
   const titleEl = document.getElementById('d-chart-title');
   if (titleEl) titleEl.textContent = titleText;
 
+  const datasets = [
+    { label: '2025 Actual',      data: act2025, borderColor: '#94a3b8', backgroundColor: '#94a3b820', tension: .3, fill: false, borderDash: [5,3], pointRadius: 3 },
+    { label: '2026 AP',          data: ap2026,  borderColor: '#205527', backgroundColor: '#20552720', tension: .3, fill: false, pointRadius: 3 },
+    { label: '2026 Actual/FCST', data: act2026, borderColor: '#16a34a', backgroundColor: '#16a34a30', tension: .3, fill: true,  pointRadius: 6, pointBackgroundColor: '#16a34a' },
+  ];
+  if (hasRofo) {
+    datasets.push({
+      label: '2026 RoFo', data: rofo2026,
+      borderColor: '#dc2626', backgroundColor: '#dc262620',
+      tension: .3, fill: false, borderDash: [4,4],
+      pointRadius: 3, pointBackgroundColor: '#dc2626',
+    });
+  }
+
   _charts.chartD = new Chart(document.getElementById('chartD'), {
     type: 'line',
-    data: {
-      labels: months,
-      datasets: [
-        { label: '2025 Actual',      data: act2025, borderColor: '#94a3b8', backgroundColor: '#94a3b820', tension: .3, fill: false, borderDash: [5,3], pointRadius: 3 },
-        { label: '2026 AP',          data: ap2026,  borderColor: '#205527', backgroundColor: '#20552720', tension: .3, fill: false, pointRadius: 3 },
-        { label: '2026 Actual/FCST', data: act2026, borderColor: '#16a34a', backgroundColor: '#16a34a30', tension: .3, fill: true,  pointRadius: 6, pointBackgroundColor: '#16a34a' },
-      ]
-    },
+    data: { labels: months, datasets },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { position: 'top' } },
       scales: { y: { ticks: { callback: v => v ? v.toLocaleString() + ' HL' : v } } }
     }
   });
+
+  _renderDProgress({ ap2026, act2026, rofo2026: hasRofo ? rofo2026 : null, thisWkFcst: fcstVal, rofoCurMonth, fcstMonIdx });
+}
+
+// ═══════════════════════════════════════════════
+//  Chart D 아래 진척률 박스 (AP 대비 FY / RoFo 대비 현재 월)
+// ═══════════════════════════════════════════════
+function _renderDProgress({ ap2026, act2026, rofo2026, thisWkFcst, rofoCurMonth, fcstMonIdx }) {
+  const row = document.getElementById('d-progress-row');
+  if (!row) return;
+
+  // ① 연간 타겟 대비 YTD: ∑act(Jan~current) / ∑AP(Jan~Dec)
+  let ytdAct = 0, ytdActOk = true;
+  for (let m = 0; m <= fcstMonIdx; m++) {
+    if (act2026?.[m] == null) { ytdActOk = false; break; }
+    ytdAct += act2026[m];
+  }
+  let annualAp = 0, annualApOk = true;
+  for (let m = 0; m < 12; m++) {
+    if (ap2026?.[m] == null) { annualApOk = false; break; }
+    annualAp += ap2026[m];
+  }
+  const ytdRate = (ytdActOk && annualApOk && annualAp > 0) ? ytdAct / annualAp : null;
+
+  // 시간 기대치: ∑AP(Jan~current) / ∑AP(Jan~Dec)
+  let expectedYtdAp = 0;
+  if (annualApOk) for (let m = 0; m <= fcstMonIdx; m++) expectedYtdAp += ap2026[m];
+  const expectedRatio = annualApOk && annualAp > 0 ? expectedYtdAp / annualAp : null;
+  const ytdRelative = (ytdRate != null && expectedRatio != null && expectedRatio > 0)
+    ? ytdRate / expectedRatio : null;
+
+  // ② AP 대비 (FY): (∑act Jan~prev) + (∑rofo curMonth~Dec) / ∑AP Jan~Dec
+  let apNumer = 0, apOk = true;
+  if (rofo2026 && annualApOk) {
+    for (let m = 0; m < 12; m++) {
+      const numerSrc = (m < fcstMonIdx) ? act2026?.[m] : rofo2026[m];
+      if (numerSrc == null) { apOk = false; break; }
+      apNumer += numerSrc;
+    }
+  } else { apOk = false; }
+  const apRate = apOk && annualAp > 0 ? apNumer / annualAp : null;
+
+  // ③ RoFo 대비 (현재 월): this_week_fcst / rofo[fcstMonIdx]
+  const rofoRate = (thisWkFcst != null && rofoCurMonth != null && rofoCurMonth > 0)
+    ? thisWkFcst / rofoCurMonth : null;
+
+  const colorOf = r => r == null ? 'var(--text-muted)'
+                     : r >= 0.95 ? 'var(--positive)'
+                     : r >= 0.90 ? 'var(--neutral)'
+                     : 'var(--negative)';
+  const fmt = r => r == null ? '—' : (r * 100).toFixed(1) + '%';
+
+  const cards = [];
+  cards.push(`
+    <div style="text-align:center;min-width:200px;">
+      <div style="font-size:11px;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;">연간 타겟 대비 진척률 (YTD)</div>
+      <div style="font-size:26px;font-weight:700;color:${colorOf(ytdRelative)};margin-top:4px;">${fmt(ytdRate)}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+        ${ytdRate != null ? `${fmtHL(ytdAct)} / ${fmtHL(annualAp)} HL (기대 ${fmt(expectedRatio)})` : '데이터 없음'}
+      </div>
+    </div>
+  `);
+  cards.push(`
+    <div style="text-align:center;min-width:200px;">
+      <div style="font-size:11px;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;">AP 대비 진척률 (FY)</div>
+      <div style="font-size:26px;font-weight:700;color:${colorOf(apRate)};margin-top:4px;">${fmt(apRate)}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+        ${apOk ? `${fmtHL(apNumer)} / ${fmtHL(annualAp)} HL` : 'RoFo 데이터 없음'}
+      </div>
+    </div>
+  `);
+  if (rofo2026) {
+    cards.push(`
+      <div style="text-align:center;min-width:200px;">
+        <div style="font-size:11px;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;">RoFo 대비 진척률 (현재 월)</div>
+        <div style="font-size:26px;font-weight:700;color:${colorOf(rofoRate)};margin-top:4px;">${fmt(rofoRate)}</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
+          ${rofoRate != null ? `FCST ${fmtHL(thisWkFcst)} / RoFo ${fmtHL(rofoCurMonth)} HL` : '현재 월 RoFo 없음'}
+        </div>
+      </div>
+    `);
+  }
+  row.innerHTML = cards.join('');
 }
 
 // ═══════════════════════════════════════════════
