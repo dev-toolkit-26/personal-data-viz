@@ -1353,32 +1353,44 @@ function renderUploadStatus(){
 // ═══════════════════════════════════════════════════
 //  Async init: load all data from Supabase then render
 // ═══════════════════════════════════════════════════
+// Supabase에서 모든 테이블을 재조회하고 정규화 (initDashboard / 다운로드 직전 재사용)
+async function loadAllData(){
+  [BOTTLE_OUTLETS,SNOW_NEW_OUTLETS,SNOW_ALL,RSP_DATA_BASE,CC_DATA_BASE,WS_DATA_BASE,Y25_DATA,OT_BOTTLE,OT_DRAUGHT,OT_WS,PAULANER_DATA]=
+    await Promise.all([
+      sGet('bottle_outlets','order=team'),
+      sGet('snow_new_outlets','order=region'),
+      sGet('snow_all','order=region'),
+      sGet('snow_incentive_rsp','order=no'),
+      sGet('snow_incentive_cc','order=no'),
+      sGet('snow_incentive_ws','order=team'),
+      sGet('snow_incentive_y25','order=no'),
+      sGet('on_trade_bottle','order=region'),
+      sGet('on_trade_draught','order=region'),
+      sGet('on_trade_ws','order=region'),
+      sGet('paulaner_outlets_v2','order=region'),
+    ]);
+  // map Supabase column names → JS property names for RSP
+  RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));
+  // normalize teams
+  [...RSP_DATA_BASE,...CC_DATA_BASE,...WS_DATA_BASE,...Y25_DATA].forEach(r=>{if(r.team)r.team=normalizeTeam(r.team);});
+  // Snow region 영어 → 한국어 정규화
+  [...SNOW_ALL,...SNOW_NEW_OUTLETS].forEach(r=>{if(r.region)r.region=normalizeSnowRegion(r.region);});
+  // 신규입점 자동 감지: 25년 매출 없음 + 26년 매출 있음
+  computeSnowTrueNew();
+}
+// 다운로드 직전 Supabase 최신 데이터 재조회 (옛 데이터 다운로드 방지)
+async function refreshBeforeDownload(){
+  const ov=document.getElementById('loadingOverlay');
+  if(ov)ov.style.display='flex';
+  try{ await loadAllData(); updateReferenceDateBadge(); }
+  catch(e){ alert('최신 데이터 불러오기 실패: '+e.message); throw e; }
+  finally{ if(ov)ov.style.display='none'; }
+}
 async function initDashboard(){
   const ov=document.getElementById('loadingOverlay');
   if(ov)ov.style.display='flex';
   try{
-    [BOTTLE_OUTLETS,SNOW_NEW_OUTLETS,SNOW_ALL,RSP_DATA_BASE,CC_DATA_BASE,WS_DATA_BASE,Y25_DATA,OT_BOTTLE,OT_DRAUGHT,OT_WS,PAULANER_DATA]=
-      await Promise.all([
-        sGet('bottle_outlets','order=team'),
-        sGet('snow_new_outlets','order=region'),
-        sGet('snow_all','order=region'),
-        sGet('snow_incentive_rsp','order=no'),
-        sGet('snow_incentive_cc','order=no'),
-        sGet('snow_incentive_ws','order=team'),
-        sGet('snow_incentive_y25','order=no'),
-        sGet('on_trade_bottle','order=region'),
-        sGet('on_trade_draught','order=region'),
-        sGet('on_trade_ws','order=region'),
-        sGet('paulaner_outlets_v2','order=region'),
-      ]);
-    // map Supabase column names → JS property names for RSP
-    RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));
-    // normalize teams
-    [...RSP_DATA_BASE,...CC_DATA_BASE,...WS_DATA_BASE,...Y25_DATA].forEach(r=>{if(r.team)r.team=normalizeTeam(r.team);});
-    // Snow region 영어 → 한국어 정규화
-    [...SNOW_ALL,...SNOW_NEW_OUTLETS].forEach(r=>{if(r.region)r.region=normalizeSnowRegion(r.region);});
-    // 신규입점 자동 감지: 25년 매출 없음 + 26년 매출 있음
-    computeSnowTrueNew();
+    await loadAllData();
   }catch(e){
     console.error('Supabase load failed:',e);
     alert('데이터 로딩 실패: '+e.message);
@@ -1825,21 +1837,24 @@ function siTriggerDownload(wb, filename) {
   a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
-function siDownloadRsp() {
+async function siDownloadRsp() {
+  try{ await refreshBeforeDownload(); }catch(e){ return; }
   const data = getSIRsp(); const today = new Date().toISOString().slice(0,10);
   const hdr = ['팀','SR','WS','아울렛','지역1','지역2','주소','SPT수량','기존가격','변경가격'];
   const rows = data.map(r => [r.team,r.sr,r.ws,r.outlet,r.area1,r.area2,r.area3||'',r.spt,r.before,r.after]);
   const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]); const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'RSP'); siTriggerDownload(wb,'SI_RSP_'+today+'.xlsx');
 }
-function siDownloadCc() {
+async function siDownloadCc() {
+  try{ await refreshBeforeDownload(); }catch(e){ return; }
   const data = getSICc(); const today = new Date().toISOString().slice(0,10);
   const hdr = ['팀','SR','WS','아울렛','지역1','지역2','수량','금액','테마'];
   const rows = data.map(r => [r.team,r.sr,r.ws,r.outlet,r.area1,r.area2,r.vol,r.cost,r.theme]);
   const ws = XLSX.utils.aoa_to_sheet([hdr,...rows]); const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'CC'); siTriggerDownload(wb,'SI_CC_'+today+'.xlsx');
 }
-function siDownloadWs() {
+async function siDownloadWs() {
+  try{ await refreshBeforeDownload(); }catch(e){ return; }
   const data = getSIWs(); const today = new Date().toISOString().slice(0,10);
   const hdr = ['팀','아울렛3월','아울렛4월','아울렛5월','3월','4월','5월','비용3월','비용4월','비용5월'];
   const teams = ['Seoul','Busan','Daegu','Daejeon','Gwangju'];
@@ -2018,7 +2033,8 @@ function siDeleteWs(){if(!confirm('WS 기본값 복원?'))return;const d=getSIDa
 (function(){const orig=switchTab;window.switchTab=function(n,el){orig(n,el);if(n==='update'){renderSIUploadStatus();renderUploadStatus();}};})();
 
 // ===== Bottle / Snow 다운로드 =====
-function downloadCurrent(type) {
+async function downloadCurrent(type) {
+  try{ await refreshBeforeDownload(); }catch(e){ return; }
   const today = new Date().toISOString().slice(0,10);
   if (type === 'bottle') {
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
