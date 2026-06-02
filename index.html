@@ -3366,7 +3366,8 @@ async function handleAPUpload() {
 }
 
 // ── RoFo Excel 파싱 (update_rofo.py 로직 재현) ────────────────────────────────
-// 입력: "Latest RoFo" 시트, R7..R58, K(11)=Team L(12)=Channel M(13)=Brand N(14)=SKU O..Z(15..26)=Jan..Dec
+// 헤더(Brand/SKU/월) 위치를 텍스트로 동적 탐지 → 시트명·시작행·시작열 레이아웃이 달라도 동작
+// (예: "Latest RoFo" 시트 K6 오프셋 / "Sheet1" A1 시작 둘 다 처리)
 // 파일명에서 월 추출: "26Y Rofo_May.xlsx" → May → ROFO_START_IDX=4 (Jan-Apr는 null 유지, May-Dec만 기록)
 async function parseRofoExcel(file) {
   const MONTH_MAP = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
@@ -3378,9 +3379,35 @@ async function parseRofoExcel(file) {
 
   const buf = await _upReadBuffer(file);
   const wb  = XLSX.read(buf, { type: 'array' });
-  const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('latest rofo')) || wb.SheetNames[0];
-  const ws  = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+  // 헤더 행·컬럼 동적 탐지: 상단 ~15행에서 Brand/SKU/월 헤더가 있는 행을 찾는다
+  const MONTH_KEYS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+  function detectLayout(ws) {
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    const scan = Math.min(rows.length, 15);
+    for (let r = 0; r < scan; r++) {
+      const cells = (rows[r] || []).map(c => String(c ?? '').trim().toLowerCase());
+      const colBrand = cells.findIndex(c => c === 'brand');
+      if (colBrand < 0) continue;
+      const colSku = cells.findIndex(c => c === 'sku' || c.startsWith('sku'));
+      if (colSku < 0) continue;
+      const colMonth = MONTH_KEYS.map(mn => cells.findIndex(c => c === mn || c.startsWith(mn)));
+      if (colMonth.filter(x => x >= 0).length >= 8) return { rows, headerRow: r, colBrand, colSku, colMonth };
+    }
+    return null;
+  }
+  // "Latest RoFo" 우선, 없으면 헤더 탐지가 성공하는 첫 시트 사용 (단순 SheetNames[0] 폴백 금지)
+  const ordered = [
+    ...wb.SheetNames.filter(n => n.toLowerCase().includes('latest rofo')),
+    ...wb.SheetNames.filter(n => !n.toLowerCase().includes('latest rofo')),
+  ];
+  let layout = null, sheetName = null;
+  for (const n of ordered) {
+    const L = detectLayout(wb.Sheets[n]);
+    if (L) { layout = L; sheetName = n; break; }
+  }
+  if (!layout) throw new Error('RoFo 시트에서 Brand/SKU/월 헤더를 찾을 수 없습니다. 시트/컬럼 형식을 확인하세요.');
+  const { rows, headerRow, colBrand, colSku, colMonth } = layout;
 
   const BRAND_MAP = {
     'Heineken':'Heineken', 'Heineken 0.0':'Heineken 0.0', 'Heineken Silver':'Heineken Silver',
@@ -3398,12 +3425,12 @@ async function parseRofoExcel(file) {
   const skuRofo = new Map();   // key=`${dashBrand}|${dashSku}` → [12] HL (null outside startIdx..11)
   const skipped = [], unmapped = [];
 
-  // Excel 1-indexed R7..R58 = JS 0-indexed rows[6]..rows[57]
-  for (let r = 6; r <= 57; r++) {
+  // 헤더 다음 행부터 시트 끝까지 (탐지된 컬럼 인덱스 사용)
+  for (let r = headerRow + 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row) continue;
-    const brandRaw = row[12];   // M
-    const skuRaw   = row[13];   // N
+    const brandRaw = row[colBrand];
+    const skuRaw   = row[colSku];
     if (brandRaw == null || brandRaw === 0 || brandRaw === '0') continue;
     if (skuRaw == null || skuRaw === 0 || skuRaw === '0') {
       skipped.push({ row: r + 1, brand: brandRaw, sku: skuRaw, reason: 'sku empty' });
@@ -3417,7 +3444,8 @@ async function parseRofoExcel(file) {
 
     const monthly = new Array(12).fill(null);
     for (let mi = startIdx; mi < 12; mi++) {
-      const v = row[14 + mi];   // O = 14
+      const ci = colMonth[mi];
+      const v = ci >= 0 ? row[ci] : null;
       monthly[mi] = (typeof v === 'number') ? Math.round(v * 100) / 100 : 0;
     }
     if (skuRofo.has(key)) {
@@ -3426,6 +3454,11 @@ async function parseRofoExcel(file) {
     } else {
       skuRofo.set(key, monthly);
     }
+  }
+
+  // 0건 매핑이면 빈 데이터를 배포해 기존 RoFo를 덮어쓰는 사고를 막기 위해 즉시 중단
+  if (skuRofo.size === 0) {
+    throw new Error(`RoFo 데이터가 0건 매핑되었습니다 (시트 "${sheetName}", skipped ${skipped.length} / unmapped ${unmapped.length}) — 시트/컬럼 형식을 확인하세요.`);
   }
 
   // HL → standard cases (× CONV)
