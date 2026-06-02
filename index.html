@@ -4868,9 +4868,13 @@ function renderSkuHistTable() {
     titleEl.textContent = `SKU Monthly History (Jan 2025 – ${endMonName} 2026)`;
   }
 
-  // Header
+  // Header — Brand/SKU 다음에 요약 3컬럼(25 TTL 연간 / 26 TTL YTD / YoY 동기간)
+  const _histFcstMonName = MONTH_NAMES_KR[_upGetFcstMonth() - 1] || '';
   let html = `<thead><tr>
-    <th style="text-align:left;min-width:160px">Brand / SKU</th>`;
+    <th style="text-align:left;min-width:160px">Brand / SKU</th>
+    <th style="background:#f0f4c3">25 TTL<br><small style="font-weight:normal">(연간)</small></th>
+    <th style="background:#8fafd4;color:#fff">26 TTL<br><small style="font-weight:normal">(~${_histFcstMonName})</small></th>
+    <th style="border-right:2px solid #999">YoY<br><small style="font-weight:normal">(동기간)</small></th>`;
   _getHistLabels().forEach(l => {
     const cls = l.includes("'26") ? ' style="background:#b8d0f8"' : '';
     html += `<th${cls}>${l}</th>`;
@@ -4901,12 +4905,29 @@ function renderSkuHistTable() {
     if (fcstMon26 >= 1 && fcstMon26 <= 12) hist26[fcstMon26 - 1] = d.mtd ?? 0;
     const vals = [...hist25.slice(0, 12), ...hist26.slice(0, fcstMon26)];
 
+    // 요약: 25 TTL(연간 Jan~Dec), 26 TTL(YTD Jan~현재월), YoY(동기간 Jan~현재월 비교)
+    let sum25Full = 0, has25Full = false;
+    for (let mo = 0; mo < 12; mo++) { if (hist25[mo] != null) { sum25Full += hist25[mo]; has25Full = true; } }
+    let sum25Ytd = 0, has25Ytd = false, sum26Ytd = 0, has26Ytd = false;
+    for (let mo = 0; mo < fcstMon26; mo++) {
+      if (hist25[mo] != null) { sum25Ytd += hist25[mo]; has25Ytd = true; }
+      if (hist26[mo] != null) { sum26Ytd += hist26[mo]; has26Ytd = true; }
+    }
+    const ttl25 = has25Full ? sum25Full : null;
+    const ttl26 = has26Ytd ? sum26Ytd : null;
+    const yoy = (has25Ytd && sum25Ytd !== 0 && has26Ytd) ? (sum26Ytd - sum25Ytd) / sum25Ytd : null;
+    const yoyCls = yoy == null ? '' : (yoy >= 0 ? ' class="td-pos"' : ' class="td-neg"');
+    const sumCells =
+      `<td${td} style="background:#f0f4c3">${fmtVal(ttl25, factor)}</td>` +
+      `<td${td} style="background:#8fafd4;color:#fff">${fmtVal(ttl26, factor)}</td>` +
+      `<td${yoyCls} style="border-right:2px solid #999">${yoy == null ? '—' : (yoy >= 0 ? '+' : '') + (yoy * 100).toFixed(1) + '%'}</td>`;
+
     let cells = '';
     vals.forEach((v, i) => {
       const bg = i >= 12 ? ' style="background:#b8d0f8"' : '';
       cells += `<td${td}${bg}>${fmtVal(v, factor)}</td>`;
     });
-    return `<tr>${nameCell}${cells}</tr>`;
+    return `<tr>${nameCell}${sumCells}${cells}</tr>`;
   }
 
   data.forEach(brand => {
