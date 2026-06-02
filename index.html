@@ -1620,6 +1620,26 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </div>
     <div class="section-title" id="ytd-section-title">YTD Attainment Status — Jan ~ Apr (HL, On Trade)</div>
     <div class="table-wrap"><table id="tbl-ytd-hl"></table></div>
+
+    <!-- 지점별 SKU AP / RoFo / Actual (FY) -->
+    <div class="section-title" id="ytdsku-title" style="margin-top:28px;">지점별 SKU — FY AP / RoFo / Actual (HL, On Trade Total)</div>
+    <div class="filter-bar" style="margin-bottom:10px;">
+      <span><label>Branch</label>
+        <select id="ytdsku-branch" onchange="renderYTDSkuTable()">
+          <option value="On Trade Total">On Trade Total</option>
+          <option value="Seoul">Seoul</option>
+          <option value="BuSan">BuSan</option>
+          <option value="DaeGu&amp;JeJu">DaeGu&amp;JeJu</option>
+          <option value="DaeJeon">DaeJeon</option>
+          <option value="GwangJu">GwangJu</option>
+        </select>
+      </span>
+      <span class="month-toggle-wrap" style="margin-left:12px;">
+        <button id="ytdsku-unit-cs" class="month-btn off" onclick="setYtdSkuUnit('cs')">c/s</button>
+        <button id="ytdsku-unit-hl" class="month-btn" onclick="setYtdSkuUnit('hl')">HL</button>
+      </span>
+    </div>
+    <div class="table-wrap" style="max-height:60vh;overflow:auto"><table id="tbl-ytdsku"></table></div>
   </div>
 
   <!-- Tab: Revenue -->
@@ -4682,6 +4702,93 @@ function renderYTDTable() {
 }
 
 // ═══════════════════════════════════════════════
+//  TABLE — 지점별 SKU FY AP / RoFo / Actual
+//  AP = FY 연간(Jan~Dec) 계획 합 / Actual = YTD 실적(현재월=MTD)
+//  RoFo = FY 착지 전망(실적월 Jan~현재월-1 + RoFo 전망월 현재월~Dec), On Trade Total만 표시
+//  환산: AP·RoFo = ×0.0792, Actual = ×hl_factor (브랜드행은 ×0.0792) — Chart D 관례 동일
+// ═══════════════════════════════════════════════
+let _ytdSkuUnit = 'hl';   // 'hl' | 'cs' (기본 HL)
+
+function setYtdSkuUnit(unit) {
+  _ytdSkuUnit = unit;
+  document.getElementById('ytdsku-unit-cs').classList.toggle('off', unit !== 'cs');
+  document.getElementById('ytdsku-unit-hl').classList.toggle('off', unit !== 'hl');
+  renderYTDSkuTable();
+}
+
+function renderYTDSkuTable() {
+  const sec  = document.getElementById('ytdsku-branch')?.value || 'On Trade Total';
+  const data = DASHBOARD_DATA.sku_detail[sec] || [];
+  const cur  = _upGetFcstMonth();                  // 1-indexed 현재 FCST 월
+  const showRofo = (sec === 'On Trade Total');      // RoFo는 On Trade Total만 데이터 존재
+  const isHL = _ytdSkuUnit === 'hl';
+
+  const titleEl = document.getElementById('ytdsku-title');
+  if (titleEl) titleEl.textContent =
+    `지점별 SKU — FY AP / ${showRofo ? 'RoFo / ' : ''}Actual (${isHL ? 'HL' : 'c/s'}, ${sec})`;
+
+  const fmt = v => v == null ? '—'
+    : (isHL ? v.toLocaleString('ko-KR', {maximumFractionDigits: 1}) : Math.round(v).toLocaleString('ko-KR'));
+
+  function calcRow(d, isBrand) {
+    const fAct = isBrand ? 0.0792 : (d.hl_factor != null ? d.hl_factor : 0.0792);
+    const fStd = 0.0792;   // AP·RoFo 표준 환산
+    const ap   = d.ap_monthly  || Array(12).fill(null);
+    const act  = [...(d.act_monthly || Array(12).fill(null))];
+    if (cur >= 1 && cur <= 12) act[cur - 1] = d.mtd ?? act[cur - 1] ?? 0;   // 현재월 = MTD
+    const rofo = d.rofo_monthly || Array(12).fill(null);
+
+    // FY AP = Σ ap[Jan~Dec]
+    let apSum = 0, apHas = false;
+    for (let m = 0; m < 12; m++) if (ap[m] != null) { apSum += isHL ? ap[m] * fStd : ap[m]; apHas = true; }
+
+    // Actual YTD = Σ act[Jan~현재월] (실적분)
+    let actSum = 0, actHas = false;
+    for (let m = 0; m < cur; m++) if (act[m] != null) { actSum += isHL ? act[m] * fAct : act[m]; actHas = true; }
+
+    // RoFo FY 착지 = 실적(Jan~현재월-1) + RoFo 전망(현재월~Dec)
+    let roVal = null;
+    if (showRofo) {
+      let roActPart = 0, roFwd = 0, roFwdHas = false;
+      for (let m = 0; m < cur - 1; m++) if (act[m] != null) roActPart += isHL ? act[m] * fAct : act[m];
+      for (let m = cur - 1; m < 12; m++) if (rofo[m] != null) { roFwd += isHL ? rofo[m] * fStd : rofo[m]; roFwdHas = true; }
+      roVal = roFwdHas ? roActPart + roFwd : null;
+    }
+    return { ap: apHas ? apSum : null, act: actHas ? actSum : null, rofo: roVal };
+  }
+
+  // Header
+  let html = `<thead><tr>
+    <th style="text-align:left;min-width:180px">Brand / SKU</th>
+    <th style="background:#20552722;color:#205527">FY AP</th>`;
+  if (showRofo) html += `<th style="background:#8fafd4;color:#fff">FY RoFo<br><small style="font-weight:normal">(착지)</small></th>`;
+  html += `<th style="background:#b8d0f8">Actual<br><small style="font-weight:normal">(YTD)</small></th>
+    </tr></thead>`;
+
+  function buildRow(d, label, isBrand) {
+    const r = calcRow(d, isBrand);
+    const td = isBrand ? ' class="td-brand"' : '';
+    const nameCell = isBrand
+      ? `<td class="td-brand">${label}</td>`
+      : `<td>&nbsp;&nbsp;<span style="color:#555">${label}</span></td>`;
+    let cells = `<td${td} style="background:#20552712">${fmt(r.ap)}</td>`;
+    if (showRofo) cells += `<td${td} style="background:#8fafd420">${fmt(r.rofo)}</td>`;
+    cells += `<td${td} style="background:#b8d0f833">${fmt(r.act)}</td>`;
+    return `<tr>${nameCell}${cells}</tr>`;
+  }
+
+  data.forEach(brand => {
+    html += '<tbody>';
+    html += buildRow(brand.data, brand.brand, true);
+    (brand.skus || []).forEach(sku => { html += buildRow(sku.data, sku.sku, false); });
+    html += '</tbody>';
+  });
+
+  document.getElementById('tbl-ytdsku').innerHTML = html;
+  makeSortable('tbl-ytdsku');
+}
+
+// ═══════════════════════════════════════════════
 //  TABLE — SKU Detail
 // ═══════════════════════════════════════════════
 let _skuUnit = 'cases';   // 'cases' | 'hl'
@@ -5743,7 +5850,7 @@ function switchTab(tabId) {
 
   if (!_tabInitialized[tabId]) {
     _tabInitialized[tabId] = true;
-    if (tabId === 'ytd')      { renderYTDCharts(); renderYTDTable(); }
+    if (tabId === 'ytd')      { renderYTDCharts(); renderYTDTable(); renderYTDSkuTable(); }
     if (tabId === 'revenue')  { initRevenueTab(); }
     if (tabId === 'sku')      { renderSkuTable(); }
     if (tabId === 'sku-hist') { renderSkuHistTable(); renderSkuHistCompare(); }
@@ -5751,7 +5858,7 @@ function switchTab(tabId) {
     if (tabId === 'minutes')  { minutesLoad(); }
     if (tabId === 'calendar') { calendarInit(); todoInit(); }
   } else {
-    if (tabId === 'ytd')          { renderYTDCharts(); renderYTDTable(); }
+    if (tabId === 'ytd')          { renderYTDCharts(); renderYTDTable(); renderYTDSkuTable(); }
     else if (tabId === 'revenue') { initRevenueTab(); }
     else if (tabId === 'sku-hist'){ renderSkuHistTable(); renderSkuHistCompare(); }
     else if (tabId === 'order')   { renderOrderPattern(); }
