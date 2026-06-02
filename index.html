@@ -236,6 +236,16 @@ thead th { background: var(--primary); color: #fff; padding: 6px 8px; text-align
 #tbl-sku-hist-cmp tbody tr:nth-child(even) td:first-child { background: #f9fafb; }
 #tbl-sku-hist .td-brand:first-child,
 #tbl-sku-hist-cmp .td-brand:first-child { background: #f0f7f0; }
+/* ── 지점별 SKU 표: Brand/SKU 첫 컬럼 + 헤더 고정 ── */
+#tbl-ytdsku thead th { position: sticky; top: 0; z-index: 3; }
+#tbl-ytdsku thead tr:nth-child(2) th { top: 27px; }   /* 월별 2단 헤더의 2행 */
+#tbl-ytdsku thead th:first-child { left: 0; z-index: 4; }
+#tbl-ytdsku td:first-child {
+  position: sticky; left: 0; z-index: 1;
+  background: #fff; border-right: 1px solid var(--border);
+}
+#tbl-ytdsku tbody tr:nth-child(even) td:first-child { background: #f9fafb; }
+#tbl-ytdsku .td-brand:first-child { background: #f0f7f0; }
 thead th:first-child, thead th:nth-child(2) { text-align: left; }
 thead th::after { content: ' \2195'; opacity: .4; font-size: 10px; }
 thead th.sort-asc::after  { content: ' \2191'; opacity: 1; }
