@@ -1635,6 +1635,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
         </select>
       </span>
       <span class="month-toggle-wrap" style="margin-left:12px;">
+        <button id="ytdsku-mode-fy" class="month-btn" onclick="setYtdSkuMode('fy')">FY 요약</button>
+        <button id="ytdsku-mode-monthly" class="month-btn off" onclick="setYtdSkuMode('monthly')">월별</button>
+      </span>
+      <span class="month-toggle-wrap" style="margin-left:12px;">
         <button id="ytdsku-unit-cs" class="month-btn off" onclick="setYtdSkuUnit('cs')">c/s</button>
         <button id="ytdsku-unit-hl" class="month-btn" onclick="setYtdSkuUnit('hl')">HL</button>
       </span>
@@ -4707,12 +4711,20 @@ function renderYTDTable() {
 //  RoFo = FY 착지 전망(실적월 Jan~현재월-1 + RoFo 전망월 현재월~Dec), On Trade Total만 표시
 //  환산: AP·RoFo = ×0.0792, Actual = ×hl_factor (브랜드행은 ×0.0792) — Chart D 관례 동일
 // ═══════════════════════════════════════════════
-let _ytdSkuUnit = 'hl';   // 'hl' | 'cs' (기본 HL)
+let _ytdSkuUnit = 'hl';    // 'hl' | 'cs' (기본 HL)
+let _ytdSkuMode = 'fy';    // 'fy' | 'monthly' (기본 FY 요약)
 
 function setYtdSkuUnit(unit) {
   _ytdSkuUnit = unit;
   document.getElementById('ytdsku-unit-cs').classList.toggle('off', unit !== 'cs');
   document.getElementById('ytdsku-unit-hl').classList.toggle('off', unit !== 'hl');
+  renderYTDSkuTable();
+}
+
+function setYtdSkuMode(mode) {
+  _ytdSkuMode = mode;
+  document.getElementById('ytdsku-mode-fy').classList.toggle('off', mode !== 'fy');
+  document.getElementById('ytdsku-mode-monthly').classList.toggle('off', mode !== 'monthly');
   renderYTDSkuTable();
 }
 
@@ -4723,12 +4735,66 @@ function renderYTDSkuTable() {
   const showRofo = (sec === 'On Trade Total');      // RoFo는 On Trade Total만 데이터 존재
   const isHL = _ytdSkuUnit === 'hl';
 
+  const metricLbl = `AP / ${showRofo ? 'RoFo / ' : ''}Actual`;
   const titleEl = document.getElementById('ytdsku-title');
   if (titleEl) titleEl.textContent =
-    `지점별 SKU — FY AP / ${showRofo ? 'RoFo / ' : ''}Actual (${isHL ? 'HL' : 'c/s'}, ${sec})`;
+    `지점별 SKU — ${_ytdSkuMode === 'monthly' ? '월별' : 'FY'} ${metricLbl} (${isHL ? 'HL' : 'c/s'}, ${sec})`;
 
   const fmt = v => v == null ? '—'
     : (isHL ? v.toLocaleString('ko-KR', {maximumFractionDigits: 1}) : Math.round(v).toLocaleString('ko-KR'));
+
+  // ── 월별 매트릭스 모드: 각 월마다 AP / RoFo / Actual 서브컬럼 (Jan~Dec'26) ──
+  if (_ytdSkuMode === 'monthly') {
+    const MN   = MONTH_NAMES_KR;          // ['Jan'..'Dec']
+    const span = showRofo ? 3 : 2;
+    let html = `<thead><tr><th rowspan="2" style="text-align:left;min-width:180px">Brand / SKU</th>`;
+    for (let m = 0; m < 12; m++) {
+      const cur26 = (m + 1 <= cur);       // 현재월까지는 강조
+      html += `<th colspan="${span}" style="text-align:center;border-bottom:1px solid #8faac8;border-left:2px solid #ccc;${cur26 ? 'background:#eef3fb' : ''}">${MN[m]}'26</th>`;
+    }
+    html += `</tr><tr>`;
+    for (let m = 0; m < 12; m++) {
+      html += `<th style="background:#20552722;color:#205527;border-left:2px solid #ccc">AP</th>`;
+      if (showRofo) html += `<th style="background:#8fafd4;color:#fff">RoFo</th>`;
+      html += `<th style="background:#b8d0f8">Act</th>`;
+    }
+    html += `</tr></thead>`;
+
+    function buildRowM(d, label, isBrand) {
+      const fAct = isBrand ? 0.0792 : (d.hl_factor != null ? d.hl_factor : 0.0792);
+      const fStd = 0.0792;
+      const ap   = d.ap_monthly  || Array(12).fill(null);
+      const act  = [...(d.act_monthly || Array(12).fill(null))];
+      if (cur >= 1 && cur <= 12) act[cur - 1] = d.mtd ?? act[cur - 1] ?? null;   // 현재월 = MTD
+      const rofo = d.rofo_monthly || Array(12).fill(null);
+      const td = isBrand ? ' class="td-brand"' : '';
+      const nameCell = isBrand
+        ? `<td class="td-brand">${label}</td>`
+        : `<td>&nbsp;&nbsp;<span style="color:#555">${label}</span></td>`;
+      let cells = '';
+      for (let m = 0; m < 12; m++) {
+        const apv  = ap[m]  != null ? (isHL ? ap[m]  * fStd : ap[m])  : null;
+        const actv = act[m] != null ? (isHL ? act[m] * fAct : act[m]) : null;
+        cells += `<td${td} style="background:#20552708;border-left:2px solid #ccc">${fmt(apv)}</td>`;
+        if (showRofo) {
+          const rv = rofo[m] != null ? (isHL ? rofo[m] * fStd : rofo[m]) : null;
+          cells += `<td${td} style="background:#8fafd418">${fmt(rv)}</td>`;
+        }
+        cells += `<td${td} style="background:#b8d0f820">${fmt(actv)}</td>`;
+      }
+      return `<tr>${nameCell}${cells}</tr>`;
+    }
+
+    data.forEach(brand => {
+      html += '<tbody>';
+      html += buildRowM(brand.data, brand.brand, true);
+      (brand.skus || []).forEach(sku => { html += buildRowM(sku.data, sku.sku, false); });
+      html += '</tbody>';
+    });
+    document.getElementById('tbl-ytdsku').innerHTML = html;
+    // 월별 매트릭스는 2단 헤더(colspan)라 컬럼-셀 인덱스가 어긋나 정렬 비활성화
+    return;
+  }
 
   function calcRow(d, isBrand) {
     const fAct = isBrand ? 0.0792 : (d.hl_factor != null ? d.hl_factor : 0.0792);
