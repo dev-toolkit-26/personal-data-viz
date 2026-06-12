@@ -279,8 +279,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .month-btn:hover { opacity: .85; }
 
 /* ── This WK Issue ── */
-.issue-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
-.issue-card { background: var(--card-bg); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow); border-top: 3px solid var(--accent); }
+.issue-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 16px; }
+.issue-card { background: var(--card-bg); border-radius: var(--radius); padding: 12px 9px; box-shadow: var(--shadow); border-top: 3px solid var(--accent); }
 .issue-card-title { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
 .issue-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px dashed #f0f0f0; font-size: 11px; gap: 6px; }
 .issue-item:last-child { border-bottom: none; }
@@ -1606,6 +1606,13 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <div class="table-wrap"><table id="tbl-wk10-cases"></table></div>
     <div class="section-title">This WK Issue — Key SKUs Up/Down vs Last Wk by Branch</div>
     <div id="this-wk-issue" class="issue-grid"></div>
+    <div class="section-title" style="margin-top:24px;">FCST vs MTD <span id="fcst-mtd-sub" style="font-weight:400;font-size:12px;color:#9ca3af;"></span>
+      <span class="month-toggle-wrap" style="margin-left:12px;">
+        <button id="fcst-mtd-unit-hl"  class="month-btn"     onclick="setFcstMtdUnit('hl')">HL</button>
+        <button id="fcst-mtd-unit-qty" class="month-btn off" onclick="setFcstMtdUnit('qty')">QTY</button>
+      </span>
+    </div>
+    <div id="fcst-mtd-issue" class="issue-grid"></div>
     <div class="section-title" style="margin-top:24px;">SKU vs LM · LY</div>
     <div id="lm-ly-issue" class="issue-grid"></div>
   </div>
@@ -2801,11 +2808,13 @@ async function parseDsrExcel(file, fcstMonth = null) {
            monthlyTtlHl, monthlyRegionHl, monthsSeen: [...monthsSeen] };
 }
 
-function _upUpdateFcstEntry(entry, newFcst, mtdKey, preserveLastWk) {
+function _upUpdateFcstEntry(entry, newFcst, mtdKey, preserveLastWk, monthChanged) {
   mtdKey = mtdKey || 'mtd_actual';
   const oldThis = entry.this_week_fcst;
+  // monthChanged=true: 새 달의 첫 주 → 비교할 전주(이번 달 FCST)가 없음 → 비교 없음('—'으로 표시)
   // preserveLastWk=true: same-week re-upload → keep last_week_fcst so differ_vs_last stays meaningful
-  if (!preserveLastWk) entry.last_week_fcst = oldThis;
+  if (monthChanged)         entry.last_week_fcst = null;
+  else if (!preserveLastWk) entry.last_week_fcst = oldThis;
   entry.this_week_fcst = _upRound4(newFcst);
   const base = entry.last_week_fcst;
   entry.differ_vs_last = (base != null) ? _upRound4(newFcst - base) : null;
@@ -2828,6 +2837,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
 
   const fcstMonth = fcstResult?.meta?.wkMeta?.month || dsrResult?.dsrMeta?.month || prevMonth;
   const isSameWeek = fcstResult?.meta?.wkMeta?.num === prevWkNum;  // re-upload of same week
+  const monthChanged = fcstMonth !== prevMonth;  // 새 달 첫 업로드: 전주 비교 무효화
   const mIdx = fcstMonth - 1;
   const mKey = String(fcstMonth);
 
@@ -2860,7 +2870,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
       }
     }
     // 월 변경 시 MTD 초기화 (새 달은 아직 실적 없음)
-    if (fcstMonth !== prevMonth) {
+    if (monthChanged) {
       for (const k of ['TTL', ..._UP_DASH_REGIONS]) {
         if (hlSum[k]) { hlSum[k].mtd_actual = 0; hlSum[k].ap_mtd_ach = null; hlSum[k].fcst_mtd_ach = null; }
       }
@@ -2889,8 +2899,8 @@ function applyDataUpdate(fcstResult, dsrResult) {
       for (const r of _UP_DASH_REGIONS) { if (D.dsr_by_region_monthly?.[r]) D.dsr_by_region_monthly[r][mIdx] = 0; }
       if (D.monthly?.act_2026) D.monthly.act_2026[mIdx] = null;
     }
-    for (const [k,v] of Object.entries(hlFcst))    { if (hlSum[k])    _upUpdateFcstEntry(hlSum[k],    v, 'mtd_actual', isSameWeek); }
-    for (const [k,v] of Object.entries(casesFcst)) { if (casesSum[k]) _upUpdateFcstEntry(casesSum[k], v, 'mtd_actual', isSameWeek); }
+    for (const [k,v] of Object.entries(hlFcst))    { if (hlSum[k])    _upUpdateFcstEntry(hlSum[k],    v, 'mtd_actual', isSameWeek, monthChanged); }
+    for (const [k,v] of Object.entries(casesFcst)) { if (casesSum[k]) _upUpdateFcstEntry(casesSum[k], v, 'mtd_actual', isSameWeek, monthChanged); }
     const _REGIONAL_TABS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
     for (const tabKey of Object.keys(D.sku_detail)) {
       if (tabKey === 'On Trade Total') continue; // recalculated below from regions
@@ -2898,7 +2908,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
       for (const brandObj of D.sku_detail[tabKey]) {
         // 1. SKU QTY 적용
         for (const skuObj of brandObj.skus) {
-          if (iFcst[skuObj.sku] !== undefined) _upUpdateFcstEntry(skuObj.data, iFcst[skuObj.sku], 'mtd', isSameWeek);
+          if (iFcst[skuObj.sku] !== undefined) _upUpdateFcstEntry(skuObj.data, iFcst[skuObj.sku], 'mtd', isSameWeek, monthChanged);
         }
         // 2. Brand c/s = Σ(SKU QTY × hl_factor / 0.0792)
         const brandCases = _upRound4(brandObj.skus.reduce((s, skuObj) => {
@@ -2906,7 +2916,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
           const hf  = skuObj.data.hl_factor ?? 0.0792;
           return s + qty * hf / 0.0792;
         }, 0));
-        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek);
+        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek, monthChanged);
       }
     }
     // On Trade Total = sum of all regional SKU QTY (not from file's On Trade Total tab)
@@ -2924,7 +2934,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
       for (const brandObj of D.sku_detail['On Trade Total']) {
         for (const skuObj of brandObj.skus) {
           if (ottSkuQty[skuObj.sku] !== undefined) {
-            _upUpdateFcstEntry(skuObj.data, ottSkuQty[skuObj.sku], 'mtd', isSameWeek);
+            _upUpdateFcstEntry(skuObj.data, ottSkuQty[skuObj.sku], 'mtd', isSameWeek, monthChanged);
             // Sync hl_factor from regional data (On Trade Total may have stale/wrong hl_factor)
             if (ottSkuHlFactor[skuObj.sku] != null) skuObj.data.hl_factor = ottSkuHlFactor[skuObj.sku];
           }
@@ -2934,7 +2944,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
           const hf  = skuObj.data.hl_factor ?? 0.0792;
           return s + qty * hf / 0.0792;
         }, 0));
-        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek);
+        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek, monthChanged);
       }
     }
     // Brand c/s 합산 → 지역별 hlSum(HL) · casesSum(Cases) 갱신 + TTL 직접 누적
@@ -2944,14 +2954,14 @@ function applyDataUpdate(fcstResult, dsrResult) {
       const regionCases = _upRound4((D.sku_detail[tabKey] || []).reduce((s, b) => s + (b.data?.this_week_fcst || 0), 0));
       if (regionCases <= 0) continue;
       const regionHL = _upRound4(regionCases * 0.0792);
-      _upUpdateFcstEntry(hlSum[hlKey],    regionHL,    'mtd_actual', true);
-      if (casesSum[hlKey]) _upUpdateFcstEntry(casesSum[hlKey], regionCases, 'mtd_actual', true);
+      _upUpdateFcstEntry(hlSum[hlKey],    regionHL,    'mtd_actual', true, monthChanged);
+      if (casesSum[hlKey]) _upUpdateFcstEntry(casesSum[hlKey], regionCases, 'mtd_actual', true, monthChanged);
       _ttlHL    += regionHL;
       _ttlCases += regionCases;
     }
     // TTL / BEER TTL: 루프에서 직접 누적한 값 사용 (hlSum[r] 재독 X)
-    if (hlSum['TTL']         && _ttlHL    > 0) _upUpdateFcstEntry(hlSum['TTL'],         _upRound4(_ttlHL),    'mtd_actual', true);
-    if (casesSum['BEER TTL'] && _ttlCases > 0) _upUpdateFcstEntry(casesSum['BEER TTL'], _upRound4(_ttlCases), 'mtd_actual', true);
+    if (hlSum['TTL']         && _ttlHL    > 0) _upUpdateFcstEntry(hlSum['TTL'],         _upRound4(_ttlHL),    'mtd_actual', true, monthChanged);
+    if (casesSum['BEER TTL'] && _ttlCases > 0) _upUpdateFcstEntry(casesSum['BEER TTL'], _upRound4(_ttlCases), 'mtd_actual', true, monthChanged);
   }
 
   if (dsrResult) {
@@ -3129,6 +3139,7 @@ function _upReRenderAll() {
   renderKPI();
   renderWK10Tables();
   renderThisWkIssue();
+  renderFcstVsMtdVariance();
   renderLMLYVariance();
   renderChartA();
   renderChartB();
@@ -4260,18 +4271,15 @@ function renderLMLYVariance() {
     return `<span style="color:${color};font-weight:600;">${sign}${(v * 100).toFixed(0)}%</span>`;
   }
 
-  let html = '';
-
-  SECTIONS.forEach(({ key, label }) => {
+  // 1) 지점별 그룹 집계
+  const sectionGroups = SECTIONS.map(({ key, label }) => {
     const brands = DASHBOARD_DATA.sku_detail[key] || [];
     const grouped = {};
-
     brands.forEach(brand => {
       (brand.skus || []).forEach(sku => {
         const d = sku.data;
         const fcst = d.this_week_fcst;
         if (!fcst) return;
-
         let lmPct = null;
         if (lmIdx >= 0 && Array.isArray(d.act_monthly)) {
           const lmAct = d.act_monthly[lmIdx];
@@ -4279,49 +4287,233 @@ function renderLMLYVariance() {
         }
         const lyPct = (d.fcst_growth_lym != null) ? d.fcst_growth_lym : null;
         const type  = getType(sku.sku);
-
         if (!grouped[type]) grouped[type] = [];
         grouped[type].push({ name: sku.sku, brand: brand.brand, lmPct, lyPct, fcst,
                               globalFcst: globalFcst[sku.sku] ?? 0 });
       });
     });
-
     // 각 그룹 내 SKU를 전체 매출 기준 내림차순 정렬
     TYPE_ORDER.forEach(t => {
       if (grouped[t]) grouped[t].sort((a, b) => b.globalFcst - a.globalFcst);
     });
+    return { label, grouped };
+  });
 
-    html += `<div class="issue-card"><div class="issue-card-title">${label}</div>`;
+  // 2) 대분류별 표시 행 수 = 전 지점 중 최대치 (대분류 헤더를 같은 선에 정렬)
+  const typeRows = {};
+  TYPE_ORDER.forEach(t => {
+    let maxN = 0;
+    sectionGroups.forEach(({ grouped }) => {
+      const grp = grouped[t];
+      if (grp && grp.length) {
+        const limit = TYPE_LIMIT[t] ?? grp.length;
+        maxN = Math.max(maxN, Math.min(grp.length, limit));
+      }
+    });
+    typeRows[t] = maxN;
+  });
 
-    const colHdr = `<div style="display:flex;gap:4px;font-size:10px;color:#9ca3af;margin-bottom:2px;padding:0 2px;">
-      <span style="flex:1;"></span>
-      <span style="width:40px;text-align:right;">vs LM</span>
-      <span style="width:40px;text-align:right;">vs LY</span>
+  const colHdr = `<div style="display:flex;gap:4px;font-size:9px;color:#9ca3af;margin-bottom:2px;padding:0 2px;">
+      <span style="flex:1;min-width:0;"></span>
+      <span style="width:32px;"></span>
+      <span style="width:32px;text-align:right;">vs LM</span>
+      <span style="width:32px;text-align:right;">vs LY</span>
+    </div>`;
+  const emptyRow = `<div class="issue-item" style="gap:4px;">
+      <span class="issue-sku">&nbsp;</span>
+      <span style="width:32px;"></span>
+      <span style="width:32px;"></span>
+      <span style="width:32px;"></span>
     </div>`;
 
-    let hasAny = false;
+  // 3) 렌더 — 모든 지점이 동일한 대분류·행 수를 가지도록 (부족하면 빈칸)
+  let html = '';
+  const anyData = TYPE_ORDER.some(t => typeRows[t] > 0);
+  sectionGroups.forEach(({ label, grouped }) => {
+    html += `<div class="issue-card"><div class="issue-card-title">${label}</div>`;
+    if (!anyData) { html += `<div class="issue-empty">No significant change</div></div>`; return; }
     TYPE_ORDER.forEach(t => {
-      const grp = grouped[t];
-      if (!grp || grp.length === 0) return;
-      hasAny = true;
+      const rows = typeRows[t];
+      if (rows === 0) return;
       const s = TYPE_STYLE[t];
-      const limit = TYPE_LIMIT[t] ?? grp.length;
       html += `<div style="margin:7px 0 3px;padding:2px 8px;background:${s.bg};color:${s.color};font-size:10px;font-weight:700;border-radius:4px;">${t}</div>`;
       html += colHdr;
-      grp.slice(0, limit).forEach(item => {
-        html += `<div class="issue-item">
+      const grp = grouped[t] || [];
+      const limit = TYPE_LIMIT[t] ?? grp.length;
+      const items = grp.slice(0, limit);
+      for (let i = 0; i < rows; i++) {
+        const item = items[i];
+        if (!item) { html += emptyRow; continue; }
+        html += `<div class="issue-item" style="gap:4px;">
           <span class="issue-sku" title="${item.name} (${item.brand})">${item.name}</span>
-          <span style="width:40px;text-align:right;font-size:11px;">${fmtPct(item.lmPct)}</span>
-          <span style="width:40px;text-align:right;font-size:11px;">${fmtPct(item.lyPct)}</span>
+          <span style="width:32px;"></span>
+          <span style="width:32px;text-align:right;font-size:10px;">${fmtPct(item.lmPct)}</span>
+          <span style="width:32px;text-align:right;font-size:10px;">${fmtPct(item.lyPct)}</span>
         </div>`;
-      });
+      }
     });
-
-    if (!hasAny) html += `<div class="issue-empty">No significant change</div>`;
     html += `</div>`;
   });
 
   document.getElementById('lm-ly-issue').innerHTML = html;
+}
+
+
+// ═══════════════════════════════════════════════
+//  GRID — FCST vs MTD (지점별, HL / QTY 토글)
+// ═══════════════════════════════════════════════
+let _fcstMtdUnit = 'hl'; // 'hl' | 'qty'
+
+function setFcstMtdUnit(unit) {
+  _fcstMtdUnit = unit;
+  document.getElementById('fcst-mtd-unit-hl').classList.toggle('off', unit !== 'hl');
+  document.getElementById('fcst-mtd-unit-qty').classList.toggle('off', unit !== 'qty');
+  renderFcstVsMtdVariance();
+}
+
+function renderFcstVsMtdVariance() {
+  const SECTIONS = [
+    { key: 'Seoul',       label: 'Seoul' },
+    { key: 'BuSan',       label: 'Busan' },
+    { key: 'DaeGu&JeJu', label: 'DaeGu & JeJu' },
+    { key: 'DaeJeon',     label: 'DaeJeon' },
+    { key: 'GwangJu',     label: 'GwangJu' },
+  ];
+
+  const TYPE_ORDER  = ['Bottle', 'Keg', 'Blade', 'Can', 'Other'];
+  const TYPE_LIMIT  = { Can: 5 };
+  const TYPE_STYLE  = {
+    Bottle: { bg:'#dbeafe', color:'#205527' },
+    Keg:    { bg:'#fef3c7', color:'#b45309' },
+    Blade:  { bg:'#dcfce7', color:'#15803d' },
+    Can:    { bg:'#ede9fe', color:'#6d28d9' },
+    Other:  { bg:'#f1f5f9', color:'#475569' },
+  };
+
+  function getType(name) {
+    if (/Blade/i.test(name))  return 'Blade';
+    if (/Keg/i.test(name))    return 'Keg';
+    if (/Can/i.test(name))    return 'Can';
+    if (/Bottle/i.test(name)) return 'Bottle';
+    return 'Other';
+  }
+
+  // On Trade Total 기준 글로벌 매출 순위 맵
+  const globalFcst = {};
+  (DASHBOARD_DATA.sku_detail['On Trade Total'] || []).forEach(brand => {
+    (brand.skus || []).forEach(sku => {
+      globalFcst[sku.sku] = sku.data.this_week_fcst ?? 0;
+    });
+  });
+
+  // Summary diagnosis와 동일: MTD 달성률을 영업일 경과율(wd.pct) 대비 비교
+  const wd = DASHBOARD_DATA.wd_progress || {};
+  const wdPct = (wd.pct != null) ? wd.pct : null;
+
+  // 제목 옆에 단위(HL/QTY) + 영업일 경과율 표시
+  const unitTxt = (_fcstMtdUnit === 'hl') ? 'HL' : 'QTY';
+  const subEl = document.getElementById('fcst-mtd-sub');
+  if (subEl) {
+    const pctTxt = (wdPct != null) ? Math.round(wdPct * 100) + '%' : '—';
+    const dayTxt = (wd.elapsed != null && wd.total != null) ? ` · ${wd.elapsed}/${wd.total}일` : '';
+    subEl.textContent = `(${unitTxt} · 영업일 경과율 ${pctTxt}${dayTxt})`;
+  }
+  function fmtAch(v) {
+    if (v == null) return '<span style="color:#d1d5db;">—</span>';
+    let color = '#6b7280';
+    if (wdPct != null) {
+      const gapPp = (v - wdPct) * 100;
+      color = gapPp >= 2 ? '#16a34a' : gapPp >= -5 ? '#d97706' : '#dc2626';
+    }
+    return `<span style="color:${color};font-weight:600;">${(v * 100).toFixed(0)}%</span>`;
+  }
+  function fmtHL0(v) { return v == null ? '<span style="color:#d1d5db;">—</span>' : Math.round(v).toLocaleString('ko-KR'); }
+
+  // 1) 지점별 그룹 집계
+  const sectionGroups = SECTIONS.map(({ key, label }) => {
+    const brands = DASHBOARD_DATA.sku_detail[key] || [];
+    const grouped = {};
+    brands.forEach(brand => {
+      (brand.skus || []).forEach(sku => {
+        const d = sku.data;
+        const fcst = d.this_week_fcst;
+        if (!fcst) return;
+        const factor = (d.hl_factor != null) ? d.hl_factor : 0.0792;
+        const fcstHL = fcst * factor;
+        const mtdHL  = (d.mtd != null) ? d.mtd * factor : null;
+        const ach    = (d.fcst_mtd_ach != null) ? d.fcst_mtd_ach : null;
+        const type   = getType(sku.sku);
+        if (!grouped[type]) grouped[type] = [];
+        grouped[type].push({ name: sku.sku, brand: brand.brand, fcst, mtd: d.mtd, fcstHL, mtdHL, ach,
+                              globalFcst: globalFcst[sku.sku] ?? 0 });
+      });
+    });
+    // 각 그룹 내 SKU를 전체 매출 기준 내림차순 정렬
+    TYPE_ORDER.forEach(t => {
+      if (grouped[t]) grouped[t].sort((a, b) => b.globalFcst - a.globalFcst);
+    });
+    return { label, grouped };
+  });
+
+  // 2) 대분류별 표시 행 수 = 전 지점 중 최대치 (대분류 헤더를 같은 선에 정렬)
+  const typeRows = {};
+  TYPE_ORDER.forEach(t => {
+    let maxN = 0;
+    sectionGroups.forEach(({ grouped }) => {
+      const grp = grouped[t];
+      if (grp && grp.length) {
+        const limit = TYPE_LIMIT[t] ?? grp.length;
+        maxN = Math.max(maxN, Math.min(grp.length, limit));
+      }
+    });
+    typeRows[t] = maxN;
+  });
+
+  const colHdr = `<div style="display:flex;gap:4px;font-size:9px;color:#9ca3af;margin-bottom:2px;padding:0 2px;">
+      <span style="flex:1;min-width:0;"></span>
+      <span style="width:32px;text-align:right;">FCST</span>
+      <span style="width:32px;text-align:right;">MTD</span>
+      <span style="width:32px;text-align:right;">%</span>
+    </div>`;
+  const emptyRow = `<div class="issue-item" style="gap:4px;">
+      <span class="issue-sku">&nbsp;</span>
+      <span style="width:32px;"></span>
+      <span style="width:32px;"></span>
+      <span style="width:32px;"></span>
+    </div>`;
+
+  // 3) 렌더 — 모든 지점이 동일한 대분류·행 수를 가지도록 (부족하면 빈칸)
+  let html = '';
+  const anyData = TYPE_ORDER.some(t => typeRows[t] > 0);
+  sectionGroups.forEach(({ label, grouped }) => {
+    html += `<div class="issue-card"><div class="issue-card-title">${label}</div>`;
+    if (!anyData) { html += `<div class="issue-empty">No significant change</div></div>`; return; }
+    TYPE_ORDER.forEach(t => {
+      const rows = typeRows[t];
+      if (rows === 0) return;
+      const s = TYPE_STYLE[t];
+      html += `<div style="margin:7px 0 3px;padding:2px 8px;background:${s.bg};color:${s.color};font-size:10px;font-weight:700;border-radius:4px;">${t}</div>`;
+      html += colHdr;
+      const grp = grouped[t] || [];
+      const limit = TYPE_LIMIT[t] ?? grp.length;
+      const items = grp.slice(0, limit);
+      for (let i = 0; i < rows; i++) {
+        const item = items[i];
+        if (!item) { html += emptyRow; continue; }
+        const valF = (_fcstMtdUnit === 'hl') ? item.fcstHL : item.fcst;
+        const valM = (_fcstMtdUnit === 'hl') ? item.mtdHL : item.mtd;
+        html += `<div class="issue-item" style="gap:4px;">
+          <span class="issue-sku" title="${item.name} (${item.brand})">${item.name}</span>
+          <span style="width:32px;text-align:right;font-size:10px;">${fmtHL0(valF)}</span>
+          <span style="width:32px;text-align:right;font-size:10px;">${fmtHL0(valM)}</span>
+          <span style="width:32px;text-align:right;font-size:10px;">${fmtAch(item.ach)}</span>
+        </div>`;
+      }
+    });
+    html += `</div>`;
+  });
+
+  document.getElementById('fcst-mtd-issue').innerHTML = html;
 }
 
 
@@ -4784,7 +4976,8 @@ function renderYTDSkuTable() {
       let cells = '';
       for (let m = 0; m < 12; m++) {
         const apv  = ap[m]  != null ? (isHL ? ap[m]  * fStd : ap[m])  : null;
-        const actv = act[m] != null ? (isHL ? act[m] * fAct : act[m]) : null;
+        // Actual은 현재 FCST 월(현재월=MTD)까지만 — 미래 월은 실적 없음(—)
+        const actv = (m < cur && act[m] != null) ? (isHL ? act[m] * fAct : act[m]) : null;
         cells += `<td${td} style="background:#20552708;border-left:2px solid #ccc">${fmt(apv)}</td>`;
         if (showRofo) {
           const rv = rofo[m] != null ? (isHL ? rofo[m] * fStd : rofo[m]) : null;
@@ -7419,6 +7612,7 @@ function init() {
   renderKPI();
   renderWK10Tables();
   renderThisWkIssue();
+  renderFcstVsMtdVariance();
   renderLMLYVariance();
   renderChartA();
   renderChartB();
