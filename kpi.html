@@ -56,6 +56,7 @@ let BOTTLE_OUTLETS=[],SNOW_NEW_OUTLETS=[],SNOW_ALL=[],SNOW_TRUE_NEW=[];
 let RSP_DATA_BASE=[],CC_DATA_BASE=[],WS_DATA_BASE=[],Y25_DATA=[];
 let OT_BOTTLE=[],OT_DRAUGHT=[],OT_WS=[];
 let PAULANER_DATA=[];
+let BOTTLE_INCENTIVE=[];
 let siRspAll=[],siCcAll=[];
 const siRF={team:'전체',type:'전체'};
 const siCF={team:'전체',theme:'전체'};
@@ -254,6 +255,7 @@ td.sr-cell{white-space:nowrap}
 <div class="tabs">
   <div class="tab" onclick="switchTab('ontrade',this)">Market Share</div>
   <div class="tab active" onclick="switchTab('bottle',this)">33cl Bottle SR KPI</div>
+  <div class="tab" onclick="switchTab('bottleinc',this)">Bottle Incentive</div>
   <div class="tab" onclick="switchTab('snow',this)">SNOW 50cl 신규 아울렛</div>
   <div class="tab" onclick="switchTab('incentive',this)">Snow Incentive</div>
   <div class="tab" onclick="switchTab('paulaner',this)">파울라너 20L</div>
@@ -302,6 +304,67 @@ td.sr-cell{white-space:nowrap}
         </tr></thead>
         <tbody id="bBody"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTLE INCENTIVE -->
+<div class="page" id="page-bottleinc">
+  <div class="cards" id="biKpiCards"></div>
+
+  <!-- 지점별 예산 집행률 -->
+  <div class="box">
+    <h3>지점별 예산 집행률</h3>
+    <div class="rgrid" id="biRegGrid"></div>
+  </div>
+
+  <div class="box">
+    <h3>월별 지점별 집행 추이</h3>
+    <div class="frow" style="margin-bottom:8px">
+      <label>지점</label>
+      <button class="fb on" onclick="bicr('전체',this)">전체</button>
+      <button class="fb" onclick="bicr('서울',this)">서울</button>
+      <button class="fb" onclick="bicr('부산',this)">부산</button>
+      <button class="fb" onclick="bicr('대구/제주',this)">대구/제주</button>
+      <button class="fb" onclick="bicr('광주',this)">광주</button>
+      <button class="fb" onclick="bicr('대전',this)">대전</button>
+    </div>
+    <div class="frow" style="margin-bottom:8px">
+      <label>보기</label>
+      <button class="fb on" onclick="bicm('amount',this)">집행액(₩)</button>
+      <button class="fb" onclick="bicm('share',this)">지점 내 비중(%)</button>
+      <button class="fb" onclick="bicm('cum',this)">할당 대비 누적(%)</button>
+    </div>
+    <canvas id="biMonthlyChart" style="max-height:280px"></canvas>
+    <div class="ow" style="margin-top:14px"><table id="biMonthlyTable" class="btbl"></table></div>
+  </div>
+
+  <div class="box">
+    <h3>SR별 집행 요약</h3>
+    <div class="tw sr-scroll"><table id="biSrTable"></table></div>
+  </div>
+
+  <div class="box">
+    <h3>아울렛별 집행 내역 <span style="font-size:11px;font-weight:400;color:var(--muted)">(중복 방문 합산 · 월별 볼륨 / 집행액 합계)</span></h3>
+    <div class="frow">
+      <label>지점</label>
+      <button class="fb on" onclick="bif('region','전체',this)">전체</button>
+      <button class="fb" onclick="bif('region','서울',this)">서울</button>
+      <button class="fb" onclick="bif('region','부산',this)">부산</button>
+      <button class="fb" onclick="bif('region','대구',this)">대구</button>
+      <button class="fb" onclick="bif('region','대전',this)">대전</button>
+      <button class="fb" onclick="bif('region','광주',this)">광주</button>
+      <button class="fb" onclick="bif('region','제주',this)">제주</button>
+    </div>
+    <div class="frow">
+      <label>SR</label>
+      <select class="fsel" id="biSrSel" onchange="renderBottleIncentive()"><option value="">전체</option></select>
+      <label>검색</label>
+      <input class="fi" id="biSearch" placeholder="아울렛명 검색..." oninput="renderBottleIncentive()">
+      <span class="fc" id="biCount"></span>
+    </div>
+    <div class="ow">
+      <table class="btbl" id="biDetailTable"></table>
     </div>
   </div>
 </div>
@@ -703,6 +766,35 @@ td.sr-cell{white-space:nowrap}
     </div>
   </div>
 
+  <!-- Bottle Incentive 업데이트 -->
+  <div class="box" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">Bottle Incentive (Market Visit) 업데이트</h3>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">① "Sales Market Visit (Bottle boost)" 파일 업로드 → ② 미리보기 확인 → ③ 대시보드 반영 · 파일 내 지점 시트(OnSeoul/OnBusan/OnDaejeon/OnGwangju/OnDaeguJeju)의 방문·집행 데이터를 읽어옵니다.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <input type="file" id="fBottleInc" accept=".xlsx,.xls" style="display:none" onchange="readBottleInc(this)">
+      <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="if(confirm('⚠ [Bottle Incentive 업데이트 주의]\n\n파일에 포함된 지점의 기존 데이터가 모두 삭제되고\n파일 내용으로 교체됩니다.\n계속하시겠습니까?'))document.getElementById('fBottleInc').click()">📁 Market Visit 파일 업로드</button>
+      <span id="fnBottleInc" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div class="status-grid" id="statusBottleInc"></div>
+    <div class="preview-box" id="pvBottleInc">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span><span class="prev-count" id="pcBottleInc"></span>
+        <div>
+          <button class="confirm-btn" onclick="confirmBottleInc()">대시보드 반영</button>
+          <button class="cancel-btn" onclick="cancelBottleInc()">취소</button>
+        </div>
+      </div>
+      <div class="ow" style="max-height:300px">
+        <table class="utable">
+          <thead><tr><th>지점</th><th class="r">월</th><th class="r">일</th><th>아울렛</th><th>도매상</th><th>브랜드</th><th>SR</th><th class="r">볼륨</th><th class="r">집행액</th></tr></thead>
+          <tbody id="pbBottleInc"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- On Trade Bottle & Draught 업데이트 -->
   <div class="box" style="margin-top:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -936,7 +1028,7 @@ td.sr-cell{white-space:nowrap}
 const CD={plugins:{legend:{labels:{color:'#6b7280',font:{size:11}}}},scales:{x:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}},y:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}}}};
 function pct(a,t){return t?Math.round(a/t*100):null}
 function badge(p){if(p===null)return '<span class="mu">–</span>';const c=p>=100?'bg':p>=80?'by':'br';return `<span class="badge ${c}">${p}%</span>`;}
-function switchTab(n,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');el.classList.add('active');if(n==='incentive')initSnowIncentive();if(n==='ontrade')initOnTradeView();if(n==='paulaner')initPaulanerView();}
+function switchTab(n,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');el.classList.add('active');if(n==='incentive')initSnowIncentive();if(n==='ontrade')initOnTradeView();if(n==='paulaner')initPaulanerView();if(n==='bottleinc')initBottleIncentiveView();}
 function rtag(r){return `<span class="tag tag-${r}">${r}</span>`;}
 
 // Data comes from Supabase
@@ -1112,6 +1204,182 @@ function initBottleView(){
   renderBottleKPI();
 }
 initBottleView();
+
+// ═══════════════════════════════════════════════════
+// Bottle Incentive (Market Visit / Bottle Boost) — 지점별 예산 집행 현황
+// 할당(분모)은 이미지 "법인카드 결제 26Y Plan" 고정값, 집행은 BOTTLE_INCENTIVE(방문 budget 합).
+const BI_ALLOC={'서울':30000000,'부산':12500000,'대전':6000000,'광주':5500000,'대구/제주':6000000};
+const BI_ALLOC_TOTAL=60000000; // 26Y Plan 지점 합(BD/HOS/Buffer 제외)
+const BI_REGIONS=['서울','부산','대구/제주','광주','대전'];
+const BI_REG_COLORS={'서울':'#2563eb','부산':'#ea580c','대구/제주':'#9333ea','광주':'#dc2626','대전':'#0d9488'};
+// 한글 team → 지역 그리드 키 (대구·제주 묶음)
+function biReg(team){return team==='대구'||team==='제주'?'대구/제주':team;}
+function biWon(n){return (Math.round(n||0)).toLocaleString('ko-KR')+'원';}
+let biMonthlyChart=null;
+let biChartMode='amount';
+let biChartReg='전체';
+function bicm(mode,btn){biChartMode=mode;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderBottleIncentiveMonthly();}
+function bicr(reg,btn){biChartReg=reg;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderBottleIncentiveMonthly();}
+function biActiveMonths(){
+  const s=new Set();
+  BOTTLE_INCENTIVE.forEach(d=>{if(d.mv_month)s.add(+d.mv_month);});
+  return [...s].sort((a,b)=>a-b);
+}
+function biMonthMatrix(){
+  const months=biActiveMonths();
+  const mat={};BI_REGIONS.forEach(r=>{mat[r]={};months.forEach(m=>mat[r][m]=0);});
+  BOTTLE_INCENTIVE.forEach(d=>{const r=biReg(d.team),m=+d.mv_month;if(mat[r]&&m&&mat[r][m]!=null)mat[r][m]+=(+d.budget||0);});
+  return {months,mat};
+}
+function renderBottleIncentiveMonthly(){
+  const {months,mat}=biMonthMatrix();
+  const mode=biChartMode, isPct=mode!=='amount';
+  const regions=biChartReg==='전체'?BI_REGIONS:[biChartReg];
+  // 모드별 시리즈 계산
+  const branchTotal={};BI_REGIONS.forEach(r=>branchTotal[r]=months.reduce((s,m)=>s+(mat[r][m]||0),0));
+  const seriesFor=r=>{
+    if(mode==='share'){const tot=branchTotal[r]||0;return months.map(m=>tot?(mat[r][m]||0)/tot*100:0);}
+    if(mode==='cum'){const al=BI_ALLOC[r]||0;let c=0;return months.map(m=>{c+=(mat[r][m]||0);return al?c/al*100:0;});}
+    return months.map(m=>mat[r][m]||0);
+  };
+  // 차트 (지점별 선그래프)
+  const canvas=document.getElementById('biMonthlyChart');
+  if(biMonthlyChart){biMonthlyChart.destroy();biMonthlyChart=null;}
+  if(canvas&&months.length){
+    // 집행액: 단일 축 절대금액 (서울이 큰 그대로) · 작은 지점은 지점 버튼/% 모드로 확대해서 확인
+    const datasets=regions.map(r=>({label:r,data:seriesFor(r),borderColor:BI_REG_COLORS[r],backgroundColor:BI_REG_COLORS[r],borderWidth:2.5,tension:0.3,pointRadius:0,pointHoverRadius:5,fill:false,spanGaps:true}));
+    const tipLabel=isPct?(c=>`${c.dataset.label}: ${c.parsed.y.toFixed(1)}%`):(c=>`${c.dataset.label}: ${biWon(c.parsed.y)}`);
+    const tipCb=isPct?{label:tipLabel}:{label:tipLabel,footer:items=>'월 합계: '+biWon(items.reduce((s,i)=>s+(i.parsed.y||0),0))};
+    const yTick=isPct?(v=>v+'%'):(v=>(v/10000).toLocaleString()+'만');
+    const scales={...CD.scales,y:{...CD.scales.y,beginAtZero:true,suggestedMax:mode==='cum'?100:undefined,ticks:{...CD.scales.y.ticks,callback:yTick}}};
+    biMonthlyChart=new Chart(canvas,{type:'line',data:{labels:months.map(m=>m+'월'),datasets},options:{...CD,responsive:true,maintainAspectRatio:true,interaction:{mode:'index',intersect:false},
+      plugins:{...CD.plugins,legend:{labels:{usePointStyle:true,color:'#6b7280',font:{size:11}}},tooltip:{mode:'index',intersect:false,callbacks:tipCb}},
+      scales}});
+  }
+  // 피벗 표 (지점 × 월)
+  const t=document.getElementById('biMonthlyTable');
+  if(t){
+    if(!months.length){t.innerHTML=`<thead><tr><th style="text-align:center;color:var(--muted);padding:14px">데이터 업데이트 탭에서 Market Visit 파일을 업로드하세요.</th></tr></thead>`;return;}
+    const ca='text-align:center';
+    const h=`<thead><tr><th style="${ca}">지점</th>${months.map(m=>`<th class="r">${m}월</th>`).join('')}<th class="r">합계</th></tr></thead>`;
+    let tb='';
+    BI_REGIONS.forEach(r=>{
+      const rowTotal=months.reduce((s,m)=>s+(mat[r][m]||0),0);
+      const tagReg=r==='대구/제주'?'대구':r;
+      tb+=`<tr><td><span class="tag tag-${tagReg}">${r}</span></td>${months.map(m=>`<td class="r">${mat[r][m]?biWon(mat[r][m]):'–'}</td>`).join('')}<td class="r bo">${biWon(rowTotal)}</td></tr>`;
+    });
+    const colTotals=months.map(m=>BI_REGIONS.reduce((s,r)=>s+(mat[r][m]||0),0));
+    const grand=colTotals.reduce((s,v)=>s+v,0);
+    tb+=`<tr class="rrow"><td>월 합계</td>${colTotals.map(v=>`<td class="r">${biWon(v)}</td>`).join('')}<td class="r bo">${biWon(grand)}</td></tr>`;
+    t.innerHTML=h+`<tbody>${tb}</tbody>`;
+  }
+}
+
+function renderBottleIncentiveKPI(){
+  const pctColor=p=>p===null?'var(--accent)':p>=100?'var(--green)':p>=80?'var(--yellow)':'var(--red)';
+  const spentTotal=BOTTLE_INCENTIVE.reduce((s,d)=>s+(+d.budget||0),0);
+  const restTotal=BI_ALLOC_TOTAL-spentTotal;
+  const pTotal=pct(spentTotal,BI_ALLOC_TOTAL);
+  // 지점별 집행
+  const regSpent={};BI_REGIONS.forEach(r=>regSpent[r]=0);
+  BOTTLE_INCENTIVE.forEach(d=>{const r=biReg(d.team);if(regSpent[r]!=null)regSpent[r]+=(+d.budget||0);});
+
+  // KPI 카드
+  const cardsEl=document.getElementById('biKpiCards');
+  if(cardsEl){
+    cardsEl.innerHTML=
+      `<div class="card"><div class="card-label">총 할당 예산</div><div class="card-value" style="color:var(--accent)">${(BI_ALLOC_TOTAL/10000).toLocaleString('ko-KR')}만</div><div class="card-sub">${biWon(BI_ALLOC_TOTAL)}</div></div>`+
+      `<div class="card"><div class="card-label">총 집행액</div><div class="card-value" style="color:var(--text)">${(spentTotal/10000).toLocaleString('ko-KR')}만</div><div class="card-sub">${biWon(spentTotal)}</div></div>`+
+      `<div class="card"><div class="card-label">잔여 예산</div><div class="card-value" style="color:${restTotal<0?'var(--red)':'var(--text)'}">${(restTotal/10000).toLocaleString('ko-KR')}만</div><div class="card-sub">${biWon(restTotal)}</div></div>`+
+      `<div class="card"><div class="card-label">전체 집행률</div><div class="card-value" style="color:${pctColor(pTotal)}">${pTotal!==null?pTotal+'%':'–'}</div><div class="card-sub">방문 ${BOTTLE_INCENTIVE.length}건</div></div>`;
+  }
+
+  // 지점별 집행률 막대
+  const regEl=document.getElementById('biRegGrid');
+  if(regEl){
+    regEl.innerHTML=BI_REGIONS.map(region=>{
+      const alloc=BI_ALLOC[region]||0;
+      const spent=regSpent[region]||0;
+      const rest=alloc-spent;
+      const p=pct(spent,alloc);
+      const col=p===null?'var(--accent)':p>=100?'var(--green)':p>=80?'var(--yellow)':'var(--red)';
+      const w=p===null?0:Math.min(p,100);
+      const tagReg=region==='대구/제주'?'대구':region;
+      return `<div class="rcard"><h4><span class="tag tag-${tagReg}">${region}</span></h4>`+
+        `<div class="rpbar-row"><span class="rpbar-label">집행</span><div class="rpbar-track"><div class="rpbar-fill" style="width:${w}%;background:${col}"></div></div><span class="rpbar-pct" style="color:${col}">${p!==null?p+'%':'–'}</span></div>`+
+        `<div style="font-size:11px;color:var(--muted);line-height:1.7;margin-top:4px">할당 ${biWon(alloc)}<br>집행 <b style="color:var(--text)">${biWon(spent)}</b><br>잔여 <span style="color:${rest<0?'var(--red)':'inherit'}">${biWon(rest)}</span></div>`+
+        `</div>`;
+    }).join('');
+  }
+}
+
+function renderBottleIncentiveSr(){
+  const t=document.getElementById('biSrTable');
+  if(!t)return;
+  const months=biActiveMonths();
+  const ca='text-align:center';
+  const h=`<thead><tr><th style="${ca}">SR</th><th style="${ca}">지점</th><th class="r">아울렛 수</th>${months.map(m=>`<th class="r">${m}월</th>`).join('')}<th class="r">집행 합계</th><th class="r">지점 할당 대비</th></tr></thead>`;
+  let tb='';
+  BI_REGIONS.forEach(region=>{
+    const rows=BOTTLE_INCENTIVE.filter(d=>biReg(d.team)===region);
+    if(!rows.length)return;
+    const alloc=BI_ALLOC[region]||0;
+    const tagReg=region==='대구/제주'?'대구':region;
+    // 지점 합계
+    const regMon={};months.forEach(m=>regMon[m]=0);
+    let regSpent=0; const regOutlets=new Set();
+    rows.forEach(d=>{regMon[+d.mv_month]=(regMon[+d.mv_month]||0)+(+d.budget||0);regSpent+=(+d.budget||0);if(d.outlet)regOutlets.add((d.team||'')+'|'+d.outlet);});
+    tb+=`<tr class="rrow"><td colspan="2" style="${ca}">${region} 합계</td><td class="r">${regOutlets.size}</td>${months.map(m=>`<td class="r">${regMon[m]?biWon(regMon[m]):'–'}</td>`).join('')}<td class="r bo">${biWon(regSpent)}</td><td class="r">${badge(pct(regSpent,alloc))}</td></tr>`;
+    // SR별 집계
+    const srMap={};
+    rows.forEach(d=>{const k=d.sr||'(미상)';if(!srMap[k])srMap[k]={month:{},spent:0,outlets:new Set()};srMap[k].month[+d.mv_month]=(srMap[k].month[+d.mv_month]||0)+(+d.budget||0);srMap[k].spent+=(+d.budget||0);if(d.outlet)srMap[k].outlets.add(d.outlet);});
+    Object.entries(srMap).sort((a,b)=>b[1].spent-a[1].spent).forEach(([sr,v])=>{
+      tb+=`<tr><td class="sr-cell" style="${ca}">${sr}</td><td style="${ca}"><span class="tag tag-${tagReg}">${region}</span></td><td class="r">${v.outlets.size}</td>${months.map(m=>`<td class="r">${v.month[m]?biWon(v.month[m]):'–'}</td>`).join('')}<td class="r bo" style="color:var(--accent)">${biWon(v.spent)}</td><td class="r">${badge(pct(v.spent,alloc))}</td></tr>`;
+    });
+  });
+  const colCount=3+months.length+2;
+  if(!tb)tb=`<tr><td colspan="${colCount}" style="text-align:center;color:var(--muted);padding:18px">데이터 업데이트 탭에서 Market Visit 파일을 업로드하세요.</td></tr>`;
+  t.innerHTML=h+`<tbody>${tb}</tbody>`;
+}
+
+const biF={region:'전체'};
+function bif(key,val,btn){biF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderBottleIncentive();}
+function renderBottleIncentive(){
+  const months=biActiveMonths();
+  const r=biF.region,sr=document.getElementById('biSrSel').value,q=document.getElementById('biSearch').value.trim().toLowerCase();
+  // 같은 업장(지점+아울렛) 합산: 월별 볼륨 / 집행액 토탈
+  const map=new Map();
+  BOTTLE_INCENTIVE.forEach(d=>{
+    const key=(d.team||'')+'|'+(d.outlet||'');
+    let o=map.get(key);
+    if(!o){o={team:d.team,outlet:d.outlet,srs:new Set(),vol:{},totalVol:0,totalBudget:0};map.set(key,o);}
+    if(d.sr)o.srs.add(d.sr);
+    o.vol[+d.mv_month]=(o.vol[+d.mv_month]||0)+(+d.volume||0);
+    o.totalVol+=(+d.volume||0);
+    o.totalBudget+=(+d.budget||0);
+  });
+  let rows=[...map.values()].filter(o=>(r==='전체'||o.team===r)&&(!sr||o.srs.has(sr))&&(!q||(o.outlet||'').toLowerCase().includes(q)));
+  rows.sort((a,b)=>b.totalBudget-a.totalBudget);
+  const t=document.getElementById('biDetailTable');
+  const head=`<thead><tr><th>지점</th><th>SR</th><th>아울렛명</th>${months.map(m=>`<th class="r">${m}월</th>`).join('')}<th class="r">볼륨합</th><th class="r">집행액</th></tr></thead>`;
+  const body=rows.map(o=>{
+    const srStr=[...o.srs].join(', ')||'–';
+    return `<tr><td>${rtag(o.team)}</td><td class="mu sr-cell">${srStr}</td><td>${o.outlet||'–'}</td>${months.map(m=>{const v=o.vol[m]||0;return v?`<td class="r" style="color:var(--accent)">${v.toLocaleString()}</td>`:`<td class="r mu">–</td>`;}).join('')}<td class="r bo">${o.totalVol?o.totalVol.toLocaleString():'–'}</td><td class="r bo" style="color:var(--accent)">${biWon(o.totalBudget)}</td></tr>`;
+  }).join('')||`<tr><td colspan="${months.length+5}" style="text-align:center;color:var(--muted);padding:18px">데이터 없음</td></tr>`;
+  t.innerHTML=head+`<tbody>${body}</tbody>`;
+  const totBudget=rows.reduce((s,o)=>s+o.totalBudget,0);
+  document.getElementById('biCount').textContent=`총 ${rows.length}개 업장 · ${biWon(totBudget)}`;
+}
+
+function initBottleIncentiveView(){
+  const srs=[...new Set(BOTTLE_INCENTIVE.map(d=>d.sr))].filter(Boolean).sort();
+  const sel=document.getElementById('biSrSel');
+  if(sel){while(sel.options.length>1)sel.remove(1);srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});}
+  renderBottleIncentiveSr();
+  renderBottleIncentive();
+  renderBottleIncentiveKPI();
+  renderBottleIncentiveMonthly();
+}
 
 // SNOW 차트
 const sReg=['서울','부산','대구','제주','대전','광주'];
@@ -1347,6 +1615,13 @@ function renderUploadStatus(){
       plEl.innerHTML=`<div class="status-card"><div class="sc-none">미업로드</div></div>`;
     }
   }
+  const biEl=document.getElementById('statusBottleInc');
+  if(biEl){
+    const BI_ORDER=['서울','부산','대구','제주','대전','광주'];
+    biEl.innerHTML=BOTTLE_INCENTIVE.length>0
+      ?BI_ORDER.map(t=>{const rows=BOTTLE_INCENTIVE.filter(d=>d.team===t);if(!rows.length)return '';const spent=rows.reduce((s,d)=>s+(+d.budget||0),0);return `<div class="status-card uploaded"><div class="sc-branch">${rtag(t)}</div><div class="sc-count">${rows.length}건 · ${biWon(spent)}</div></div>`;}).join('')||`<div class="status-card"><div class="sc-none">미업로드</div></div>`
+      :`<div class="status-card"><div class="sc-none">미업로드</div></div>`;
+  }
 }
 
 
@@ -1355,7 +1630,7 @@ function renderUploadStatus(){
 // ═══════════════════════════════════════════════════
 // Supabase에서 모든 테이블을 재조회하고 정규화 (initDashboard / 다운로드 직전 재사용)
 async function loadAllData(){
-  [BOTTLE_OUTLETS,SNOW_NEW_OUTLETS,SNOW_ALL,RSP_DATA_BASE,CC_DATA_BASE,WS_DATA_BASE,Y25_DATA,OT_BOTTLE,OT_DRAUGHT,OT_WS,PAULANER_DATA]=
+  [BOTTLE_OUTLETS,SNOW_NEW_OUTLETS,SNOW_ALL,RSP_DATA_BASE,CC_DATA_BASE,WS_DATA_BASE,Y25_DATA,OT_BOTTLE,OT_DRAUGHT,OT_WS,PAULANER_DATA,BOTTLE_INCENTIVE]=
     await Promise.all([
       sGet('bottle_outlets','order=team'),
       sGet('snow_new_outlets','order=region'),
@@ -1368,6 +1643,7 @@ async function loadAllData(){
       sGet('on_trade_draught','order=region'),
       sGet('on_trade_ws','order=region'),
       sGet('paulaner_outlets_v2','order=region'),
+      sGet('bottle_incentive','order=team').catch(()=>[]),
     ]);
   // map Supabase column names → JS property names for RSP
   RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));
@@ -1403,6 +1679,7 @@ async function initDashboard(){
   initSnowAllView();
   initOnTradeView();
   initPaulanerView();
+  initBottleIncentiveView();
   renderUploadStatus();
   renderSIUploadStatus();
   updateReferenceDateBadge();
@@ -2183,6 +2460,80 @@ function cancelBottleWide() {
   document.getElementById('pvBottleWide').style.display = 'none';
   document.getElementById('fnBottleWide').textContent = '';
   document.getElementById('fBottleWide').value = '';
+}
+
+// ===== Bottle Incentive (Market Visit / Bottle Boost) 업데이트 =====
+let parsedBottleInc = [];
+const BI_TEAM_NORM={Seoul:'서울',Busan:'부산',Daejeon:'대전',Gwangju:'광주',Daegu:'대구',Jeju:'제주',
+  '서울':'서울','부산':'부산','대전':'대전','광주':'광주','대구':'대구','제주':'제주'};
+function readBottleInc(input){
+  const file=input.files[0]; if(!file) return;
+  document.getElementById('fnBottleInc').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const acc=[];
+      for(const name of wb.SheetNames){
+        // 지점 시트만: "On"으로 시작, OnTotal/MV form 제외
+        if(!/^On/i.test(name)) continue;
+        if(/^OnTotal/i.test(name)||/MV\s*form/i.test(name)) continue;
+        const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''});
+        const hdrIdx=rows.findIndex(r=>r.some(c=>String(c).trim()==='Team')&&r.some(c=>String(c).trim()==='Outlet')&&r.some(c=>String(c).trim()==='Budget'));
+        if(hdrIdx<0) continue;
+        const hdr=rows[hdrIdx].map(c=>String(c).trim());
+        const ix=(...keys)=>{for(const k of keys){const i=hdr.indexOf(k);if(i>=0)return i;}return -1;};
+        const iTeam=ix('Team'),iNo=ix('No.','No'),iYear=ix('Year'),iMon=ix('MV month'),iDate=ix('MV date'),
+          iOut=ix('Outlet'),iWs=ix('WS'),iBrand=ix('Brand'),iSr=ix('SR'),iVol=ix('Volume impact','Volume'),iBud=ix('Budget'),iMgr=ix('MGR');
+        rows.slice(hdrIdx+1).forEach(r=>{
+          if(String(r[0]||'').includes('예시')) return; // (예시) 템플릿 행 제외
+          const outlet=String(r[iOut]||'').trim(); if(!outlet) return;
+          const bud=Number(r[iBud]); if(!isFinite(bud)||bud<=0) return;
+          const teamRaw=String(r[iTeam]||'').trim();
+          const team=BI_TEAM_NORM[teamRaw]||teamRaw;
+          acc.push({
+            team, no:Number(r[iNo])||null, year:Number(r[iYear])||null,
+            mv_month:Number(r[iMon])||null, mv_date:r[iDate]!==''&&r[iDate]!=null?String(r[iDate]).trim():null,
+            outlet, ws:String(r[iWs]||'').trim(), brand:String(r[iBrand]||'').trim(),
+            sr:String(r[iSr]||'').trim(), volume:isFinite(Number(r[iVol]))?Number(r[iVol]):null,
+            budget:bud, mgr:String(r[iMgr]||'').trim(),
+          });
+        });
+      }
+      if(!acc.length){alert('⚠ Market Visit 파일 형식 오류\n지점 시트(OnSeoul 등)에 Team/Outlet/Budget 헤더가 필요합니다.');input.value='';return;}
+      parsedBottleInc=acc;
+      document.getElementById('pcBottleInc').textContent=parsedBottleInc.length+'건';
+      document.getElementById('pbBottleInc').innerHTML=parsedBottleInc.slice(0,50).map(r=>
+        `<tr><td>${rtag(r.team)}</td><td class="r mu">${r.mv_month??'–'}</td><td class="r mu">${r.mv_date??'–'}</td><td>${r.outlet}</td><td class="mu" style="font-size:11px">${r.ws||'–'}</td><td class="mu" style="font-size:11px">${r.brand||'–'}</td><td class="mu">${r.sr||'–'}</td><td class="r">${r.volume??'–'}</td><td class="r">${biWon(r.budget)}</td></tr>`
+      ).join('');
+      document.getElementById('pvBottleInc').style.display='block';
+    }catch(err){alert('오류: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function confirmBottleInc(){
+  if(!parsedBottleInc.length){alert('파일을 먼저 업로드하세요');return;}
+  const teams=[...new Set(parsedBottleInc.map(r=>r.team))].filter(Boolean);
+  if(!teams.length){alert('⚠ 지점(Team) 데이터가 없습니다. 파일을 확인하세요.');return;}
+  const ov=document.getElementById('loadingOverlay');
+  if(ov)ov.style.display='flex';
+  try{
+    await sDel('bottle_incentive','team=in.('+teams.map(encodeURIComponent).join(',')+')');
+    const _at=new Date().toISOString();
+    const rows=parsedBottleInc.map(r=>({...r,updated_at:_at}));
+    await sIns('bottle_incentive',rows);
+    BOTTLE_INCENTIVE=await sGet('bottle_incentive','order=team');
+    const spent=rows.reduce((s,d)=>s+(+d.budget||0),0);
+    alert('✅ Bottle Incentive '+rows.length+'건 저장됨\n지점: '+teams.join(', ')+'\n집행 합계: '+biWon(spent));
+    cancelBottleInc(); renderUploadStatus(); initBottleIncentiveView();
+  }catch(e){alert('오류: '+e.message+'\n\n(테이블이 없으면 migrations/bottle_incentive_init.sql 를 먼저 실행하세요.)');}
+  finally{ if(ov)ov.style.display='none'; }
+}
+function cancelBottleInc(){
+  parsedBottleInc=[];
+  document.getElementById('pvBottleInc').style.display='none';
+  document.getElementById('fnBottleInc').textContent='';
+  document.getElementById('fBottleInc').value='';
 }
 
 // ===== 파울라너 20L 업데이트 =====
