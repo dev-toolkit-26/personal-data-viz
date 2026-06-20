@@ -2661,11 +2661,12 @@ async function downloadCurrent(type) {
     });
     siTriggerDownload(wb,'SNOW_New Outlet_'+today.replace(/-/g,'.')+'.xlsx');
   } else if (type === 'paulaner') {
-    const mCols=[3,4,5,6,7,8,9,10,11,12];
-    const hdr=['Group','WS','거래처명','System',...mCols.map(m=>m+'월'),'합계'];
+    // 업로드 형식과 동일: Group | WS | 거래처명 | System | 설치월 (단일 컬럼, 예 '4월')
+    const hdr=['Group','WS','거래처명','System','설치월'];
     const REG_ORDER=['Seoul','Busan','Daejeon','Daegu','Gwangju','Jeju','NKA'];
     const present=new Set(PAULANER_DATA.map(d=>d.region).filter(Boolean));
     const regions=[...REG_ORDER.filter(r=>present.has(r)),...[...present].filter(r=>!REG_ORDER.includes(r)).sort()];
+    const installMon=d=>{for(let m=3;m<=12;m++)if(d['m'+m]!=null)return m;return null;};
     const wb=XLSX.utils.book_new();
     if(!PAULANER_DATA.length){
       const ws=XLSX.utils.aoa_to_sheet([hdr]);
@@ -2673,9 +2674,8 @@ async function downloadCurrent(type) {
     } else {
       regions.forEach(reg=>{
         const rows=PAULANER_DATA.filter(d=>d.region===reg).map(d=>{
-          const mVals=mCols.map(m=>d['m'+m]??'');
-          const total=mCols.reduce((s,m)=>s+(d['m'+m]??0),0);
-          return [d.region||'',d.ws||'',d.outlet||'',d.system||'',...mVals,total];
+          const im=installMon(d);
+          return [d.region||'',d.ws||'',d.outlet||'',d.system||'',im?im+'월':''];
         });
         const ws=XLSX.utils.aoa_to_sheet([hdr,...rows]);
         XLSX.utils.book_append_sheet(wb,ws,reg);
@@ -3317,13 +3317,22 @@ function renderPaulanerTable(){
   const installMon=d=>{for(let m=3;m<=12;m++)if(d['m'+m]!=null)return m;return null;};
   const SYS_IDX=Object.fromEntries(PL_SYS_ORDER.map((s,i)=>[s,i]));
   data=[...data].sort((a,b)=>a.region.localeCompare(b.region)||(SYS_IDX[a.system]??99)-(SYS_IDX[b.system]??99)||((installMon(a)||99)-(installMon(b)||99))||String(a.outlet).localeCompare(String(b.outlet)));
-  document.getElementById('plCount').textContent=data.length+'개 업장';
+  // 고유 업장수(region+거래처명) + 중복 행 수 — 같은 업장이 시스템 여러 개로 중복 입력된 경우 표시
+  const uniqOutlets=new Set(data.map(d=>d.region+'|'+d.outlet)).size;
+  const dupCnt=data.length-uniqOutlets;
+  document.getElementById('plCount').textContent=uniqOutlets+'개 업장'+(dupCnt>0?` (${dupCnt}개 중복)`:'');
   const thead=document.getElementById('plTableHead');
   if(thead)thead.innerHTML='<th>지역</th><th>시스템</th><th>WS</th><th>거래처명</th><th class="r">설치월</th>';
+  // 중복 업장(같은 region+거래처명이 2행 이상) 키 집합 → 행 강조
+  const cntByOutlet={};
+  for(const d of data){const k=d.region+'|'+d.outlet;cntByOutlet[k]=(cntByOutlet[k]||0)+1;}
   document.getElementById('plBody').innerHTML=data.map(r=>{
     const regStyle=r.region==='NKA'?'color:#9333ea;font-weight:700':'';
     const im=installMon(r);
-    return `<tr><td style="${regStyle}">${r.region}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}</td><td class="r">${im?im+'월':'–'}</td></tr>`;
+    const isDup=cntByOutlet[r.region+'|'+r.outlet]>1;
+    const rowStyle=isDup?'background:#fef3c7':'';
+    const dupTag=isDup?' <span style="font-size:10px;color:#b45309;font-weight:700">중복</span>':'';
+    return `<tr style="${rowStyle}"><td style="${regStyle}">${r.region}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}${dupTag}</td><td class="r">${im?im+'월':'–'}</td></tr>`;
   }).join('')||`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">데이터 없음</td></tr>`;
 }
 
