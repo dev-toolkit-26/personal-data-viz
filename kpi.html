@@ -1016,7 +1016,7 @@ td.sr-cell{white-space:nowrap}
   <div id="plHQReport" style="margin-bottom:16px">
     <div class="box" style="border-left:3px solid #16a34a">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">지점별 · 월별 운영 업장수 <span style="font-size:12px;font-weight:400;color:var(--muted)">(설치월 기준 · keg 하이트/자체/타사 + PA Normal/Column 통합)</span></h3>
+        <h3 style="margin:0">지점별 · 월별 운영 업장수 <span style="font-size:12px;font-weight:400;color:var(--muted)">(설치월 기준 · <b style="color:#0ea5e9">PA</b> / <b style="color:#16a34a">Other</b>(하이트+자체+타사) / <b>TTL</b>)</span></h3>
         <span style="font-size:11px;color:var(--muted)">[UNIT: # of Outlet]</span>
       </div>
       <div class="frow" id="plNiSysRow" style="margin-bottom:8px">
@@ -3235,33 +3235,67 @@ function plOperatingRows(){
   return out;
 }
 // 지점별·월별 운영 업장수 매트릭스 (지역+NKA × 설치월). keg+PA 통합. 시스템 필터 plNiSys.
+// plNiSys==='전체': 월마다 PA전체 / 키그(하이트+자체+타사) 두 하위컬럼 병기. 개별 필터: 단일 값.
 function renderPaulanerHQReport() {
   const tbl=document.getElementById('plNiTable');
   if(!tbl)return;
-  let data=plOperatingRows();
-  if(!data.length){
+  const allRows=plOperatingRows();
+  if(!allRows.length){
     tbl.innerHTML='<tbody><tr><td style="color:var(--muted);padding:20px">데이터 없음 — 데이터 업데이트 탭에서 파울라너 20L / Draught 파일을 업로드해주세요</td></tr></tbody>';
     return;
   }
-  if(plNiSys==='PA') data=data.filter(d=>PA_SYS_ORDER.includes(d.system));   // PA Normal+Column 통합
-  else if(plNiSys!=='전체') data=data.filter(d=>d.system===plNiSys);
-  // 항상 업장 중복제거(region+outlet) — 운영 업장수 = 고유 업장 (두 시스템 보유 업장 1곳으로). 가장 이른 달.
-  const mp=new Map();
-  for(const d of data){ const k=d.region+'|'+d.outlet; const ex=mp.get(k); if(!ex||(d.month&&(ex.month==null||d.month<ex.month))) mp.set(k,d); }
-  data=[...mp.values()];
-  const monthsWith=[3,4,5,6,7,8,9,10,11,12].filter(m=>data.some(d=>d.month===m));
-  const months=monthsWith.length?monthsWith:[3,4,5,6,7,8,9,10,11,12];
-  const cnt=(r,m)=>data.filter(d=>d.region===r&&d.month===m).length;
+  const allMonths=[3,4,5,6,7,8,9,10,11,12];
   const branches=PL_NI_REGIONS.filter(r=>r!=='NKA');   // 6 지점 (전국)
-  const cells=vals=>vals.map(v=>`<td class="r">${v||'–'}</td>`).join('')+`<td class="r" style="font-weight:700">${vals.reduce((a,b)=>a+b,0)||'–'}</td>`;
   const subStyle='font-weight:700;border-top:2px solid var(--border);background:var(--surface2)';
+  // 부분집합 내 고유 업장(region+outlet, 가장 이른 달) — 그룹별 독립 dedup
+  const dedup=subset=>{
+    const mp=new Map();
+    for(const d of subset){ const k=d.region+'|'+d.outlet; const ex=mp.get(k); if(!ex||(d.month&&(ex.month==null||d.month<ex.month))) mp.set(k,d); }
+    return [...mp.values()];
+  };
+
+  // ── 전체: PA전체 / 키그(하이트+자체+타사) 두 갈래 동시 표시 ──
+  if(plNiSys==='전체'){
+    const PA_COL='#0ea5e9', KEG_COL='#16a34a';
+    const paData =dedup(allRows.filter(d=>PA_SYS_ORDER.includes(d.system)));
+    const kegData=dedup(allRows.filter(d=>PL_SYS_ORDER.includes(d.system)));
+    const monthsWith=allMonths.filter(m=>paData.some(d=>d.month===m)||kegData.some(d=>d.month===m));
+    const months=monthsWith.length?monthsWith:allMonths;
+    const cPA =(regs,m)=>paData.filter(d=>regs.includes(d.region)&&d.month===m).length;
+    const cKeg=(regs,m)=>kegData.filter(d=>regs.includes(d.region)&&d.month===m).length;
+    // 한 행(지역 집합 regs): 합계 3칸(PA/Other/TTL) 먼저 → 월별 3칸
+    const row=(regs,bold='')=>{
+      const tPA=months.reduce((a,m)=>a+cPA(regs,m),0), tOth=months.reduce((a,m)=>a+cKeg(regs,m),0), tTtl=tPA+tOth;
+      let s=`<td class="r" style="font-weight:700;color:${PA_COL};${bold}">${tPA||'–'}</td><td class="r" style="font-weight:700;color:${KEG_COL};${bold}">${tOth||'–'}</td><td class="r" style="font-weight:800;border-right:2px solid var(--border);${bold}">${tTtl||'–'}</td>`;
+      months.forEach(m=>{ const pa=cPA(regs,m), oth=cKeg(regs,m), ttl=pa+oth;
+        s+=`<td class="r" style="border-left:1px solid var(--border);color:${PA_COL};${bold}">${pa||'–'}</td><td class="r" style="color:${KEG_COL};${bold}">${oth||'–'}</td><td class="r" style="font-weight:700;${bold}">${ttl||'–'}</td>`; });
+      return s;
+    };
+    let h='<thead>';
+    h+='<tr><th rowspan="2">지역</th><th colspan="3" style="text-align:center;border-right:2px solid var(--border)">합계</th>'+months.map(m=>`<th colspan="3" style="text-align:center;border-left:1px solid var(--border)">${m}월</th>`).join('')+'</tr>';
+    h+=`<tr><th class="r" style="color:${PA_COL};font-size:11px">PA</th><th class="r" style="color:${KEG_COL};font-size:11px">Other</th><th class="r" style="font-size:11px;font-weight:700;border-right:2px solid var(--border)">TTL</th>`+months.map(()=>`<th class="r" style="border-left:1px solid var(--border);color:${PA_COL};font-size:11px">PA</th><th class="r" style="color:${KEG_COL};font-size:11px">Other</th><th class="r" style="font-size:11px;font-weight:700">TTL</th>`).join('')+'</tr>';
+    h+='</thead><tbody>';
+    branches.forEach(r=>{ h+=`<tr><td style="font-weight:700">${r}</td>`+row([r])+`</tr>`; });
+    h+=`<tr style="${subStyle}"><td>지점 TTL <span style="font-size:10px;font-weight:400;color:var(--muted)">(전국)</span></td>`+row(branches)+`</tr>`;
+    h+=`<tr><td style="color:#9333ea;font-weight:700">NKA</td>`+row(['NKA'])+`</tr>`;
+    h+=`<tr style="${subStyle}"><td>합계</td>`+row(PL_NI_REGIONS)+`</tr>`;
+    h+='</tbody>'; tbl.innerHTML=h;
+    return;
+  }
+
+  // ── 개별 시스템 필터: 기존 단일 값 매트릭스 ──
+  let data=allRows;
+  if(plNiSys==='PA') data=data.filter(d=>PA_SYS_ORDER.includes(d.system));   // PA Normal+Column 통합
+  else data=data.filter(d=>d.system===plNiSys);
+  data=dedup(data);
+  const monthsWith=allMonths.filter(m=>data.some(d=>d.month===m));
+  const months=monthsWith.length?monthsWith:allMonths;
+  const cnt=(r,m)=>data.filter(d=>d.region===r&&d.month===m).length;
+  const cells=vals=>vals.map(v=>`<td class="r">${v||'–'}</td>`).join('')+`<td class="r" style="font-weight:700">${vals.reduce((a,b)=>a+b,0)||'–'}</td>`;
   let h='<thead><tr><th>지역</th>'+months.map(m=>`<th class="r">${m}월</th>`).join('')+'<th class="r" style="font-weight:700">합계</th></tr></thead><tbody>';
   branches.forEach(r=>{ h+=`<tr><td style="font-weight:700">${r}</td>`+cells(months.map(m=>cnt(r,m)))+`</tr>`; });
-  // 지점 TTL = 전국 (6지점 합, NKA 제외)
   h+=`<tr style="${subStyle}"><td>지점 TTL <span style="font-size:10px;font-weight:400;color:var(--muted)">(전국)</span></td>`+cells(months.map(m=>branches.reduce((a,r)=>a+cnt(r,m),0)))+`</tr>`;
-  // NKA
   h+=`<tr><td style="color:#9333ea;font-weight:700">NKA</td>`+cells(months.map(m=>cnt('NKA',m)))+`</tr>`;
-  // 합계 = 전국 + NKA
   h+=`<tr style="${subStyle}"><td>합계</td>`+cells(months.map(m=>PL_NI_REGIONS.reduce((a,r)=>a+cnt(r,m),0)))+`</tr>`;
   h+='</tbody>'; tbl.innerHTML=h;
 }
