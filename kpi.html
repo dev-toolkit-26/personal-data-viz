@@ -1778,6 +1778,10 @@ async function loadAllData(){
   ]);
   // PA Normal/Column 설치 (별도 로드 — 테이블 미생성 시에도 대시보드 동작 유지)
   PA_INSTALL_DATA = await sGet('paulaner_pa_installs','order=region').catch(()=>[]);
+  // PA 지역/NKA 수동 재분류 override 로드 → 적용 (재업로드에도 유지)
+  const ovRows = await sGet('paulaner_pa_overrides').catch(()=>[]);
+  PA_OVERRIDES = Object.fromEntries(ovRows.map(o=>[o.outlet,o.region]));
+  applyPaOverrides();
   // map Supabase column names → JS property names for RSP
   RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));
   // normalize teams
@@ -3194,6 +3198,7 @@ async function confirmDraught(){
         await sDel('paulaner_pa_installs','id=gt.0');
         await sIns('paulaner_pa_installs', pa);
         PA_INSTALL_DATA = await sGet('paulaner_pa_installs','order=region');
+        applyPaOverrides();   // 재업로드로 재생성된 데이터에 수동 재분류 재적용
         paMsg='\nPA 설치 '+pa.length+'건 (파울라너 20L 탭 반영)';
         initPaulanerView();
       }catch(pe){ paMsg='\n⚠ PA 설치 저장 실패: '+pe.message+'\n(migrations/paulaner_pa_init.sql 실행 필요)'; }
@@ -3337,6 +3342,32 @@ function renderPaulanerTable(){
 }
 
 // ===== PA Normal/Column 설치 뷰 (PA_INSTALL_DATA, 파울라너 20L 탭 상단 섹션) =====
+// PA 지역/NKA 수동 재분류 override (outlet → region). NKA Check 자동분류가 틀린 업장 보정용.
+let PA_OVERRIDES = {};        // outlet -> region (강제 지정)
+let _paRows = [];             // 현재 목록 렌더에 쓰인 필터/정렬된 배열 (인라인 수정 인덱스 참조용)
+function applyPaOverrides(){
+  for(const d of PA_INSTALL_DATA){
+    if(d._region0===undefined) d._region0 = d.region;   // 원본 지역 1회 캡처
+    const ov = PA_OVERRIDES[d.outlet];
+    d.region = (ov!=null) ? ov : d._region0;
+  }
+}
+async function paSetRegion(sel){
+  const d = _paRows[+sel.dataset.idx]; if(!d) return;
+  const outlet = d.outlet, orig = d._region0 ?? d.region, region = sel.value;
+  try{
+    if(region===orig){
+      delete PA_OVERRIDES[outlet];
+      await sDel('paulaner_pa_overrides','outlet=eq.'+encodeURIComponent(outlet));
+    }else{
+      PA_OVERRIDES[outlet]=region;
+      await sUpsert('paulaner_pa_overrides',[{outlet,region}],'outlet');
+    }
+    applyPaOverrides();
+    renderPaulanerPATable();   // 목록 갱신(필터/색상)
+    renderPaulanerPAReport();  // 상단 월별 매트릭스(지역 집계) 갱신
+  }catch(e){ alert('지역 변경 저장 실패: '+e.message+'\n(migrations/paulaner_pa_overrides.sql 실행 필요)'); }
+}
 // 월별 설치 대수 매트릭스 (지역+NKA × 월, 설치월 = m{월} 대수 합). 시스템 필터 paNiSys.
 function renderPaulanerPAReport(){
   const tbl=document.getElementById('paNiTable');
@@ -3400,12 +3431,15 @@ function renderPaulanerPATable(){
   data=[...data].sort((a,b)=>a.region.localeCompare(b.region)||(SYS_IDX[a.system]??99)-(SYS_IDX[b.system]??99)||(firstMon(a)-firstMon(b))||String(a.outlet).localeCompare(String(b.outlet)));
   const totUnits=data.reduce((s,d)=>s+qtyOf(d),0);
   document.getElementById('paCount').textContent=`${data.length}개 업장 · ${totUnits}대`;
-  document.getElementById('paBody').innerHTML=data.map(r=>{
-    const regStyle=r.region==='NKA'?'color:#9333ea;font-weight:700':'';
+  _paRows=data;   // 인라인 지역 수정(paSetRegion)에서 인덱스로 참조
+  document.getElementById('paBody').innerHTML=data.map((r,i)=>{
+    const selStyle=r.region==='NKA'?'color:#9333ea;font-weight:700':'';
+    const opts=PA_NI_REGIONS.map(rg=>`<option value="${rg}"${rg===r.region?' selected':''}>${rg}</option>`).join('');
+    const regCell=`<select data-idx="${i}" onchange="paSetRegion(this)" style="font-size:12px;padding:1px 2px;border:1px solid var(--border);border-radius:4px;background:var(--surface);${selStyle}">${opts}</select>`;
     const q=qtyOf(r);
     const monLabel=monsOf(r).map(m=>m+'월').join('·')||'–';
     const qtyCell=q>1?`<b style="color:#0ea5e9">${q}대</b>`:`${q}대`;
-    return `<tr><td style="${regStyle}">${r.region}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}</td><td style="font-size:11px">${r.addr||'–'}</td><td class="r">${qtyCell}</td><td class="r">${monLabel}</td></tr>`;
+    return `<tr><td>${regCell}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}</td><td style="font-size:11px">${r.addr||'–'}</td><td class="r">${qtyCell}</td><td class="r">${monLabel}</td></tr>`;
   }).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">데이터 없음</td></tr>`;
 }
 
