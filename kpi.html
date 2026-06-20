@@ -57,6 +57,8 @@ let RSP_DATA_BASE=[],CC_DATA_BASE=[],WS_DATA_BASE=[],Y25_DATA=[];
 let OT_BOTTLE=[],OT_DRAUGHT=[],OT_WS=[];
 let PAULANER_DATA=[];
 let BOTTLE_INCENTIVE=[];
+let DRAUGHT_MOVEMENT=[],DRAUGHT_STOCK=[],DRAUGHT_BLADE=[];
+let PA_INSTALL_DATA=[];   // PA Normal/Column 설치 (paulaner_pa_installs) — 20L 키그와 별도
 let siRspAll=[],siCcAll=[];
 const siRF={team:'전체',type:'전체'};
 const siCF={team:'전체',theme:'전체'};
@@ -259,6 +261,7 @@ td.sr-cell{white-space:nowrap}
   <div class="tab" onclick="switchTab('snow',this)">SNOW 50cl 신규 아울렛</div>
   <div class="tab" onclick="switchTab('incentive',this)">Snow Incentive</div>
   <div class="tab" onclick="switchTab('paulaner',this)">파울라너 20L</div>
+  <div class="tab" onclick="switchTab('draught',this)">Draught System</div>
   <div class="tab" onclick="switchTab('update',this)" style="margin-left:auto">데이터 업데이트</div>
 </div>
 
@@ -843,6 +846,48 @@ td.sr-cell{white-space:nowrap}
     </div>
   </div>
 
+  <!-- Draught Analysis 업데이트 -->
+  <div class="box" style="margin-top:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h3 style="margin:0">Draught Analysis 업데이트</h3>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:12px">① "Draught Analysis Progress&amp;Status" 파일 업로드 → ② 미리보기 확인 → ③ 대시보드 반영 · Summary / Progress / 26Y BLADE Plan 시트로 Movement / Stock / BLADE 를 갱신하고, 'Progress Raw data' 시트의 Paulaner 신규설치(PA Normal / PA Column)를 파울라너 20L 탭에 함께 반영합니다.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <input type="file" id="fDraught" accept=".xlsx,.xls" style="display:none" onchange="readDraught(this)">
+      <button class="confirm-btn" style="font-size:13px;padding:9px 20px" onclick="if(confirm('⚠ [Draught 업데이트 주의]\n\nMovement / Stock / BLADE 기존 데이터가 모두 삭제되고\n파일 내용으로 교체됩니다.\n계속하시겠습니까?'))document.getElementById('fDraught').click()">📁 Draught Analysis 파일 업로드</button>
+      <span id="fnDraught" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div class="preview-box" id="pvDraught">
+      <div class="prev-head">
+        <span class="prev-title">미리보기</span><span class="prev-count" id="pcDraught"></span>
+        <div>
+          <button class="confirm-btn" onclick="confirmDraught()">대시보드 반영</button>
+          <button class="cancel-btn" onclick="cancelDraught()">취소</button>
+        </div>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin:4px 0 4px">① Movement (자산×action)</div>
+      <div class="ow" style="max-height:180px">
+        <table class="utable"><thead><tr><th>Brand</th><th>Asset</th><th>Action</th><th class="r">YTD</th><th class="r">월합</th></tr></thead>
+        <tbody id="pbDrMove"></tbody></table>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 4px">② Stock (자산×상태)</div>
+      <div class="ow" style="max-height:180px">
+        <table class="utable"><thead><tr><th>Asset</th><th>Status</th><th class="r">Qty</th><th class="r">비율</th></tr></thead>
+        <tbody id="pbDrStock"></tbody></table>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 4px">③ BLADE (Status / Plan)</div>
+      <div class="ow" style="max-height:180px">
+        <table class="utable"><thead><tr><th>Kind</th><th>Label</th><th class="r">입고</th><th class="r">출고</th><th class="r">기말/건수</th></tr></thead>
+        <tbody id="pbDrBlade"></tbody></table>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 4px">④ PA 신규설치 (Paulaner Normal / Column · 업장단위 → 파울라너 20L 탭)</div>
+      <div class="ow" style="max-height:180px">
+        <table class="utable"><thead><tr><th>지역</th><th>시스템</th><th>거래처명</th><th class="r">대수</th><th class="r">설치월</th></tr></thead>
+        <tbody id="pbDrPA"></tbody></table>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <!-- SNOW INCENTIVE -->
@@ -961,34 +1006,75 @@ td.sr-cell{white-space:nowrap}
 
 <!-- PAULANER 20L -->
 <div class="page" id="page-paulaner">
+
+  <!-- 시스템별 운영 업장수 카드 (keg 3종 + PA Normal/Column) -->
+  <div class="cards" id="plKpiSummary" style="margin-bottom:8px"></div>
+  <div class="cards" id="plKpiSystems" style="margin-bottom:6px"></div>
+  <div id="plKpiNote" style="font-size:11px;color:var(--muted);margin-bottom:16px"></div>
+
+  <!-- 지점별·월별 운영 업장수 (keg 하이트/자체/타사 + PA Normal/Column 통합) -->
   <div id="plHQReport" style="margin-bottom:16px">
-    <div class="box" style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <h3 style="margin:0">1. Sales Volume</h3>
-        <span style="font-size:11px;color:var(--muted)">[UNIT: HL] &nbsp; This week Fcst / PA: <b>20,000 keg HL</b></span>
-      </div>
-      <div class="ow"><table id="plVolTable" style="min-width:700px"></table></div>
-    </div>
-    <div class="box">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <h3 style="margin:0">2. Distribution Update</h3>
+    <div class="box" style="border-left:3px solid #16a34a">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">지점별 · 월별 운영 업장수 <span style="font-size:12px;font-weight:400;color:var(--muted)">(설치월 기준 · keg 하이트/자체/타사 + PA Normal/Column 통합)</span></h3>
         <span style="font-size:11px;color:var(--muted)">[UNIT: # of Outlet]</span>
       </div>
-      <div class="ow"><table id="plDistTable" style="min-width:800px"></table></div>
+      <div class="frow" id="plNiSysRow" style="margin-bottom:8px">
+        <label>시스템</label>
+        <button class="fb on" onclick="setPlNiSys('전체',this)">전체</button>
+        <button class="fb" onclick="setPlNiSys('하이트시스템',this)">하이트</button>
+        <button class="fb" onclick="setPlNiSys('자체시스템',this)">자체</button>
+        <button class="fb" onclick="setPlNiSys('타사 시스템',this)">타사</button>
+        <button class="fb" onclick="setPlNiSys('PA',this)">PA 전체</button>
+        <button class="fb" onclick="setPlNiSys('PA Normal',this)">PA Normal</button>
+        <button class="fb" onclick="setPlNiSys('PA Column',this)">PA Column</button>
+      </div>
+      <div class="ow"><table class="utable" id="plNiTable" style="min-width:700px"></table></div>
     </div>
   </div>
-  <div class="cards" id="plKpiSummary" style="margin-bottom:8px"></div>
-  <div class="cards" id="plKpiSystems"></div>
 
-  <div class="box" style="margin-top:12px">
-    <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
-      <h3 style="margin:0">지점별 시스템 현황</h3>
-      <div style="display:flex;align-items:center;gap:6px">
-        <label style="font-size:12px;font-weight:700;color:var(--muted)">월</label>
-        <select class="fsel" id="plMonthSel" onchange="renderPaulanerPivot()"><option value="">전체</option></select>
+  <!-- PA Normal/Column 설치 (Draught raw 원본) -->
+  <div id="paInstallSection" style="margin-bottom:20px">
+    <div class="box" style="border-left:3px solid #0ea5e9;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">PA 시스템 월별 설치 대수 <span style="font-size:12px;font-weight:400;color:var(--muted)">(PA Normal / PA Column · 지점/NKA · YTD 신규설치 대수)</span></h3>
+        <span style="font-size:13px;color:var(--text)" id="paKpiLine"></span>
+      </div>
+      <div class="frow" id="paNiSysRow" style="margin-bottom:8px">
+        <label>시스템</label>
+        <button class="fb on" onclick="setPaNiSys('전체',this)">전체</button>
+        <button class="fb" onclick="setPaNiSys('PA Normal',this)">PA Normal</button>
+        <button class="fb" onclick="setPaNiSys('PA Column',this)">PA Column</button>
+      </div>
+      <div class="ow"><table class="utable" id="paNiTable" style="min-width:700px"></table></div>
+    </div>
+    <div class="box">
+      <h3 style="margin-bottom:12px">PA 업장 목록</h3>
+      <div class="frow" style="margin-bottom:8px">
+        <label>지역</label>
+        <button class="fb on" onclick="paf('region','전체',this)">전체</button>
+        <button class="fb" onclick="paf('region','Seoul',this)">Seoul</button>
+        <button class="fb" onclick="paf('region','Busan',this)">Busan</button>
+        <button class="fb" onclick="paf('region','Daejeon',this)">Daejeon</button>
+        <button class="fb" onclick="paf('region','Daegu',this)">Daegu</button>
+        <button class="fb" onclick="paf('region','Gwangju',this)">Gwangju</button>
+        <button class="fb" onclick="paf('region','Jeju',this)">Jeju</button>
+        <button class="fb" onclick="paf('region','NKA',this)" style="color:#9333ea">NKA</button>
+        <label>시스템</label>
+        <button class="fb on" onclick="paf('system','전체',this)">전체</button>
+        <button class="fb" onclick="paf('system','PA Normal',this)">PA Normal</button>
+        <button class="fb" onclick="paf('system','PA Column',this)">PA Column</button>
+        <label>검색</label>
+        <input class="fi" id="paSearch" placeholder="거래처명 검색..." oninput="renderPaulanerPATable()">
+        <span class="fc" id="paCount"></span>
+      </div>
+      <div class="ow">
+        <table>
+          <thead><tr id="paTableHead"><th>지역</th><th>시스템</th><th>도매상</th><th>거래처명</th><th>주소</th><th class="r">대수</th><th class="r">설치월</th></tr></thead>
+          <tbody id="paBody"></tbody>
+        </table>
       </div>
     </div>
-    <div class="ow" id="plPivotWrap"></div>
   </div>
 
   <div class="box" style="margin-top:12px">
@@ -1007,8 +1093,6 @@ td.sr-cell{white-space:nowrap}
       <button class="fb on" onclick="plf('system','전체',this)">전체</button>
       <button class="fb" onclick="plf('system','하이트시스템',this)">하이트</button>
       <button class="fb" onclick="plf('system','자체시스템',this)">자체</button>
-      <button class="fb" onclick="plf('system','하이네켄 노멀',this)">HK 노멀</button>
-      <button class="fb" onclick="plf('system','하이네켄 콜륨',this)">HK 콜륨</button>
       <button class="fb" onclick="plf('system','타사 시스템',this)">타사</button>
       <label>검색</label>
       <input class="fi" id="plSearch" placeholder="거래처명 검색..." oninput="renderPaulanerTable()">
@@ -1023,12 +1107,53 @@ td.sr-cell{white-space:nowrap}
   </div>
 </div>
 
+<!-- DRAUGHT SYSTEM -->
+<div class="page" id="page-draught">
+
+  <!-- A. Summary (엑셀 Summary 양식 재현) -->
+  <div class="box" style="margin-bottom:16px">
+    <h2 style="margin:0 0 4px">Summary <span style="font-size:13px;font-weight:400;color:var(--muted)">(2026 May Draught System Analysis)</span></h2>
+    <div id="drSumEmpty" style="display:none;color:var(--muted);font-size:13px;padding:20px 0">데이터가 없습니다. ‘데이터 업데이트’ 탭에서 Draught Analysis 파일을 업로드하세요.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;align-items:start">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">1) Movement Progress_YTD</div>
+        <div class="ow"><table class="utable" id="drSumMove"></table></div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">2) Paulaner Installation Stock</div>
+        <div class="ow"><table class="utable" id="drSumStock"></table></div>
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">3) BLADE Status</div>
+        <div class="ow"><table class="utable" id="drSumBlade"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B. Progress 월별/주차별 추이 -->
+  <div class="box" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+      <h2 style="margin:0">Progress <span style="font-size:13px;font-weight:400;color:var(--muted)">설치 / 철거 / 교체 추이 (지점 합산)</span></h2>
+      <div class="frow" style="margin:0">
+        <button class="fb on" id="drProgM" onclick="setDraughtProgMode('month',this)">월별</button>
+        <button class="fb" id="drProgW" onclick="setDraughtProgMode('week',this)">주차별</button>
+      </div>
+    </div>
+    <div id="drProgNote" style="display:none;color:var(--muted);font-size:12px;margin-bottom:8px"></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">카테고리(설치 / 철거 / 교체)를 누르면 그 아래로 지점별 행이 펼쳐집니다</div>
+    <div class="ow" style="margin-bottom:18px"><table class="utable" id="drProgTable"></table></div>
+    <div class="frow" id="drProgAssetRow" style="margin-bottom:8px"></div>
+    <div style="height:320px"><canvas id="drProgChart"></canvas></div>
+  </div>
+
+</div>
+
 <script>
 // 공통
 const CD={plugins:{legend:{labels:{color:'#6b7280',font:{size:11}}}},scales:{x:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}},y:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}}}};
 function pct(a,t){return t?Math.round(a/t*100):null}
 function badge(p){if(p===null)return '<span class="mu">–</span>';const c=p>=100?'bg':p>=80?'by':'br';return `<span class="badge ${c}">${p}%</span>`;}
-function switchTab(n,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');el.classList.add('active');if(n==='incentive')initSnowIncentive();if(n==='ontrade')initOnTradeView();if(n==='paulaner')initPaulanerView();if(n==='bottleinc')initBottleIncentiveView();}
+function switchTab(n,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');el.classList.add('active');if(n==='incentive')initSnowIncentive();if(n==='ontrade')initOnTradeView();if(n==='paulaner')initPaulanerView();if(n==='bottleinc')initBottleIncentiveView();if(n==='draught')initDraughtView();}
 function rtag(r){return `<span class="tag tag-${r}">${r}</span>`;}
 
 // Data comes from Supabase
@@ -1645,6 +1770,14 @@ async function loadAllData(){
       sGet('paulaner_outlets_v2','order=region'),
       sGet('bottle_incentive','order=team').catch(()=>[]),
     ]);
+  // Draught System (별도 로드 — 테이블 미생성 시에도 대시보드 동작 유지)
+  [DRAUGHT_MOVEMENT,DRAUGHT_STOCK,DRAUGHT_BLADE]=await Promise.all([
+    sGet('draught_movement','order=id').catch(()=>[]),
+    sGet('draught_stock','order=id').catch(()=>[]),
+    sGet('draught_blade','order=id').catch(()=>[]),
+  ]);
+  // PA Normal/Column 설치 (별도 로드 — 테이블 미생성 시에도 대시보드 동작 유지)
+  PA_INSTALL_DATA = await sGet('paulaner_pa_installs','order=region').catch(()=>[]);
   // map Supabase column names → JS property names for RSP
   RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));
   // normalize teams
@@ -1662,6 +1795,192 @@ async function refreshBeforeDownload(){
   catch(e){ alert('최신 데이터 불러오기 실패: '+e.message); throw e; }
   finally{ if(ov)ov.style.display='none'; }
 }
+// ═══════════════════════════════════════════════════
+//  Draught System 뷰
+// ═══════════════════════════════════════════════════
+let drProgChartObj=null, drProgMode='month', drProgAsset='전체';
+const drProgExpanded=new Set(); // 펼쳐진 카테고리 행 키(brand|asset|action)
+const DR_OFFICE_LIST=[
+  {full:'On Seoul',label:'Seoul'},{full:'On Busan',label:'Busan'},{full:'On Daejeon',label:'Daejeon'},
+  {full:'On Daegu',label:'Daegu'},{full:'On Gwangju',label:'Gwangju'},{full:'On Jeju',label:'Jeju'}
+];
+const DR_ASSET_ORDER=['DAVID','BLADE','Normal','Cooler(s)','Cooler(m)','PA Column','PA Coupler','Regulator'];
+const DR_ACTION_LABEL={install:'설치',withdraw:'철거',replace_in:'교체',replace_out:'교체철수'};
+const DR_PROG_ACTIONS=['install','withdraw','replace_in'];   // 설치/철거/교체(설치)
+const DR_SUM_CAT={install:'#of Installation',withdraw:'#of Withdraw',replace_in:'#of Replacement'};
+const DR_PROG_COLORS={install:'#16a34a',withdraw:'#e30613',replace_in:'#2563eb'};
+function drN(v){return (v==null||v==='')?0:Number(v);}
+function drFmt(v){return (v==null||v==='')?'–':Number(v).toLocaleString('ko-KR');}
+
+function initDraughtView(){
+  renderDraughtSummary();
+  renderDraughtProgress();
+}
+
+// ── A. Summary (엑셀 Summary 양식 재현) ──────────────────────────
+function renderDraughtSummary(){
+  const empty=document.getElementById('drSumEmpty');
+  const has=DRAUGHT_MOVEMENT.length||DRAUGHT_STOCK.length||DRAUGHT_BLADE.length;
+  if(empty)empty.style.display=has?'none':'block';
+  // ① Movement Progress_YTD : Brand | Asset | Category | Qty
+  const moveT=document.getElementById('drSumMove');
+  if(moveT){
+    const map=new Map();
+    DRAUGHT_MOVEMENT.filter(r=>!r.office).forEach(r=>{const k=(r.brand||'')+'|'+(r.asset||'');if(!map.has(k))map.set(k,{brand:r.brand||'',asset:r.asset||'',vals:{}});map.get(k).vals[r.action]=drN(r.qty);});
+    const list=[...map.values()].sort((a,b)=>{if(a.brand!==b.brand)return a.brand==='Heineken'?-1:1;return DR_ASSET_ORDER.indexOf(a.asset)-DR_ASSET_ORDER.indexOf(b.asset);});
+    let h='<thead><tr><th>Brand</th><th>Asset</th><th>Category</th><th class="r">Qty</th></tr></thead><tbody>';
+    let pb=null;
+    list.forEach(it=>{
+      Object.keys(DR_SUM_CAT).forEach((a,i)=>{
+        const bcell=(i===0&&it.brand!==pb)?it.brand:''; if(i===0)pb=it.brand;
+        const acell=i===0?it.asset:'';
+        h+=`<tr><td style="font-weight:700">${bcell}</td><td>${acell}</td><td>${DR_SUM_CAT[a]}</td><td class="r">${it.vals[a]!=null?drFmt(it.vals[a]):'–'}</td></tr>`;
+      });
+    });
+    h+='</tbody>'; moveT.innerHTML=list.length?h:'<tbody><tr><td style="color:var(--muted);padding:14px">–</td></tr></tbody>';
+  }
+  // ② Paulaner Installation Stock : Asset | Status | Qty | Remaining
+  const stockT=document.getElementById('drSumStock');
+  if(stockT){
+    const sorted=[...DRAUGHT_STOCK].sort((a,b)=>DR_ASSET_ORDER.indexOf(a.asset)-DR_ASSET_ORDER.indexOf(b.asset));
+    let h='<thead><tr><th>Asset</th><th>Status</th><th class="r">Qty</th><th class="r">Remaining</th></tr></thead><tbody>',pa=null;
+    sorted.forEach(r=>{
+      const acell=r.asset!==pa?r.asset:''; pa=r.asset;
+      const isOp=r.status==='Operation Total';
+      h+=`<tr><td style="font-weight:700">${acell}</td><td${isOp?' style="font-weight:700"':''}>${r.status}</td><td class="r"${isOp?' style="font-weight:700"':''}>${drFmt(r.qty)}</td><td class="r">${r.ratio!=null?Math.round(r.ratio*100)+'%':'–'}</td></tr>`;
+    });
+    h+='</tbody>'; stockT.innerHTML=DRAUGHT_STOCK.length?h:'<tbody><tr><td style="color:var(--muted);padding:14px">–</td></tr></tbody>';
+  }
+  // ③ BLADE Status : Status | Qty
+  const bladeT=document.getElementById('drSumBlade');
+  if(bladeT){
+    const st=DRAUGHT_BLADE.filter(r=>r.kind==='status');
+    let h='<thead><tr><th>Status</th><th class="r">Qty</th></tr></thead><tbody>';
+    st.forEach(r=>{h+=`<tr><td>${r.label}</td><td class="r">${drFmt(r.qty)}</td></tr>`;});
+    h+='</tbody>'; bladeT.innerHTML=st.length?h:'<tbody><tr><td style="color:var(--muted);padding:14px">–</td></tr></tbody>';
+  }
+}
+
+// ── B. Progress 월별/주차별 추이 (자산×동작, 지점 합산) ─────────────
+// office=null → 전 지점 합계, 그 외 → 해당 지점
+function drProgRows(office){
+  return DRAUGHT_MOVEMENT.filter(r=>DR_PROG_ACTIONS.includes(r.action) && (office?r.office===office:!r.office)).sort((a,b)=>{
+    if(a.brand!==b.brand)return a.brand==='Heineken'?-1:1;
+    const ai=DR_ASSET_ORDER.indexOf(a.asset),bi=DR_ASSET_ORDER.indexOf(b.asset);
+    if(ai!==bi)return ai-bi;
+    return DR_PROG_ACTIONS.indexOf(a.action)-DR_PROG_ACTIONS.indexOf(b.action);
+  });
+}
+// 현재 모드(월/주)에 맞는 기간 정의 — periods 없으면 null
+function drProgPeriods(rows){
+  if(drProgMode==='week'){
+    let maxW=0;
+    rows.forEach(r=>{ if(Array.isArray(r.weeks)) r.weeks.forEach((v,i)=>{ if(v!=null&&i+1>maxW)maxW=i+1; }); });
+    if(!maxW)return null;
+    return {periods:Array.from({length:maxW},(_,i)=>i+1),getVal:(r,p)=>Array.isArray(r.weeks)?r.weeks[p-1]:null,labelOf:p=>p+'W'};
+  }
+  let maxM=0; rows.forEach(r=>{for(let m=1;m<=12;m++)if(drN(r['m'+m])!==0&&m>maxM)maxM=m;});
+  if(!maxM)maxM=12;
+  return {periods:Array.from({length:maxM},(_,i)=>i+1),getVal:(r,p)=>r['m'+p],labelOf:p=>p+'월'};
+}
+// 매트릭스 표 HTML(thead+tbody) — Category 클릭 시 지점별 행 드릴다운
+function drProgTableHTML(rows,pd){
+  const {periods,getVal,labelOf}=pd;
+  // 지점 행 lookup: brand|asset|action → [office rows]
+  const offMap=new Map();
+  DRAUGHT_MOVEMENT.filter(r=>DR_PROG_ACTIONS.includes(r.action)&&r.office).forEach(r=>{
+    const k=r.brand+'|'+r.asset+'|'+r.action;
+    if(!offMap.has(k))offMap.set(k,[]); offMap.get(k).push(r);
+  });
+  const offIdx=o=>{const i=DR_OFFICE_LIST.findIndex(x=>x.full===o);return i<0?99:i;};
+  const offLabel=o=>{const x=DR_OFFICE_LIST.find(x=>x.full===o);return x?x.label:o;};
+  const cellsOf=r=>{let tot=0;const cells=periods.map(p=>{const v=getVal(r,p);if(v!=null)tot+=Number(v);return `<td class="r">${v!=null?drFmt(v):'–'}</td>`;}).join('');return {cells,tot};};
+  let h='<thead><tr><th>Brand</th><th>Asset</th><th>Category</th>'+periods.map(p=>`<th class="r">${labelOf(p)}</th>`).join('')+'<th class="r">Total</th></tr></thead><tbody>';
+  let pb=null,paAsset=null;
+  rows.forEach(r=>{
+    const bcell=r.brand!==pb?r.brand:''; pb=r.brand;
+    const ak=r.brand+'|'+r.asset; const acell=ak!==paAsset?r.asset:''; paAsset=ak;
+    const key=r.brand+'|'+r.asset+'|'+r.action;
+    const has=offMap.has(key), exp=drProgExpanded.has(key);
+    const {cells,tot}=cellsOf(r);
+    const catCell=has
+      ? `<td style="cursor:pointer;user-select:none" onclick="toggleDraughtProgRow('${key}')"><span style="color:var(--muted)">${exp?'▾':'▸'}</span> ${DR_ACTION_LABEL[r.action]}</td>`
+      : `<td>${DR_ACTION_LABEL[r.action]}</td>`;
+    h+=`<tr><td style="font-weight:700">${bcell}</td><td>${acell}</td>${catCell}${cells}<td class="r" style="font-weight:700">${drFmt(tot)}</td></tr>`;
+    if(exp&&has){
+      offMap.get(key).slice().sort((a,b)=>offIdx(a.office)-offIdx(b.office)).forEach(or=>{
+        const {cells:oc,tot:ot}=cellsOf(or);
+        h+=`<tr style="background:var(--surface2)"><td></td><td></td><td style="padding-left:22px;color:var(--muted)">└ ${offLabel(or.office)}</td>${oc}<td class="r">${drFmt(ot)}</td></tr>`;
+      });
+    }
+  });
+  return h+'</tbody>';
+}
+function renderDraughtProgress(){
+  const tbl=document.getElementById('drProgTable');
+  const canvas=document.getElementById('drProgChart');
+  const note=document.getElementById('drProgNote');
+  if(!tbl)return;
+  const assetRowEl=document.getElementById('drProgAssetRow');
+  if(!DRAUGHT_MOVEMENT.length){
+    tbl.innerHTML='<tbody><tr><td style="color:var(--muted);padding:20px">데이터가 없습니다. ‘데이터 업데이트’ 탭에서 업로드하세요.</td></tr></tbody>';
+    if(drProgChartObj){drProgChartObj.destroy();drProgChartObj=null;}
+    if(assetRowEl)assetRowEl.innerHTML='';
+    if(note)note.style.display='none';
+    return;
+  }
+  const totalRows=drProgRows(null);
+  const pd=drProgPeriods(totalRows);
+  if(!pd){ // 주차 모드인데 주차 데이터 없음
+    if(note){note.style.display='block';note.textContent='주차 데이터가 없습니다. draught_weeks.sql 실행 후 Draught Analysis 파일을 재업로드하세요.';}
+    tbl.innerHTML='<tbody><tr><td style="color:var(--muted);padding:14px">–</td></tr></tbody>';
+    if(drProgChartObj){drProgChartObj.destroy();drProgChartObj=null;}
+    if(assetRowEl)assetRowEl.innerHTML='';
+    return;
+  }
+  if(note)note.style.display='none';
+  // 전체 + 펼친 카테고리의 지점 드릴다운
+  tbl.innerHTML=drProgTableHTML(totalRows,pd);
+  const {periods,getVal,labelOf}=pd;
+  // 차트 asset 토글 버튼 (전체 + 자산별)
+  const assetRow=document.getElementById('drProgAssetRow');
+  const assets=[]; const nameCnt={};
+  totalRows.forEach(r=>{const k=r.brand+'|'+r.asset;if(!assets.some(a=>a.k===k))assets.push({k,brand:r.brand,asset:r.asset});});
+  assets.forEach(a=>nameCnt[a.asset]=(nameCnt[a.asset]||0)+1);
+  const assetLabel=a=>nameCnt[a.asset]>1?`${a.asset}(${a.brand==='Heineken'?'HE':'PA'})`:a.asset;
+  if(drProgAsset!=='전체' && !assets.some(a=>a.k===drProgAsset)) drProgAsset='전체';
+  if(assetRow){
+    assetRow.innerHTML='<label>차트 자산</label>'+
+      `<button class="fb${drProgAsset==='전체'?' on':''}" onclick="setDraughtProgAsset('전체')">전체</button>`+
+      assets.map(a=>`<button class="fb${drProgAsset===a.k?' on':''}" onclick="setDraughtProgAsset('${a.k}')">${assetLabel(a)}</button>`).join('');
+  }
+  // 차트: 선택 자산(또는 전체)의 동작별 시계열
+  const chartRows=drProgAsset==='전체'?totalRows:totalRows.filter(r=>r.brand+'|'+r.asset===drProgAsset);
+  const series={};DR_PROG_ACTIONS.forEach(a=>series[a]=periods.map(()=>0));
+  chartRows.forEach(r=>periods.forEach((p,i)=>{series[r.action][i]+=drN(getVal(r,p));}));
+  if(canvas){
+    if(drProgChartObj)drProgChartObj.destroy();
+    drProgChartObj=new Chart(canvas,{type:'line',data:{labels:periods.map(labelOf),
+      datasets:DR_PROG_ACTIONS.map(a=>({label:DR_ACTION_LABEL[a],data:series[a],borderColor:DR_PROG_COLORS[a],backgroundColor:DR_PROG_COLORS[a]+'22',tension:.3,fill:false}))},
+      options:{...CD,responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false}}});
+  }
+}
+function setDraughtProgMode(mode,el){
+  drProgMode=mode;
+  const bm=document.getElementById('drProgM'),bw=document.getElementById('drProgW');
+  if(bm)bm.classList.toggle('on',mode==='month');
+  if(bw)bw.classList.toggle('on',mode==='week');
+  renderDraughtProgress();
+}
+function toggleDraughtProgRow(key){
+  if(drProgExpanded.has(key))drProgExpanded.delete(key); else drProgExpanded.add(key);
+  renderDraughtProgress();
+}
+function setDraughtProgAsset(key){
+  drProgAsset=key;
+  renderDraughtProgress();
+}
+
 async function initDashboard(){
   const ov=document.getElementById('loadingOverlay');
   if(ov)ov.style.display='flex';
@@ -2539,7 +2858,16 @@ function cancelBottleInc(){
 // ===== 파울라너 20L 업데이트 =====
 let parsedPaulaner = [];
 const PL_REGION_NORM={Seoul:'Seoul',seoul:'Seoul',Busan:'Busan',busan:'Busan',Daejeon:'Daejeon',daejeon:'Daejeon',Daegu:'Daegu',daegu:'Daegu',Daeug:'Daegu',daeug:'Daegu',Gwangju:'Gwangju',gwangju:'Gwangju',Jeju:'Jeju',jeju:'Jeju',NKA:'NKA',nka:'NKA'};
-const PL_SYS_ORDER=['하이트시스템','자체시스템','하이네켄 노멀','하이네켄 콜륨','타사 시스템'];
+const PL_SYS_ORDER=['하이트시스템','자체시스템','타사 시스템'];   // 하이네켄 노멀/콜륨은 PA Normal/Column(Draught raw)로 이관
+const PL_SYS_SKIP=['하이네켄 노멀','하이네켄 콜륨'];              // keg 업로드 시 제외 (PA는 Draught에서)
+const PL_NI_REGIONS=['Seoul','Busan','Daejeon','Daegu','Gwangju','Jeju','NKA'];
+let plNiSys='전체';   // 운영 업장수 매트릭스 시스템 필터 (전체/keg 3종/PA 2종)
+// PA Normal/Column 설치 (draught raw 원본 → 별도 섹션)
+const PA_SYS_ORDER=['PA Normal','PA Column'];
+const PA_SYS_COLORS={'PA Normal':'#0ea5e9','PA Column':'#9333ea'};
+const PA_NI_REGIONS=['Seoul','Busan','Daejeon','Daegu','Gwangju','Jeju','NKA'];
+let paNiSys='전체';
+const paFilter={region:'전체',system:'전체'};
 
 function readPaulaner(input) {
   const file = input.files[0]; if (!file) return;
@@ -2563,9 +2891,11 @@ function readPaulaner(input) {
         const iOut=hdr.findIndex(h=>h==='거래처명'||h==='Outlet');
         const iSys=ix('System');
         const iCh=ix('Channel');
+        // 신규 형식: '설치월' 단일 컬럼 (설치된 월). 없으면 레거시 월별(3월~12월) 컬럼.
+        const iInstall=hdr.indexOf('설치월');
         const monthCols={};
-        hdr.forEach((h,i)=>{ if(MONTH_LABELS[h]!==undefined) monthCols[MONTH_LABELS[h]]=i; });
-        if (!Object.keys(monthCols).length) continue;
+        if(iInstall<0){ hdr.forEach((h,i)=>{ if(MONTH_LABELS[h]!==undefined) monthCols[MONTH_LABELS[h]]=i; }); }
+        if(iInstall<0 && !Object.keys(monthCols).length) continue;
         Object.keys(monthCols).forEach(m=>monthSet.add(Number(m)));
         const sheetRows = allRows.slice(hdrIdx+1).filter(r=>String(r[iGroup]||'').trim()&&String(r[iOut]||'').trim()).map(r=>{
           const rawGroup=String(r[iGroup]||'').trim();
@@ -2578,12 +2908,18 @@ function readPaulaner(input) {
             outlet:String(r[iOut]||'').trim(),
             system:iSys>=0?String(r[iSys]||'').trim():'',
           };
-          for(const [m,ci] of Object.entries(monthCols)){const v=parseFloat(r[ci]);row['m'+m]=isNaN(v)?null:v;}
+          if(iInstall>=0){
+            const raw=String(r[iInstall]||'').trim();
+            const m=MONTH_LABELS[raw]!==undefined?MONTH_LABELS[raw]:(parseInt(raw,10)||null);
+            if(m){ row['m'+m]=1; monthSet.add(m); }  // 설치월 = 1 (신규 설치 표시)
+          } else {
+            for(const [m,ci] of Object.entries(monthCols)){const v=parseFloat(r[ci]);row['m'+m]=isNaN(v)?null:v;}
+          }
           return row;
-        });
+        }).filter(row=>!PL_SYS_SKIP.includes(row.system));   // 하이네켄 노멀/콜륨 제외 (PA는 Draught에서)
         accumulated.push(...sheetRows);
       }
-      if (!accumulated.length) { alert('⚠ 파울라너 파일 형식 오류\n각 시트는 다음 헤더가 필요합니다:\nGroup, WS, 거래처명, System, 3월~12월'); input.value=''; return; }
+      if (!accumulated.length) { alert('⚠ 파울라너 파일 형식 오류\n각 시트는 다음 헤더가 필요합니다:\nGroup, WS, 거래처명, System, 설치월'); input.value=''; return; }
       parsedPaulaner = accumulated;
       const mList=[...monthSet].sort((a,b)=>a-b);
       document.getElementById('pcPaulaner').textContent = parsedPaulaner.length+'건';
@@ -2636,6 +2972,244 @@ function cancelPaulaner() {
   document.getElementById('fPaulaner').value='';
 }
 
+// ═══════════════════════════════════════════════════
+//  PA Normal/Column 설치 파서 (Draught raw 'Installation Stock Status' → paulaner_pa_installs)
+//  Draught Analysis 업로드에 통합 — 별도 업로드 불필요.
+// ═══════════════════════════════════════════════════
+// 변경일자(엑셀 시리얼/문자열/Date) → 월(1~12) 또는 null
+function paDateMonth(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number'){ try{const d=XLSX.SSF.parse_date_code(v); return d&&d.m?d.m:null;}catch(e){return null;} }
+  if(v instanceof Date) return v.getMonth()+1;
+  const s=String(v).trim();
+  let m=/(\d{4})[-./](\d{1,2})[-./](\d{1,2})/.exec(s); if(m)return Number(m[2]);
+  m=/(\d{1,2})[-./](\d{1,2})[-./](\d{2,4})/.exec(s); if(m)return Number(m[1]);
+  return null;
+}
+// wb 'Progress Raw data' 시트(신규설치 이벤트 로그)에서 Paulaner PA Normal/Column 추출.
+//  → Draught System 탭의 YTD 신규설치(25/25)와 동일 모집단.
+//  업장+시스템 단위로 dedup, m{월} = 그 달 설치 대수(count). 한 업장 2대=같은 행 m{월}=2 (업장수 1 / 대수 2).
+//  소스 컬럼: Office(지점) · 설치사유(신규설치) · Outlet(업장) · 브랜드 · 도매상 · 주소 · 변경일자(월) · NKA Check · 수식0(자산소분류)
+function drParsePAInstall(wb){
+  const shName=wb.SheetNames.find(s=>s.trim().toLowerCase().includes('progress raw data'));
+  if(!shName)return [];
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[shName],{header:1,defval:''});
+  if(!rows.length)return [];
+  const norm=s=>String(s).replace(/\s+/g,'').trim();
+  const hdr=rows[0].map(norm);
+  const findCol=names=>hdr.findIndex(h=>names.some(n=>h.startsWith(n)));
+  const iOff=findCol(['Office']), iReason=findCol(['설치사유']), iOut=findCol(['Outlet']),
+        iBrand=findCol(['브랜드']), iWs=findCol(['도매상']), iAddr=findCol(['주소']),
+        iDate=findCol(['변경일자']), iNka=findCol(['NKACheck']), iAsset=findCol(['수식0']);
+  if(iOff<0||iReason<0||iOut<0||iBrand<0||iDate<0||iAsset<0)return [];
+  const venue=new Map();   // region|system|outlet → {region,ws,outlet,addr,system,mc:{}}
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i]; if(!r)continue;
+    if(String(r[iReason]||'').trim()!=='신규설치')continue;
+    if(String(r[iBrand]||'').trim()!=='Paulaner')continue;
+    const a=String(r[iAsset]||'').trim();
+    const system = a==='Normal' ? 'PA Normal' : (a==='PA Column' ? 'PA Column' : null);
+    if(!system)continue;
+    const month=paDateMonth(r[iDate]); if(!month||month<3||month>12)continue;
+    const outlet=String(r[iOut]||'').trim(); if(!outlet)continue;
+    // NKA Check 컬럼이 우선 (권위 소스). 'NKA'면 region=NKA, 아니면 Office에서 'On ' 제거.
+    const isNka=iNka>=0 && String(r[iNka]||'').trim().toUpperCase()==='NKA';
+    const region=isNka?'NKA':String(r[iOff]||'').trim().replace(/^On\s+/i,'');
+    if(!region)continue;
+    const ws=iWs>=0?String(r[iWs]||'').trim():'';
+    const addr=iAddr>=0?String(r[iAddr]||'').trim():'';
+    const key=region+'|'+system+'|'+outlet;
+    let v=venue.get(key);
+    if(!v){ v={region,ws,outlet,addr,system,mc:{}}; venue.set(key,v); }
+    v.mc[month]=(v.mc[month]||0)+1;          // 그 달 설치 대수 누적
+    if(!v.ws&&ws)v.ws=ws; if(!v.addr&&addr)v.addr=addr;
+  }
+  // 균일 스키마(모든 객체 동일 키 → PGRST102 회피): m{월}=대수(없으면 null)
+  return [...venue.values()].map(v=>{
+    const o={region:v.region,ws:v.ws,outlet:v.outlet,addr:v.addr,system:v.system};
+    for(let m=3;m<=12;m++)o['m'+m]=v.mc[m]||null;
+    return o;
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  Draught Analysis 업로드 (Summary / Progress / 26Y BLADE Plan / PA 설치)
+// ═══════════════════════════════════════════════════
+let parsedDraught={movement:[],stock:[],blade:[],paInstall:[]};
+function drSheetRows(wb,name){
+  const lower=name.toLowerCase();
+  const exact=wb.SheetNames.find(s=>s.trim().toLowerCase()===lower);
+  const key=exact||wb.SheetNames.find(s=>s.trim().toLowerCase().includes(lower));
+  return key?XLSX.utils.sheet_to_json(wb.Sheets[key],{header:1,defval:null}):null;
+}
+function drParseMovement(wb){
+  const rows=drSheetRows(wb,'Progress'); if(!rows)return [];
+  const MT=[11,16,21,27,32,37,43,48,54,59,64,69]; // 0-based 월 Total 컬럼 Jan..Dec
+  const ACT={'신규설치':'install','단순철수':'withdraw','교체설치':'replace_in','교체철수':'replace_out'};
+  const SKIP=['Heineken','Paulaner','Brand Total'];
+  // 주차 컬럼맵: 'Week' 헤더행(E열)에서 ^\d+W$ 셀 → {col, week}
+  const wkHdr=rows.findIndex(r=>r && String(r[4]==null?'':r[4]).trim()==='Week');
+  const wkCols=[]; let maxWk=0;
+  if(wkHdr>=0){
+    rows[wkHdr].forEach((c,ci)=>{
+      const m=/^(\d+)W$/.exec(String(c==null?'':c).trim());
+      if(m){const w=Number(m[1]);wkCols.push({ci,w});if(w>maxWk)maxWk=w;}
+    });
+  }
+  const OFFICES=['On Seoul','On Busan','On Daejeon','On Gwangju','On Daegu','On Jeju'];
+  // 한 행에서 qty/월/주차 값 추출 (모든 행 동일 키 → PGRST102 회피)
+  const buildVals=(r)=>{
+    const o={}; const ytd=Number(r[5]); o.qty=isNaN(ytd)?null:ytd;
+    MT.forEach((ci,i)=>{const v=Number(r[ci]);o['m'+(i+1)]=isNaN(v)?null:v;});
+    const weeks=maxWk?new Array(maxWk).fill(null):null;
+    if(weeks)wkCols.forEach(({ci,w})=>{const v=Number(r[ci]);weeks[w-1]=isNaN(v)?null:v;});
+    o.weeks=weeks; return o;
+  };
+  let asset=null, action=null, brand='Heineken'; const seen=new Set(); const out=[];
+  for(const r of rows){
+    if(!r)continue;
+    const d=r[3]==null?'':String(r[3]).trim();
+    const e=r[4]==null?'':String(r[4]).trim();
+    const act=ACT[e];
+    if(act){
+      if(d && !SKIP.includes(d)){ asset=d; if(act==='install'){ if(seen.has(asset)){brand='Paulaner';seen.clear();} seen.add(asset); } }
+      action=act;
+      if(asset) out.push({brand,asset,action,office:null,...buildVals(r)}); // 전 지점 합계
+      continue;
+    }
+    if(asset && action && OFFICES.includes(e)){
+      out.push({brand,asset,action,office:e,...buildVals(r)}); // 지점별
+    }
+  }
+  return out;
+}
+function drParseStock(wb){
+  const rows=drSheetRows(wb,'Summary'); if(!rows)return [];
+  const hdr=rows.findIndex(r=>r&&String(r[9]).trim()==='Asset'&&String(r[10]).trim()==='Status');
+  if(hdr<0)return [];
+  const SUB=['(HE & PA)','(PA Only)','(PA Column)'];
+  let asset=null; const out=[];
+  for(let i=hdr+1;i<rows.length;i++){
+    const r=rows[i]; if(!r)continue;
+    const j=r[9]==null?'':String(r[9]).trim();
+    const k=r[10]==null?'':String(r[10]).trim();
+    if(j && !SUB.includes(j)) asset=j;
+    if(!k||!asset)continue;
+    const qty=Number(r[11]); const ratio=Number(r[12]);
+    out.push({asset,status:k,qty:isNaN(qty)?null:qty,ratio:isNaN(ratio)?null:ratio});
+  }
+  return out;
+}
+function drParseBlade(wb){
+  const blade=[];
+  // status: Summary cols X(23)–Y(24)
+  const srows=drSheetRows(wb,'Summary');
+  if(srows){
+    srows.forEach(r=>{
+      if(!r)return;
+      const x=r[23]==null?'':String(r[23]).trim();
+      const y=r[24];
+      if(x && y!=null && !isNaN(Number(y))) blade.push({kind:'status',label:x,month:null,inq:null,outq:null,ending:null,qty:Number(y)});
+    });
+  }
+  // plan: 26Y BLADE Plan 시트 (월별 입고/출고/기말재고)
+  const prows=drSheetRows(wb,'BLADE Plan');
+  if(prows){
+    const mh=prows.findIndex(r=>r&&String(r[1]).trim()==='Month');
+    if(mh>=0){
+      const hdr=prows[mh]; const monthCols=[];
+      for(let c=2;c<hdr.length;c+=2){
+        const lab=hdr[c]==null?'':String(hdr[c]).trim();
+        if(lab) monthCols.push({label:lab,inC:c,outC:c+1});
+      }
+      let endRow=prows.length;
+      const nxt=prows.findIndex((r,i)=>i>mh && r && String(r[1]).trim()==='Month');
+      if(nxt>=0)endRow=nxt;
+      let endingRow=null;
+      for(let i=mh+1;i<endRow;i++){ if(prows[i]&&String(prows[i][1]||'').trim()==='기말재고'){endingRow=prows[i];break;} }
+      monthCols.forEach((mc,k)=>{
+        let inq=0,outq=0;
+        for(let i=mh+1;i<endRow;i++){
+          const r=prows[i]; if(!r)continue;
+          const b=String(r[1]||'').trim();
+          if(b.startsWith('입고')){const v=Number(r[mc.inC]);if(!isNaN(v))inq+=v;}
+          if(b.startsWith('출고')){const v=Number(r[mc.outC]);if(!isNaN(v))outq+=Math.abs(v);}
+        }
+        const ending=endingRow?Number(endingRow[mc.outC]):NaN;
+        blade.push({kind:'plan',label:mc.label,month:k+1,inq:inq||null,outq:outq||null,ending:isNaN(ending)?null:ending,qty:null});
+      });
+    }
+  }
+  return blade;
+}
+function readDraught(input){
+  const file=input.files[0]; if(!file)return;
+  document.getElementById('fnDraught').textContent=file.name;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const movement=drParseMovement(wb), stock=drParseStock(wb), blade=drParseBlade(wb), paInstall=drParsePAInstall(wb);
+      if(!movement.length && !stock.length && !blade.length){
+        alert('⚠ Draught 파일 형식 오류\nSummary / Progress / 26Y BLADE Plan 시트를 찾을 수 없습니다.');
+        input.value=''; return;
+      }
+      parsedDraught={movement,stock,blade,paInstall};
+      const sumMonths=r=>[1,2,3,4,5,6,7,8,9,10,11,12].reduce((s,m)=>s+drN(r['m'+m]),0);
+      const paUnits=paInstall.reduce((s,d)=>{for(let m=3;m<=12;m++)s+=(d['m'+m]||0);return s;},0);
+      document.getElementById('pcDraught').textContent=`Movement ${movement.length} · Stock ${stock.length} · BLADE ${blade.length} · PA설치 ${paInstall.length}업장/${paUnits}대`;
+      document.getElementById('pbDrMove').innerHTML=movement.slice(0,80).map(r=>`<tr><td>${r.brand}</td><td>${r.asset}</td><td>${DR_ACTION_LABEL[r.action]||r.action}</td><td class="r">${drFmt(r.qty)}</td><td class="r">${drFmt(sumMonths(r))}</td></tr>`).join('');
+      document.getElementById('pbDrStock').innerHTML=stock.slice(0,80).map(r=>`<tr><td>${r.asset}</td><td>${r.status}</td><td class="r">${drFmt(r.qty)}</td><td class="r">${r.ratio!=null?Math.round(r.ratio*100)+'%':'–'}</td></tr>`).join('');
+      document.getElementById('pbDrBlade').innerHTML=blade.slice(0,80).map(r=>`<tr><td>${r.kind}</td><td>${r.label}</td><td class="r">${r.inq!=null?drFmt(r.inq):'–'}</td><td class="r">${r.outq!=null?drFmt(r.outq):'–'}</td><td class="r">${r.kind==='plan'?drFmt(r.ending):drFmt(r.qty)}</td></tr>`).join('');
+      const paMons=d=>{const a=[];for(let m=3;m<=12;m++)if(d['m'+m]!=null)a.push(m+'월');return a.join('·');};
+      const paQty=d=>{let q=0;for(let m=3;m<=12;m++)q+=(d['m'+m]||0);return q;};
+      document.getElementById('pbDrPA').innerHTML=paInstall.slice(0,80).map(r=>{const q=paQty(r);return `<tr><td style="${r.region==='NKA'?'color:#9333ea;font-weight:700':''}">${r.region}</td><td>${r.system}</td><td>${r.outlet}</td><td class="r">${q>1?'<b>'+q+'대</b>':q+'대'}</td><td class="r">${paMons(r)||'–'}</td></tr>`;}).join('')||'<tr><td colspan="5" style="color:var(--muted)">PA 신규설치 행 없음 (Progress Raw data 시트 확인)</td></tr>';
+      document.getElementById('pvDraught').style.display='block';
+    }catch(err){ alert('오류: '+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function confirmDraught(){
+  const {movement,stock,blade,paInstall}=parsedDraught;
+  if(!movement.length && !stock.length && !blade.length){ alert('파일을 먼저 업로드하세요'); return; }
+  const ov=document.getElementById('loadingOverlay'); if(ov)ov.style.display='flex';
+  try{
+    const _at=new Date().toISOString();
+    const mv=movement.map(r=>({...r,updated_at:_at}));
+    const st=stock.map(r=>({...r,updated_at:_at}));
+    const bl=blade.map(r=>({...r,updated_at:_at}));
+    await sDel('draught_movement','id=gt.0');
+    await sDel('draught_stock','id=gt.0');
+    await sDel('draught_blade','id=gt.0');
+    await sIns('draught_movement',mv);
+    await sIns('draught_stock',st);
+    await sIns('draught_blade',bl);
+    [DRAUGHT_MOVEMENT,DRAUGHT_STOCK,DRAUGHT_BLADE]=await Promise.all([
+      sGet('draught_movement','order=id'),sGet('draught_stock','order=id'),sGet('draught_blade','order=id')]);
+    // PA Normal/Column 설치 — 파일에 해당 행이 있을 때만 교체 (구버전 파일이 PA 데이터를 지우지 않도록)
+    let paMsg='';
+    if((paInstall||[]).length){
+      try{
+        const pa=paInstall.map(r=>({...r,updated_at:_at}));
+        await sDel('paulaner_pa_installs','id=gt.0');
+        await sIns('paulaner_pa_installs', pa);
+        PA_INSTALL_DATA = await sGet('paulaner_pa_installs','order=region');
+        paMsg='\nPA 설치 '+pa.length+'건 (파울라너 20L 탭 반영)';
+        initPaulanerView();
+      }catch(pe){ paMsg='\n⚠ PA 설치 저장 실패: '+pe.message+'\n(migrations/paulaner_pa_init.sql 실행 필요)'; }
+    }
+    alert('✅ Draught 데이터 저장됨\nMovement '+mv.length+' · Stock '+st.length+' · BLADE '+bl.length+paMsg);
+    cancelDraught(); renderUploadStatus(); initDraughtView();
+  }catch(e){ alert('오류: '+e.message+'\n\n(테이블 미생성 시 migrations/draught_init.sql 을 먼저 실행하세요)'); }
+  finally{ if(ov)ov.style.display='none'; }
+}
+function cancelDraught(){
+  parsedDraught={movement:[],stock:[],blade:[],paInstall:[]};
+  document.getElementById('pvDraught').style.display='none';
+  document.getElementById('fnDraught').textContent='';
+  document.getElementById('fDraught').value='';
+}
+
 // 파울라너 뷰
 const plFilter={region:'전체',system:'전체'};
 const plDistExp={outlet:false,outletH:false};
@@ -2646,210 +3220,91 @@ function plf(key,val,el){
   plFilter[key]=val;
   renderPaulanerTable();
 }
+// 운영 업장 통합 목록 (keg 하이트/자체/타사 + PA Normal/Column). 각 항목 = {region,system,outlet,month}.
+//  month = 설치월. PA는 한 업장 여러 대여도 업장 1개(가장 이른 달)로.
+function plOperatingRows(){
+  const firstMon=d=>{for(let m=3;m<=12;m++)if(d['m'+m]!=null)return m;return null;};
+  const out=[];
+  for(const d of PAULANER_DATA){ if(!PL_SYS_ORDER.includes(d.system))continue; out.push({region:d.region,system:d.system,outlet:d.outlet,month:firstMon(d)}); }
+  for(const d of (PA_INSTALL_DATA||[])){ out.push({region:d.region,system:d.system,outlet:d.outlet,month:firstMon(d)}); }
+  return out;
+}
+// 지점별·월별 운영 업장수 매트릭스 (지역+NKA × 설치월). keg+PA 통합. 시스템 필터 plNiSys.
 function renderPaulanerHQReport() {
-  const MONTHS_PL = [3,4,5,6,7,8,9,10,11,12];
-  const PL_VOL_TARGET = {3:73,4:112,5:252,6:270,7:318,8:318,9:414,10:288,11:201,12:114};
-  const PL_DIST_TARGET = {
-    outlet:  {4:20,5:35,6:35,7:30,8:30},
-    special: {3:10,4:15,5:15,6:10},
-    total:   {3:10,4:35,5:50,6:45,7:30,8:30}
-  };
-  const DIST_TOTAL = {outlet:150, special:50, total:200};
-  const HITE_SYS = new Set(['하이트시스템','타사 시스템']);
-  const REGIONS = ['Seoul','Busan','Daejeon','Daegu','Gwangju','Jeju'];
-  const isNKA = d => d.region === 'NKA';
-  const isOutletNH = d => !isNKA(d) && !HITE_SYS.has(d.system);
-  const isOutletH  = d => !isNKA(d) && HITE_SYS.has(d.system);
-  const isNKANH    = d => isNKA(d) && !HITE_SYS.has(d.system);
-  const isNKAH     = d => isNKA(d) && HITE_SYS.has(d.system);
-  const cntM = (fn, m) => PAULANER_DATA.filter(d => fn(d) && d['m'+m]!=null).length;
-  const cntAny = fn => PAULANER_DATA.filter(d => fn(d) && MONTHS_PL.some(m=>d['m'+m]!=null)).length;
-  const pct = (a, t) => t ? Math.round(a/t*100)+'%' : '–';
-  const GH = 'background:#1a5c2a;color:#fff;';
-  const DG = 'background:#444;color:#fff;';
-  const SH = 'background:#ddd;font-weight:700;';
-  const ST = 'background:#f0f0f0;font-weight:700;';
-  const YL = 'background:#FFE66D;font-weight:700;';
-  const BD = 'font-weight:700;';
-  const P  = 'padding:4px 8px;font-size:12px;';
-  const PR = P+'text-align:right;';
-
-  // ─── 1. Sales Volume Table ───────────────────────────────────
-  const volTbl = document.getElementById('plVolTable');
-  if (volTbl) {
-    const volTotal = MONTHS_PL.reduce((s,m)=>s+(PL_VOL_TARGET[m]||0),0);
-    let h = `<thead><tr><th style="${P}${GH}">Category</th>`;
-    MONTHS_PL.forEach(m => h += `<th style="${PR}${GH}">${m}월</th>`);
-    h += `<th style="${PR}${GH}">Total</th></tr></thead><tbody><tr>`;
-    h += `<td style="${P}${GH}">Target (HL)</td>`;
-    MONTHS_PL.forEach(m => h += `<td style="${PR}">${PL_VOL_TARGET[m]??'–'}</td>`);
-    h += `<td style="${PR}${BD}">${volTotal}</td></tr></tbody>`;
-    volTbl.innerHTML = h;
+  const tbl=document.getElementById('plNiTable');
+  if(!tbl)return;
+  let data=plOperatingRows();
+  if(!data.length){
+    tbl.innerHTML='<tbody><tr><td style="color:var(--muted);padding:20px">데이터 없음 — 데이터 업데이트 탭에서 파울라너 20L / Draught 파일을 업로드해주세요</td></tr></tbody>';
+    return;
   }
-
-  // ─── 2. Distribution Update Table ───────────────────────────
-  const distTbl = document.getElementById('plDistTable');
-  if (!distTbl) return;
-
-  const tRow = (label, vals, total, rowStyle='', labelStyle='') => {
-    let r = `<tr><td style="${P}${rowStyle}${labelStyle}">${label}</td>`;
-    MONTHS_PL.forEach(m => {
-      const v = vals[m];
-      r += `<td style="${PR}${rowStyle}">${(v!=null&&v!=='')?(v||0):'–'}</td>`;
-    });
-    r += `<td style="${PR}${rowStyle}${BD}">${total!=null?total:'–'}</td></tr>`;
-    return r;
-  };
-
-  // Build month-level actual counts
-  const onhM={}, ohM={}, nkanhM={}, nkahM={};
-  const regONH={}, regOH={};
-  REGIONS.forEach(r=>{ regONH[r]={}; regOH[r]={}; });
-  MONTHS_PL.forEach(m => {
-    onhM[m]=cntM(isOutletNH,m); ohM[m]=cntM(isOutletH,m);
-    nkanhM[m]=cntM(isNKANH,m); nkahM[m]=cntM(isNKAH,m);
-    REGIONS.forEach(r => {
-      regONH[r][m]=PAULANER_DATA.filter(d=>isOutletNH(d)&&d.region===r&&d['m'+m]!=null).length;
-      regOH[r][m] =PAULANER_DATA.filter(d=>isOutletH(d) &&d.region===r&&d['m'+m]!=null).length;
-    });
-  });
-
-  // Outlet grand per month
-  const outGM={}, nkaGM={}, totGM={};
-  MONTHS_PL.forEach(m => {
-    outGM[m]=(onhM[m]||0)+(ohM[m]||0);
-    nkaGM[m]=(nkanhM[m]||0)+(nkahM[m]||0);
-    totGM[m]=outGM[m]+nkaGM[m];
-  });
-
-  // Unique totals
-  const tONH=cntAny(isOutletNH), tOH=cntAny(isOutletH);
-  const tNH=cntAny(isNKANH),     tNH2=cntAny(isNKAH);
-  const tOut=cntAny(d=>!isNKA(d)), tSpc=cntAny(isNKA);
-  const tAll=PAULANER_DATA.filter(d=>MONTHS_PL.some(m=>d['m'+m]!=null)).length;
-
-  // Target month vals
-  const mkT = src => { const o={}; MONTHS_PL.forEach(m=>{ o[m]=src[m]??''; }); return o; };
-
-  let h = `<thead><tr><th style="${P}${GH}">Category</th>`;
-  MONTHS_PL.forEach(m => h += `<th style="${PR}${GH}">${m}월</th>`);
-  h += `<th style="${PR}${GH}">Total <span style="font-weight:400;font-size:10px;opacity:.85">(Unique)</span></th></tr></thead><tbody>`;
-
-  // Target section
-  h += `<tr><td colspan="${MONTHS_PL.length+2}" style="${P}background:#e8f4e8;${BD}color:#1a5c2a;">▶ Target</td></tr>`;
-  h += tRow('Outlet', mkT(PL_DIST_TARGET.outlet), DIST_TOTAL.outlet, GH);
-  h += tRow('Special (NKA)', mkT(PL_DIST_TARGET.special), DIST_TOTAL.special, GH);
-  h += tRow('Total', mkT(PL_DIST_TARGET.total), DIST_TOTAL.total, GH);
-
-  // Actual section
-  h += `<tr><td colspan="${MONTHS_PL.length+2}" style="${P}${DG}${BD}">▶ Actual</td></tr>`;
-
-  const expBtn = (onclick, open) => `<button onclick="${onclick}" style="background:none;border:1px solid currentColor;border-radius:3px;cursor:pointer;font-size:10px;padding:0 6px;margin-left:8px;color:inherit;font-weight:700;line-height:16px">${open?'−':'+'} 지점</button>`;
-  const sumRow = (label, vals, total, extra='') => {
-    let r = `<tr><td style="${P}${SH}${extra}">${label}</td>`;
-    MONTHS_PL.forEach(m => { const v=vals[m]; r += `<td style="${PR}${SH}${extra}">${v||'–'}</td>`; });
-    r += `<td style="${PR}${SH}${BD}${extra}">${total||'–'}</td></tr>`;
-    return r;
-  };
-
-  // Outlet (non-W/Hite) — subtotal on header, regions collapsible
-  h += sumRow('Outlet'+expBtn('togglePlDist(\'outlet\')', plDistExp.outlet), onhM, tONH);
-  if (plDistExp.outlet) REGIONS.forEach(r => {
-    const rT=PAULANER_DATA.filter(d=>isOutletNH(d)&&d.region===r&&MONTHS_PL.some(m=>d['m'+m]!=null)).length;
-    h += tRow('　'+r, regONH[r], rT);
-  });
-
-  // Outlet+W/Hite — subtotal on header, regions collapsible
-  h += sumRow('Outlet+W/Hite'+expBtn('togglePlDist(\'outletH\')', plDistExp.outletH), ohM, tOH);
-  if (plDistExp.outletH) REGIONS.forEach(r => {
-    const rT=PAULANER_DATA.filter(d=>isOutletH(d)&&d.region===r&&MONTHS_PL.some(m=>d['m'+m]!=null)).length;
-    h += tRow('　'+r, regOH[r], rT);
-  });
-
-  // Outlet grand total
-  h += tRow('Outlet – Total', outGM, tOut, `${ST}color:#1a5c2a;`);
-
-  // Special (NKA) — breakdown first, total below matching Outlet – Total style
-  h += tRow('Special', nkanhM, tNH);
-  h += tRow('Special+W/Hite', nkahM, tNH2);
-  h += tRow('Special (NKA) – Total', nkaGM, tSpc, `${ST}color:#1a5c2a;`);
-
-  // Grand total row
-  h += `<tr style="${BD}"><td style="${P}${GH}">TOTAL</td>`;
-  MONTHS_PL.forEach(m => h += `<td style="${PR}${GH}">${totGM[m]}</td>`);
-  h += `<td style="${PR}${GH}">${tAll}</td></tr>`;
-
-  h += '</tbody>';
-  distTbl.innerHTML = h;
+  if(plNiSys==='PA') data=data.filter(d=>PA_SYS_ORDER.includes(d.system));   // PA Normal+Column 통합
+  else if(plNiSys!=='전체') data=data.filter(d=>d.system===plNiSys);
+  // 항상 업장 중복제거(region+outlet) — 운영 업장수 = 고유 업장 (두 시스템 보유 업장 1곳으로). 가장 이른 달.
+  const mp=new Map();
+  for(const d of data){ const k=d.region+'|'+d.outlet; const ex=mp.get(k); if(!ex||(d.month&&(ex.month==null||d.month<ex.month))) mp.set(k,d); }
+  data=[...mp.values()];
+  const monthsWith=[3,4,5,6,7,8,9,10,11,12].filter(m=>data.some(d=>d.month===m));
+  const months=monthsWith.length?monthsWith:[3,4,5,6,7,8,9,10,11,12];
+  const cnt=(r,m)=>data.filter(d=>d.region===r&&d.month===m).length;
+  const branches=PL_NI_REGIONS.filter(r=>r!=='NKA');   // 6 지점 (전국)
+  const cells=vals=>vals.map(v=>`<td class="r">${v||'–'}</td>`).join('')+`<td class="r" style="font-weight:700">${vals.reduce((a,b)=>a+b,0)||'–'}</td>`;
+  const subStyle='font-weight:700;border-top:2px solid var(--border);background:var(--surface2)';
+  let h='<thead><tr><th>지역</th>'+months.map(m=>`<th class="r">${m}월</th>`).join('')+'<th class="r" style="font-weight:700">합계</th></tr></thead><tbody>';
+  branches.forEach(r=>{ h+=`<tr><td style="font-weight:700">${r}</td>`+cells(months.map(m=>cnt(r,m)))+`</tr>`; });
+  // 지점 TTL = 전국 (6지점 합, NKA 제외)
+  h+=`<tr style="${subStyle}"><td>지점 TTL <span style="font-size:10px;font-weight:400;color:var(--muted)">(전국)</span></td>`+cells(months.map(m=>branches.reduce((a,r)=>a+cnt(r,m),0)))+`</tr>`;
+  // NKA
+  h+=`<tr><td style="color:#9333ea;font-weight:700">NKA</td>`+cells(months.map(m=>cnt('NKA',m)))+`</tr>`;
+  // 합계 = 전국 + NKA
+  h+=`<tr style="${subStyle}"><td>합계</td>`+cells(months.map(m=>PL_NI_REGIONS.reduce((a,r)=>a+cnt(r,m),0)))+`</tr>`;
+  h+='</tbody>'; tbl.innerHTML=h;
+}
+function setPlNiSys(sys,el){
+  plNiSys=sys;
+  const row=document.getElementById('plNiSysRow');
+  if(row)row.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));
+  if(el)el.classList.add('on');
+  renderPaulanerHQReport();
 }
 
 function initPaulanerView(){
   renderPaulanerHQReport();
   renderPaulanerKPI();
-  const sel=document.getElementById('plMonthSel');
-  const months=[3,4,5,6,7,8,9,10,11,12].filter(m=>PAULANER_DATA.some(d=>d['m'+m]!=null));
-  const cur=sel.value;
-  while(sel.options.length>1)sel.remove(1);
-  months.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m+'월';sel.appendChild(o);});
-  if(months.includes(Number(cur)))sel.value=cur;
-  renderPaulanerPivot();
   renderPaulanerTable();
+  // PA Normal/Column 섹션
+  renderPaulanerPAReport();
+  renderPaulanerPATable();
 }
-const PL_SYS_COLORS={'하이트시스템':'#3b6ef5','자체시스템':'#16a34a','하이네켄 노멀':'#d97706','하이네켄 콜륨':'#9333ea','타사 시스템':'#6b7280'};
+const PL_SYS_COLORS={'하이트시스템':'#3b6ef5','자체시스템':'#16a34a','타사 시스템':'#6b7280','PA Normal':'#0ea5e9','PA Column':'#9333ea'};
 function renderPaulanerKPI(){
-  const months=[3,4,5,6,7,8,9,10,11,12].filter(m=>PAULANER_DATA.some(d=>d['m'+m]!=null));
-  const allSystems=[...PL_SYS_ORDER.filter(s=>PAULANER_DATA.some(d=>d.system===s)),
-    ...[...new Set(PAULANER_DATA.map(d=>d.system))].filter(s=>s&&!PL_SYS_ORDER.includes(s)).sort()];
-  const totalOutlets=PAULANER_DATA.length;
-  const noData=!PAULANER_DATA.length;
-  const lastMon=months[months.length-1];
-  const sysCards=noData?'<div class="card"><div class="card-label">파울라너 데이터 없음</div><div class="card-value" style="color:var(--muted)">–</div><div class="card-sub">데이터 업데이트 탭에서 업로드</div></div>':allSystems.map(s=>{
+  const paAll=PA_INSTALL_DATA||[];
+  const unitsOf=rows=>rows.reduce((s,d)=>{for(let m=3;m<=12;m++)s+=(d['m'+m]||0);return s;},0);
+  // keg 3종(업장수) + PA 2종(고유 업장수 / 대수)
+  const sysList=[
+    ...PL_SYS_ORDER.map(s=>({s,cnt:PAULANER_DATA.filter(d=>d.system===s).length,units:null})),
+    ...PA_SYS_ORDER.map(s=>{const rows=paAll.filter(d=>d.system===s);return {s,cnt:new Set(rows.map(d=>d.outlet)).size,units:unitsOf(rows)};})
+  ];
+  const grand=sysList.reduce((a,b)=>a+b.cnt,0);
+  const noData=!PAULANER_DATA.length && !paAll.length;
+  const sysCards=noData?'<div class="card"><div class="card-label">파울라너 데이터 없음</div><div class="card-value" style="color:var(--muted)">–</div><div class="card-sub">데이터 업데이트 탭에서 업로드</div></div>':sysList.map(({s,cnt,units})=>{
     const col=PL_SYS_COLORS[s]||'#94a3b8';
-    const cnt=PAULANER_DATA.filter(d=>d.system===s).length;
-    const pct=totalOutlets?Math.round(cnt/totalOutlets*100):0;
-    return `<div class="card" style="border-top:3px solid ${col};background:${col}11"><div class="card-label" style="color:${col}">${s}</div><div class="card-value" style="color:${col}">${cnt}</div><div class="card-sub">${pct}% · ${lastMon?lastMon+'월 기준':''}</div></div>`;
+    const pct=grand?Math.round(cnt/grand*100):0;
+    const sub=units!=null?`${cnt}개 업장 · ${units}대`:`${pct}%`;
+    return `<div class="card" style="border-top:3px solid ${col};background:${col}11"><div class="card-label" style="color:${col}">${s}</div><div class="card-value" style="color:${col}">${cnt}</div><div class="card-sub">${sub}</div></div>`;
   }).join('');
   document.getElementById('plKpiSummary').innerHTML='';
   document.getElementById('plKpiSystems').innerHTML=sysCards;
-}
-function renderPaulanerPivot(){
-  const mon=document.getElementById('plMonthSel')?.value;
-  let data=PAULANER_DATA;
-  if(mon)data=data.filter(d=>d['m'+mon]!=null);
-  if(!data.length){
-    document.getElementById('plPivotWrap').innerHTML='<div style="padding:20px;text-align:center;color:var(--muted)">데이터 없음 — 데이터 업데이트 탭에서 취합파일을 업로드해주세요</div>';
-    return;
+  // PA Normal/Column 카드 합 vs 고유 업장 차이 안내 (두 시스템 모두 보유한 업장)
+  const note=document.getElementById('plKpiNote');
+  if(note){
+    const paSum=PA_SYS_ORDER.reduce((a,s)=>a+new Set(paAll.filter(d=>d.system===s).map(d=>d.outlet)).size,0);
+    const paUniq=new Set(paAll.map(d=>d.outlet)).size;
+    const dup=paSum-paUniq;
+    note.innerHTML = dup>0
+      ? `※ PA 카드는 <b>시스템별</b> 업장수(합 ${paSum}곳). 두 시스템 모두 보유한 ${dup}곳을 제외하면 <b>고유 운영 업장 ${paUniq}곳</b>입니다.`
+      : '';
   }
-  const REGION_ORDER=['Seoul','Busan','Daejeon','Daegu','Gwangju','Jeju','NKA'];
-  const allSystems=[...PL_SYS_ORDER.filter(s=>data.some(d=>d.system===s)),
-    ...[...new Set(data.map(d=>d.system))].filter(s=>s&&!PL_SYS_ORDER.includes(s)).sort()];
-  const regions=REGION_ORDER.filter(r=>data.some(d=>d.region===r));
-  // count unique outlets per (region, system)
-  const countMap={};
-  for(const d of data){
-    if(!d.region||!d.system)continue;
-    const k=d.region+'__'+d.system;
-    if(!countMap[k])countMap[k]=new Set();
-    countMap[k].add(d.outlet);
-  }
-  const gc=(r,s)=>countMap[r+'__'+s]?.size||0;
-  let html='<table><thead><tr><th>지역</th>';
-  for(const s of allSystems)html+=`<th class="r" style="font-size:12px">${s}</th>`;
-  html+='<th class="r" style="font-weight:700">합계</th></tr></thead><tbody>';
-  for(const r of regions){
-    const counts=allSystems.map(s=>gc(r,s));
-    const total=counts.reduce((a,b)=>a+b,0);
-    html+=`<tr><td><b>${r}</b></td>`;
-    for(const c of counts)html+=`<td class="r">${c||'–'}</td>`;
-    html+=`<td class="r" style="font-weight:700">${total}</td></tr>`;
-  }
-  const sysTotals=allSystems.map(s=>regions.reduce((a,r)=>a+gc(r,s),0));
-  const grandTotal=sysTotals.reduce((a,b)=>a+b,0);
-  html+='<tr style="font-weight:700;border-top:2px solid var(--border);background:var(--surface2)"><td>합계</td>';
-  for(const t of sysTotals)html+=`<td class="r">${t}</td>`;
-  html+=`<td class="r">${grandTotal}</td></tr>`;
-  html+='</tbody></table>';
-  document.getElementById('plPivotWrap').innerHTML=html;
 }
 function renderPaulanerTable(){
   const reg=plFilter.region;
@@ -2859,19 +3314,90 @@ function renderPaulanerTable(){
   if(reg&&reg!=='전체')data=data.filter(d=>d.region===reg);
   if(sys&&sys!=='전체')data=data.filter(d=>d.system===sys);
   if(kw)data=data.filter(d=>(d.outlet||'').toLowerCase().includes(kw)||(d.ws||'').toLowerCase().includes(kw));
-  const months=[3,4,5,6,7,8,9,10,11,12].filter(m=>PAULANER_DATA.some(d=>d['m'+m]!=null));
+  const installMon=d=>{for(let m=3;m<=12;m++)if(d['m'+m]!=null)return m;return null;};
   const SYS_IDX=Object.fromEntries(PL_SYS_ORDER.map((s,i)=>[s,i]));
-  data.sort((a,b)=>a.region.localeCompare(b.region)||(SYS_IDX[a.system]??99)-(SYS_IDX[b.system]??99)||a.outlet.localeCompare(b.outlet));
+  data=[...data].sort((a,b)=>a.region.localeCompare(b.region)||(SYS_IDX[a.system]??99)-(SYS_IDX[b.system]??99)||((installMon(a)||99)-(installMon(b)||99))||String(a.outlet).localeCompare(String(b.outlet)));
   document.getElementById('plCount').textContent=data.length+'개 업장';
   const thead=document.getElementById('plTableHead');
-  if(thead)thead.innerHTML='<th>지역</th><th>시스템</th><th>WS</th><th>거래처명</th>'+months.map(m=>`<th class="r">${m}월</th>`).join('')+'<th class="r">합계</th>';
-  const colspan=4+months.length+1;
+  if(thead)thead.innerHTML='<th>지역</th><th>시스템</th><th>WS</th><th>거래처명</th><th class="r">설치월</th>';
   document.getElementById('plBody').innerHTML=data.map(r=>{
     const regStyle=r.region==='NKA'?'color:#9333ea;font-weight:700':'';
-    const mVals=months.map(m=>r['m'+m]??0);
-    const total=mVals.reduce((a,b)=>a+b,0);
-    return `<tr><td style="${regStyle}">${r.region}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}</td>${mVals.map(v=>`<td class="r">${v||'–'}</td>`).join('')}<td class="r" style="font-weight:700">${total||'–'}</td></tr>`;
-  }).join('')||`<tr><td colspan="${colspan}" style="text-align:center;color:var(--muted);padding:20px">데이터 없음</td></tr>`;
+    const im=installMon(r);
+    return `<tr><td style="${regStyle}">${r.region}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}</td><td class="r">${im?im+'월':'–'}</td></tr>`;
+  }).join('')||`<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">데이터 없음</td></tr>`;
+}
+
+// ===== PA Normal/Column 설치 뷰 (PA_INSTALL_DATA, 파울라너 20L 탭 상단 섹션) =====
+// 월별 설치 대수 매트릭스 (지역+NKA × 월, 설치월 = m{월} 대수 합). 시스템 필터 paNiSys.
+function renderPaulanerPAReport(){
+  const tbl=document.getElementById('paNiTable');
+  // KPI 요약: 운영 업장 수(시스템 무관 고유) + 총 설치 대수
+  const kpi=document.getElementById('paKpiLine');
+  if(kpi){
+    const ds=paNiSys!=='전체'?PA_INSTALL_DATA.filter(d=>d.system===paNiSys):PA_INSTALL_DATA;
+    const outlets=new Set(ds.map(d=>d.outlet)).size;
+    const units=ds.reduce((s,d)=>{for(let m=3;m<=12;m++)s+=(d['m'+m]||0);return s;},0);
+    kpi.innerHTML=PA_INSTALL_DATA.length?`운영 업장 <b style="color:#0ea5e9">${outlets}곳</b> · 설치 <b style="color:#0ea5e9">${units}대</b>`:'';
+  }
+  if(!tbl)return;
+  if(!PA_INSTALL_DATA.length){
+    tbl.innerHTML='<tbody><tr><td style="color:var(--muted);padding:20px">데이터 없음 — 데이터 업데이트 탭에서 Draught Analysis 파일을 업로드해주세요</td></tr></tbody>';
+    return;
+  }
+  let data=PA_INSTALL_DATA;
+  if(paNiSys!=='전체') data=data.filter(d=>d.system===paNiSys);
+  const monthsWith=[3,4,5,6,7,8,9,10,11,12].filter(m=>data.some(d=>d['m'+m]!=null));
+  const months=monthsWith.length?monthsWith:[3,4,5,6,7,8,9,10,11,12];
+  // 월별 설치 대수 = m{월} 값(대수) 합
+  const cnt=(r,m)=>data.filter(d=>d.region===r).reduce((s,d)=>s+(d['m'+m]||0),0);
+  const rows=PA_NI_REGIONS;
+  let h='<thead><tr><th>지역</th>'+months.map(m=>`<th class="r">${m}월</th>`).join('')+'<th class="r" style="font-weight:700">합계</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    const vals=months.map(m=>cnt(r,m));
+    const tot=vals.reduce((a,b)=>a+b,0);
+    const isNKA=r==='NKA';
+    h+=`<tr><td style="${isNKA?'color:#9333ea;font-weight:700':'font-weight:700'}">${r}</td>`+vals.map(v=>`<td class="r">${v||'–'}</td>`).join('')+`<td class="r" style="font-weight:700">${tot||'–'}</td></tr>`;
+  });
+  const colTot=months.map(m=>rows.reduce((a,r)=>a+cnt(r,m),0));
+  const grand=colTot.reduce((a,b)=>a+b,0);
+  h+='<tr style="font-weight:700;border-top:2px solid var(--border);background:var(--surface2)"><td>합계</td>'+colTot.map(t=>`<td class="r">${t||'–'}</td>`).join('')+`<td class="r">${grand||'–'}</td></tr>`;
+  h+='</tbody>'; tbl.innerHTML=h;
+}
+function setPaNiSys(sys,el){
+  paNiSys=sys;
+  const row=document.getElementById('paNiSysRow');
+  if(row)row.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));
+  if(el)el.classList.add('on');
+  renderPaulanerPAReport();
+}
+function paf(key,val,el){
+  document.querySelectorAll('#paInstallSection .fb').forEach(b=>{if(b.getAttribute('onclick')&&b.getAttribute('onclick').startsWith("paf('"+key+"'"))b.classList.remove('on');});
+  if(el)el.classList.add('on');
+  paFilter[key]=val;
+  renderPaulanerPATable();
+}
+function renderPaulanerPATable(){
+  const reg=paFilter.region;
+  const sys=paFilter.system;
+  const kw=(document.getElementById('paSearch')?.value||'').trim().toLowerCase();
+  let data=PA_INSTALL_DATA;
+  if(reg&&reg!=='전체')data=data.filter(d=>d.region===reg);
+  if(sys&&sys!=='전체')data=data.filter(d=>d.system===sys);
+  if(kw)data=data.filter(d=>(d.outlet||'').toLowerCase().includes(kw)||(d.ws||'').toLowerCase().includes(kw));
+  const firstMon=d=>{for(let m=3;m<=12;m++)if(d['m'+m]!=null)return m;return 99;};
+  const qtyOf=d=>{let q=0;for(let m=3;m<=12;m++)q+=(d['m'+m]||0);return q;};
+  const monsOf=d=>{const a=[];for(let m=3;m<=12;m++)if(d['m'+m]!=null)a.push(m);return a;};
+  const SYS_IDX=Object.fromEntries(PA_SYS_ORDER.map((s,i)=>[s,i]));
+  data=[...data].sort((a,b)=>a.region.localeCompare(b.region)||(SYS_IDX[a.system]??99)-(SYS_IDX[b.system]??99)||(firstMon(a)-firstMon(b))||String(a.outlet).localeCompare(String(b.outlet)));
+  const totUnits=data.reduce((s,d)=>s+qtyOf(d),0);
+  document.getElementById('paCount').textContent=`${data.length}개 업장 · ${totUnits}대`;
+  document.getElementById('paBody').innerHTML=data.map(r=>{
+    const regStyle=r.region==='NKA'?'color:#9333ea;font-weight:700':'';
+    const q=qtyOf(r);
+    const monLabel=monsOf(r).map(m=>m+'월').join('·')||'–';
+    const qtyCell=q>1?`<b style="color:#0ea5e9">${q}대</b>`:`${q}대`;
+    return `<tr><td style="${regStyle}">${r.region}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}</td><td style="font-size:11px">${r.addr||'–'}</td><td class="r">${qtyCell}</td><td class="r">${monLabel}</td></tr>`;
+  }).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">데이터 없음</td></tr>`;
 }
 
 // ===== Snow 신규입점 업데이트 =====
