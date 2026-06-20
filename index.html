@@ -1565,16 +1565,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
   <!-- Tab: WK10 -->
   <div id="tab-wk10" class="tab-content active">
-    <div class="chart-grid">
-      <div class="chart-card">
-        <div class="chart-title" id="chartA-title">A. Regional Mar AP / Jan Actual / Feb Actual / MTD (HL)</div>
-        <div class="chart-wrap"><canvas id="chartA"></canvas></div>
-      </div>
-      <div class="chart-card">
-        <div class="chart-title">B. This Wk FCST vs Last Wk FCST (by Region)</div>
-        <div class="chart-wrap"><canvas id="chartB"></canvas></div>
-      </div>
-    </div>
     <div class="filter-bar" style="margin-bottom:10px;">
       <span><label>Branch</label>
         <select id="d-branch" onchange="onDMonthlyBranchChange()">
@@ -2837,7 +2827,12 @@ function applyDataUpdate(fcstResult, dsrResult) {
 
   const fcstMonth = fcstResult?.meta?.wkMeta?.month || dsrResult?.dsrMeta?.month || prevMonth;
   const isSameWeek = fcstResult?.meta?.wkMeta?.num === prevWkNum;  // re-upload of same week
-  const monthChanged = fcstMonth !== prevMonth;  // 새 달 첫 업로드: 전주 비교 무효화
+  // 월 변경 판단은 직전 'FCST 적용 월'(last_fcst_month) 기준 — wk_meta.month는 DSR 단독 업로드로도
+  // 갱신되므로, 월초 DSR 먼저 적용 시 전월 FCST가 새어 들어오는 문제 방지.
+  const prevFcstMonth = (D.last_fcst_month != null) ? D.last_fcst_month : prevMonth;
+  const monthChanged = fcstResult
+    ? ((fcstResult.meta?.wkMeta?.month ?? fcstMonth) !== prevFcstMonth)  // 새 달 첫 FCST 업로드: 전주 비교 무효화
+    : (fcstMonth !== prevMonth);
   const mIdx = fcstMonth - 1;
   const mKey = String(fcstMonth);
 
@@ -2962,6 +2957,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
     // TTL / BEER TTL: 루프에서 직접 누적한 값 사용 (hlSum[r] 재독 X)
     if (hlSum['TTL']         && _ttlHL    > 0) _upUpdateFcstEntry(hlSum['TTL'],         _upRound4(_ttlHL),    'mtd_actual', true, monthChanged);
     if (casesSum['BEER TTL'] && _ttlCases > 0) _upUpdateFcstEntry(casesSum['BEER TTL'], _upRound4(_ttlCases), 'mtd_actual', true, monthChanged);
+    D.last_fcst_month = fcstMonth;  // 직전 FCST 적용 월 기록 (다음 월 변경 판단 기준)
   }
 
   if (dsrResult) {
@@ -3141,8 +3137,6 @@ function _upReRenderAll() {
   renderThisWkIssue();
   renderFcstVsMtdVariance();
   renderLMLYVariance();
-  renderChartA();
-  renderChartB();
   onDMonthlyBranchChange();
   _tabInitialized['wk10'] = true;
   document.title = 'Sales Dashboard';
@@ -3661,98 +3655,6 @@ function achBadge(v) {
       <div class="kpi-sub">${k.sub}</div>
       ${k.badge}
     </div>`).join('');
-}
-
-// ═══════════════════════════════════════════════
-//  CHART A — AP vs Actual/FCST by selected month
-//  Jan/Feb: AP vs DSR Actual (by Region)
-//  Mar    : AP vs This Week FCST (by Region)
-// ═══════════════════════════════════════════════
-function renderChartA() {
-  destroyChart('chartA');
-  const mon    = _selectedMonth;             // 1=Jan, 2=Feb, 3=Mar
-  const hl     = DASHBOARD_DATA.wk10_summary?.hl || {};
-  const regAP  = DASHBOARD_DATA.monthly_regional_ap;  // {region:[12 months HL]}
-  const dsrMon = DASHBOARD_DATA.dsr_by_month;
-  const titleEl = document.getElementById('chartA-title');
-  const regions = _UP_DASH_REGIONS.filter(k => hl[k]);
-  const monName = MONTH_NAMES_KR[mon - 1];
-
-  let apData, compareData, compareLabel, compareColor, title;
-
-  if (mon === _upGetFcstMonth()) {
-    // Mar: AP vs This Week FCST
-    apData       = regions.map(k => hl[k].ap);
-    compareData  = regions.map(k => hl[k].this_week_fcst);
-    compareLabel = `${monName} FCST`;
-    compareColor = '#16a34a';
-    title = `A. Regional ${monName} AP vs ${monName} FCST (HL)`;
-  } else {
-    // Jan / Feb: AP vs DSR Actual
-    apData       = regions.map(k => regAP[k] ? regAP[k][mon - 1] : null);
-    compareData  = regions.map(k => {
-      const entry = dsrMon[String(mon)] || dsrMon[mon];
-      return (entry && entry[k] != null) ? entry[k] : null;
-    });
-    compareLabel = `${monName} Actual`;
-    compareColor = mon === 1 ? '#94a3b8' : '#e30613';
-    title = `A. Regional ${monName} AP vs ${monName} Actual (HL)`;
-  }
-
-  if (titleEl) titleEl.textContent = title;
-
-  _charts.chartA = new Chart(document.getElementById('chartA'), {
-    type: 'bar',
-    data: {
-      labels: regions,
-      datasets: [
-        { label: `${monName} AP`,  data: apData,      backgroundColor: '#20552799', borderColor: '#205527', borderWidth: 1 },
-        { label: compareLabel,     data: compareData, backgroundColor: compareColor + '99', borderColor: compareColor, borderWidth: 1 },
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top', labels: { color: '#374151' } },
-        tooltip: {
-          callbacks: {
-            afterBody: (items) => {
-              const apV = apData[items[0].dataIndex];
-              const cV  = compareData[items[0].dataIndex];
-              if (apV && cV) return [`Attainment: ${(cV/apV*100).toFixed(1)}%`];
-            }
-          }
-        }
-      },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => fmtHL(v) } } }
-    }
-  });
-}
-
-// ═══════════════════════════════════════════════
-//  CHART B — This Wk / Last Wk FCST
-// ═══════════════════════════════════════════════
-function renderChartB() {
-  destroyChart('chartB');
-  const hl = DASHBOARD_DATA.wk10_summary?.hl || {};
-  const labels = _UP_DASH_REGIONS.filter(k => hl[k]);
-  const tw = labels.map(k => hl[k].this_week_fcst);
-  const lw = labels.map(k => hl[k].last_week_fcst);
-
-  _charts.chartB = new Chart(document.getElementById('chartB'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'This Week FCST', data: tw, backgroundColor: '#2d7a3a', borderRadius: 6 },
-        { label: 'Last Week FCST', data: lw, backgroundColor: '#94a3b8', borderRadius: 6 },
-      ]
-    },
-    options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top', labels: { color: '#374151' } } },
-      scales: { y: { beginAtZero: false } }
-    }
-  });
 }
 
 // ═══════════════════════════════════════════════
@@ -5964,7 +5866,6 @@ function selectMonth(mon) {
   document.querySelectorAll('.month-btn').forEach(b => b.classList.add('off'));
   document.getElementById('mbtn-' + mon)?.classList.remove('off');
   // Update charts/tables
-  renderChartA();
   renderWK10Tables();
   if (document.getElementById('tab-sku').classList.contains('active')) {
     renderSkuTable();
@@ -7614,8 +7515,6 @@ function init() {
   renderThisWkIssue();
   renderFcstVsMtdVariance();
   renderLMLYVariance();
-  renderChartA();
-  renderChartB();
   onDMonthlyBranchChange();
   _tabInitialized['wk10'] = true;
   // Show summary page (if password already authenticated or just authenticated)
