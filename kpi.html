@@ -16,15 +16,15 @@ const SUPA_URL='https://elqammnozbfhkitnncsz.supabase.co';
 const SUPA_KEY='sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd';
 const SH={apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY,'Content-Type':'application/json'};
 async function sGet(t,q){
-  const PAGE=1000,all=[];
+  const PAGE=2000,all=[];
   let offset=0;
   while(true){
     const r=await fetch(SUPA_URL+'/rest/v1/'+t+'?select=*&limit='+PAGE+'&offset='+offset+(q?'&'+q:''),{headers:SH});
     if(!r.ok)throw new Error(await r.text());
     const rows=await r.json();
+    if(rows.length===0)break;
     all.push(...rows);
-    if(rows.length<PAGE)break;
-    offset+=PAGE;
+    offset+=rows.length;          // 서버 max-rows(1000) 캡으로 PAGE보다 적게 와도 안전하게 다음 페이지 진행
   }
   return all;
 }
@@ -273,6 +273,19 @@ td.sr-cell{white-space:nowrap}
   <div class="box">
     <h3>지역별 달성률</h3>
     <div class="rgrid" id="bRegGrid"></div>
+  </div>
+
+  <!-- SR 개인 전국 순위 -->
+  <div class="box">
+    <h3>SR 개인 전국 순위 <span id="bRankPeriod" style="font-size:12px;font-weight:400;color:var(--muted)"></span></h3>
+    <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">
+      <b>점수 = 달성률 점수 × 50% + 절대수 점수 × 50%</b> (각 항목 전국 최댓값=100점 정규화, 높을수록 상위)<br>
+      · <b>달성률</b> = 누적 달성 아울렛 수 ÷ 누적 목표 × 100 &nbsp;→&nbsp; 달성률 점수 = (해당 SR 달성률 ÷ 전국 최고 달성률) × 100<br>
+      · <b>절대수</b> = 누적 달성 아울렛 수(월별 매출>0 아울렛, 기간 합산) &nbsp;→&nbsp; 절대수 점수 = (해당 SR 달성수 ÷ 전국 최다 달성수) × 100<br>
+      · 집계 기간은 <b>3월부터 데이터·목표가 모두 있는 달</b>까지 자동 확장됩니다(6월·이후 월은 업로드/타겟 설정 시 자동 포함).
+    </div>
+    <div class="tw sr-scroll"><table id="bRankTable"></table></div>
+    <div id="bRankNoTgt" style="font-size:11.5px;color:var(--muted);margin-top:8px"></div>
   </div>
 
   <div class="box">
@@ -1317,6 +1330,47 @@ function renderBottleKPI(){
     bD.srs.forEach(sr=>{fallback[sr.name]=BD_MONTHS.map(m=>sr[m.key]?sr[m.key][0]:0);});
     renderSrTable(fallback);
   }
+  renderBottleSrRanking();
+}
+
+// SR 개인 전국 순위 — 달성률 50% + 절대 달성수 50% (3월~데이터·목표 있는 달 누적)
+function renderBottleSrRanking(){
+  const t=document.getElementById('bRankTable'); if(!t)return;
+  // 집계 대상 월: 3월(인덱스2)부터, '목표 설정 + 실데이터 존재'인 달만 → 6월/이후 월 자동 포함
+  const startIdx=BD_MONTHS.findIndex(m=>m.key==='mar');
+  const active=[];
+  for(let i=startIdx;i<BD_MONTHS.length;i++){
+    const mk=BD_MONTHS[i].mk;
+    const hasTgt=(bD.overall.target[i]||0)>0;
+    const hasData=BOTTLE_OUTLETS.some(d=>(d[mk]||0)>0);
+    if(hasTgt&&hasData)active.push(i);
+  }
+  const period=document.getElementById('bRankPeriod');
+  if(!active.length){t.innerHTML='';if(period)period.textContent='(데이터 없음)';return;}
+  if(period)period.textContent=`(${BD_MONTHS[active[0]].label}~${BD_MONTHS[active[active.length-1]].label} 누적)`;
+  // SR별 달성수·목표 집계
+  const rows=bD.srs.map(sr=>{
+    let ach=0,tgt=0;
+    active.forEach(i=>{
+      const mk=BD_MONTHS[i].mk,key=BD_MONTHS[i].key;
+      ach+=BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[mk]||0)>0).length;
+      const mt=sr[key]?sr[key][1]:null;
+      if(mt!=null)tgt+=mt;
+    });
+    return{sr:sr.name,reg:sr.region,ach,tgt,rate:tgt>0?ach/tgt*100:null};
+  });
+  const ranked=rows.filter(r=>r.rate!=null);
+  const noTgt=rows.filter(r=>r.rate==null);
+  const maxA=Math.max(1,...ranked.map(r=>r.ach));
+  const maxR=Math.max(1,...ranked.map(r=>r.rate));
+  ranked.forEach(r=>{r.nA=r.ach/maxA*100;r.nR=r.rate/maxR*100;r.score=r.nR*0.5+r.nA*0.5;});
+  ranked.sort((a,b)=>b.score-a.score);
+  const medal=i=>i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+  const head=`<thead><tr><th>순위</th><th>SR</th><th>지역</th><th class="r">달성수</th><th class="r">목표</th><th class="r">달성률</th><th class="r">점수</th></tr></thead>`;
+  const body=ranked.map((r,i)=>`<tr><td>${medal(i)}</td><td>${r.sr}</td><td class="mu">${rtag(r.reg)}</td><td class="r bo">${r.ach}</td><td class="r mu">${r.tgt}</td><td class="r">${r.rate.toFixed(1)}%</td><td class="r" style="font-weight:700;color:var(--accent)">${r.score.toFixed(1)}</td></tr>`).join('');
+  t.innerHTML=head+`<tbody>${body}</tbody>`;
+  const nt=document.getElementById('bRankNoTgt');
+  if(nt)nt.innerHTML=noTgt.length?`※ 목표 미설정(집계 기간 타겟 없음) → 순위 제외: ${noTgt.map(r=>`${r.sr}(${r.reg}) 달성 ${r.ach}`).join(' · ')}`:'';
 }
 
 function initBottleView(){
