@@ -2891,6 +2891,11 @@ function applyDataUpdate(fcstResult, dsrResult) {
     : (fcstMonth !== prevMonth);
   const mIdx = fcstMonth - 1;
   const mKey = String(fcstMonth);
+  // DSR 데이터의 월이 현재 활성 예측월과 같은지 (다르면 = 비활성월 백필 업데이트)
+  // FCST가 함께 업로드되면 DSR은 그 FCST월로 집계되므로 항상 활성월로 간주.
+  // 비활성월 DSR(예: 7월 FCST 중 6월 DSR)은 월별 추이/히스토리에만 반영하고
+  // 활성월(7월) 라이브 요약(MTD·AP·달성률, .mtd)·wk_meta.month는 건드리지 않는다.
+  const dsrIsActiveMonth = fcstResult ? true : (fcstMonth === prevFcstMonth);
 
   if (fcstResult) {
     const { hlFcst, casesFcst, skuBrandFcst, skuItemFcst } = fcstResult;
@@ -3018,9 +3023,10 @@ function applyDataUpdate(fcstResult, dsrResult) {
 
   if (dsrResult) {
     if (dsrResult.dsrMeta) {
-      // FCST가 같이 업로드됐으면 wk_meta는 FCST 기준 유지 (DSR meta는 오늘 날짜 기반이라 month 필드가 없음)
-      // DSR만 단독 업로드 시 month는 직전 값(prevMonth) 유지 — 통째로 덮으면 month=undefined가 되어 4월 폴백되는 버그 방지
-      if (!fcstResult) D.wk_meta = { ...dsrResult.dsrMeta.wk_meta, month: dsrResult.dsrMeta.month || prevMonth };
+      // FCST가 같이 업로드됐으면 wk_meta는 FCST 기준 유지 (DSR meta는 오늘 날짜 기반)
+      // DSR만 단독 업로드 시 month는 활성 예측월(prevFcstMonth) 유지 — DSR 파일의 월(예: 마감 안된 6월)로
+      // 덮으면 활성월(7월)이 비활성월로 바뀌어 MTD/AP가 잘못 복사되는 버그 방지
+      if (!fcstResult) D.wk_meta = { ...dsrResult.dsrMeta.wk_meta, month: prevFcstMonth };
       D.wd_progress = dsrResult.dsrMeta.wd_progress;
     }
     const { regionHl, regionCases, ttlHl, ttlCases, skuQty, regionSkuQty, skuCasesMap, regionSkuCasesMap, orderPattern, monthlySkuQty, monthlyRegionSkuQty, monthlySkuCases, monthlyRegionSkuCases, monthlyTtlHl, monthlyRegionHl, monthsSeen } = dsrResult;
@@ -3056,24 +3062,27 @@ function applyDataUpdate(fcstResult, dsrResult) {
     if (D.monthly && D.monthly.act_2026) D.monthly.act_2026[mIdx] = hasMtd ? r2(ttlHl) : null;
 
     const regAP = D.monthly_regional_ap;
-    if (regAP) {
+    if (regAP && dsrIsActiveMonth) {
       for (const k of ['TTL', ..._UP_DASH_REGIONS]) {
         if (D.wk10_summary.hl[k] && regAP[k]) D.wk10_summary.hl[k].ap = regAP[k][mIdx];
       }
     }
 
     const hlSum = D.wk10_summary.hl, casesSum = D.wk10_summary.cases;
-    for (const [dk, hv] of [['TTL',ttlHl], ..._UP_DASH_REGIONS.map(r=>[r,regionHl[r]||0])]) {
-      if (!hlSum[dk]) continue;
-      hlSum[dk].mtd_actual  = hasMtd ? r2(hv) : null;
-      hlSum[dk].ap_mtd_ach  = hasMtd ? _upSafeDiv(hv, hlSum[dk].ap) : null;
-      hlSum[dk].fcst_mtd_ach= hasMtd ? _upSafeDiv(hv, hlSum[dk].this_week_fcst) : null;
-    }
-    for (const [dk, cv] of [['BEER TTL',ttlCases], ..._UP_DASH_REGIONS.map(r=>[r,regionCases[r]||0])]) {
-      if (!casesSum[dk]) continue;
-      casesSum[dk].mtd_actual  = hasMtd ? r2(cv) : null;
-      casesSum[dk].ap_mtd_ach  = hasMtd ? _upSafeDiv(cv, casesSum[dk].ap) : null;
-      casesSum[dk].fcst_mtd_ach= hasMtd ? _upSafeDiv(cv, casesSum[dk].this_week_fcst) : null;
+    // 라이브 MTD 요약은 활성월 DSR일 때만 갱신 (비활성월 DSR이 활성월 MTD를 덮어쓰는 버그 방지)
+    if (dsrIsActiveMonth) {
+      for (const [dk, hv] of [['TTL',ttlHl], ..._UP_DASH_REGIONS.map(r=>[r,regionHl[r]||0])]) {
+        if (!hlSum[dk]) continue;
+        hlSum[dk].mtd_actual  = hasMtd ? r2(hv) : null;
+        hlSum[dk].ap_mtd_ach  = hasMtd ? _upSafeDiv(hv, hlSum[dk].ap) : null;
+        hlSum[dk].fcst_mtd_ach= hasMtd ? _upSafeDiv(hv, hlSum[dk].this_week_fcst) : null;
+      }
+      for (const [dk, cv] of [['BEER TTL',ttlCases], ..._UP_DASH_REGIONS.map(r=>[r,regionCases[r]||0])]) {
+        if (!casesSum[dk]) continue;
+        casesSum[dk].mtd_actual  = hasMtd ? r2(cv) : null;
+        casesSum[dk].ap_mtd_ach  = hasMtd ? _upSafeDiv(cv, casesSum[dk].ap) : null;
+        casesSum[dk].fcst_mtd_ach= hasMtd ? _upSafeDiv(cv, casesSum[dk].this_week_fcst) : null;
+      }
     }
 
     const SKUMAP = {
@@ -3092,18 +3101,24 @@ function applyDataUpdate(fcstResult, dsrResult) {
           const sn = skuObj.sku;
           if (qd[sn] !== undefined) {
             const qv = r2(qd[sn]);
-            skuObj.data.mtd = qv;
+            // act_monthly(히스토리)는 항상 기록 — 비활성월(6월)은 monthsSeen 루프가 건너뛰므로 여기서만 채워짐
             if (skuObj.data.act_monthly) skuObj.data.act_monthly[mIdx] = qv;
-            skuObj.data.ap_mtd_ach  = _upSafeDiv(qv, skuObj.data.ap);
-            skuObj.data.fcst_mtd_ach= _upSafeDiv(qv, skuObj.data.this_week_fcst);
+            // 라이브 .mtd/달성률은 활성월 DSR일 때만 (비활성월이 활성월 MTD 덮어쓰기 방지)
+            if (dsrIsActiveMonth) {
+              skuObj.data.mtd = qv;
+              skuObj.data.ap_mtd_ach  = _upSafeDiv(qv, skuObj.data.ap);
+              skuObj.data.fcst_mtd_ach= _upSafeDiv(qv, skuObj.data.this_week_fcst);
+            }
             bcs += (cd[sn] || 0);
           } else { bcs += (cd[sn] || skuObj.data.mtd || 0); }
         }
         bcs = r2(bcs);
-        brandObj.data.mtd = bcs;
         if (brandObj.data.act_monthly) brandObj.data.act_monthly[mIdx] = bcs;
-        brandObj.data.ap_mtd_ach  = _upSafeDiv(bcs, brandObj.data.ap);
-        brandObj.data.fcst_mtd_ach= _upSafeDiv(bcs, brandObj.data.this_week_fcst);
+        if (dsrIsActiveMonth) {
+          brandObj.data.mtd = bcs;
+          brandObj.data.ap_mtd_ach  = _upSafeDiv(bcs, brandObj.data.ap);
+          brandObj.data.fcst_mtd_ach= _upSafeDiv(bcs, brandObj.data.this_week_fcst);
+        }
       }
     }
 
