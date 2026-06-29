@@ -1606,6 +1606,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
   <!-- Tabs -->
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('wk10')" id="tab-btn-wk10">FCST Status</button>
+    <button class="tab-btn" onclick="switchTab('rofo-sheet')" id="tab-btn-rofo-sheet">Rofo Sheet</button>
     <button class="tab-btn" onclick="switchTab('minutes')" id="tab-btn-minutes">Minutes</button>
     <button class="tab-btn" onclick="switchTab('ytd')">YTD</button>
     <button class="tab-btn" onclick="switchTab('revenue')">Revenue</button>
@@ -1658,6 +1659,14 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <div id="fcst-mtd-issue" class="issue-grid"></div>
     <div class="section-title" style="margin-top:24px;">SKU vs LM · LY</div>
     <div id="lm-ly-issue" class="issue-grid"></div>
+  </div>
+
+  <!-- Tab: Rofo Sheet (6월 지점별 SKU 진행률 vs P06_V1) -->
+  <div id="tab-rofo-sheet" class="tab-content">
+    <div class="section-title">Rofo Sheet — 6월 지점별 SKU 진행률 (vs P06_V1 분배, HL)</div>
+    <div id="rofo-sheet-meta" style="font-size:11px;color:var(--text-muted);margin:-4px 0 12px;"></div>
+    <div id="rofo-sheet-summary" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;"></div>
+    <div id="rofo-sheet-body"></div>
   </div>
 
   <!-- Tab: YTD -->
@@ -2925,8 +2934,11 @@ function applyDataUpdate(fcstResult, dsrResult) {
         }
       }
     }
-    // 월 변경 시 MTD 초기화 (새 달은 아직 실적 없음)
-    if (monthChanged) {
+    // 월 변경 시 또는 활성월 영업일 경과 0일(실적 없는 새 달) MTD 초기화.
+    // freshActiveMonth: 전월 .mtd/act_monthly가 새 활성월에 잔류해 MTD로 새는 데이터를 자가 치유.
+    // (monthChanged=false인 같은 달 FCST 재업로드에도 적용 — 영업일 0일이면 MTD는 반드시 0)
+    const freshActiveMonth = (D.wd_progress != null && D.wd_progress.elapsed === 0);
+    if (monthChanged || freshActiveMonth) {
       for (const k of ['TTL', ..._UP_DASH_REGIONS]) {
         if (hlSum[k]) { hlSum[k].mtd_actual = 0; hlSum[k].ap_mtd_ach = null; hlSum[k].fcst_mtd_ach = null; }
       }
@@ -4903,6 +4915,190 @@ function setYtdSkuMode(mode) {
   renderYTDSkuTable();
 }
 
+// ── Rofo Sheet: 6월 지점별 SKU 진행률 (P06_V1 분배 vs 실시간 MTD) ─────────────────
+// 타깃: Rofo/01. 2026 Volume_P06_V1.xlsx (6월 Rofo AP 지점 분배, standard cases)
+// region 키는 DASHBOARD_DATA.sku_detail 키와 동일. SKU 라벨로 실적(MTD) 조인.
+const ROFO_JUN_BRANCH = {
+  'HE ORI 330 Bottle': { brand:'Heineken', Jun:1000, Seoul:505.57, GwangJu:91.88, DaeJeon:95.23, 'DaeGu&JeJu':94.51, BuSan:212.81 },
+  'HE ORI 330 Can': { brand:'Heineken', Jun:300, Seoul:129.58, GwangJu:54.48, DaeJeon:17.61, 'DaeGu&JeJu':41.36, BuSan:56.97 },
+  'HE ORI 500 Can': { brand:'Heineken', Jun:110, Seoul:62.57, GwangJu:24.35, DaeJeon:4.15, 'DaeGu&JeJu':11.05, BuSan:7.88 },
+  'HE ORI 5000 Keg': { brand:'Heineken', Jun:50, Seoul:43.62, GwangJu:2.21, DaeJeon:1.43, 'DaeGu&JeJu':2.26, BuSan:0.5 },
+  'HE ORI 8000 Blade': { brand:'Heineken', Jun:78, Seoul:47.28, GwangJu:3.4, DaeJeon:5.48, 'DaeGu&JeJu':7.92, BuSan:13.92 },
+  'HE ORI 20000 Air Keg': { brand:'Heineken', Jun:1325, Seoul:666.43, GwangJu:100.12, DaeJeon:158.68, 'DaeGu&JeJu':152.74, BuSan:247.03 },
+  'HE 0.0 330 Bottle': { brand:'Heineken 0.0', Jun:140, Seoul:49.35, GwangJu:5.05, DaeJeon:11.09, 'DaeGu&JeJu':26.23, BuSan:48.27 },
+  'HE 0.0 330 Can': { brand:'Heineken 0.0', Jun:14, Seoul:7.45, GwangJu:0.15, DaeJeon:0.25, 'DaeGu&JeJu':1.08, BuSan:5.07 },
+  'HE SLV 330 Bottle': { brand:'Heineken Silver', Jun:35, Seoul:13.36, GwangJu:4.77, DaeJeon:3.84, 'DaeGu&JeJu':6.11, BuSan:6.91 },
+  'HE SLV 250 Can': { brand:'Heineken Silver', Jun:5, Seoul:2.51, GwangJu:0.38, DaeJeon:0.6, 'DaeGu&JeJu':0.58, BuSan:0.93 },
+  'HE SLV 330 Can': { brand:'Heineken Silver', Jun:41, Seoul:33.96, GwangJu:0.65, DaeJeon:2.94, 'DaeGu&JeJu':0.19, BuSan:3.26 },
+  'HE SLV 500 Can': { brand:'Heineken Silver', Jun:59, Seoul:28.88, GwangJu:12.86, DaeJeon:2.13, 'DaeGu&JeJu':11.97, BuSan:3.16 },
+  'DE ORI 330 Bottle': { brand:'Desperados', Jun:24, Seoul:16.13, GwangJu:0.52, DaeJeon:2.37, 'DaeGu&JeJu':1.92, BuSan:3.07 },
+  'ED WHE 500 Can': { brand:'EdelWeiss', Jun:1, Seoul:0.79, GwangJu:0.11, DaeJeon:0.03, 'DaeGu&JeJu':0.01, BuSan:0.05 },
+  'ED WHE 8000 Blade': { brand:'EdelWeiss', Jun:6, Seoul:3.44, GwangJu:0.76, DaeJeon:0.34, 'DaeGu&JeJu':0.84, BuSan:0.63 },
+  'TI ORI 330 Bottle': { brand:'Tiger', Jun:77, Seoul:49.15, GwangJu:4.6, DaeJeon:7.95, 'DaeGu&JeJu':6.04, BuSan:9.26 },
+  'TI ORI 640 Bottle': { brand:'Tiger', Jun:89, Seoul:49.35, GwangJu:6.39, DaeJeon:7.63, 'DaeGu&JeJu':13.53, BuSan:12.12 },
+  'TI ORI 330 Can': { brand:'Tiger', Jun:37, Seoul:15.87, GwangJu:9.69, DaeJeon:2.52, 'DaeGu&JeJu':1.75, BuSan:7.17 },
+  'TI ORI 500 Can': { brand:'Tiger', Jun:8, Seoul:4.88, GwangJu:1.7, DaeJeon:0.42, 'DaeGu&JeJu':0.59, BuSan:0.41 },
+  'TI RAD 330 Can': { brand:'Tiger Radler', Jun:20, Seoul:5.75, GwangJu:1.66, DaeJeon:0.75, 'DaeGu&JeJu':3.78, BuSan:8.06 },
+  'TI RAD 500 Can': { brand:'Tiger Radler', Jun:8, Seoul:5.59, GwangJu:0.91, DaeJeon:0.45, 'DaeGu&JeJu':0.6, BuSan:0.46 },
+  'TI RGR 500 Can': { brand:'Tiger Radler', Jun:4, Seoul:2.41, GwangJu:0.71, DaeJeon:0.39, 'DaeGu&JeJu':0.23, BuSan:0.26 },
+  'TI ORI 8000 Blade': { brand:'Tiger', Jun:166, Seoul:106.78, GwangJu:10.69, DaeJeon:11.07, 'DaeGu&JeJu':15.82, BuSan:21.63 },
+  'BI ORI 330 Bottle': { brand:'Birra Moretti', Jun:42, Seoul:32.34, GwangJu:1.3, DaeJeon:3.05, 'DaeGu&JeJu':2.72, BuSan:2.6 },
+  'BI ORI 440 Can': { brand:'Birra Moretti', Jun:29, Seoul:17.21, GwangJu:0.06, DaeJeon:0, 'DaeGu&JeJu':0.79, BuSan:10.95 },
+  'SU ORI 500 Can': { brand:'SULHWA', Jun:47, Seoul:29.64, GwangJu:4.29, DaeJeon:0.2, 'DaeGu&JeJu':8.19, BuSan:4.68 },
+  'SU ORI 500 Bottle': { brand:'SULHWA', Jun:140, Seoul:83.12, GwangJu:16.95, DaeJeon:9.91, 'DaeGu&JeJu':16.15, BuSan:13.87 },
+  'PA HEL 500 Can': { brand:'Paulaner', Jun:10, Seoul:5.69, GwangJu:2.21, DaeJeon:0.38, 'DaeGu&JeJu':1.0, BuSan:0.72 },
+  'PA WHE 500 Can': { brand:'Paulaner', Jun:16, Seoul:9.1, GwangJu:3.54, DaeJeon:0.6, 'DaeGu&JeJu':1.61, BuSan:1.15 },
+  'PA WHE 20000 Keg': { brand:'Paulaner', Jun:322, Seoul:162.21, GwangJu:24.27, DaeJeon:38.49, 'DaeGu&JeJu':37.04, BuSan:59.99 },
+};
+// region 키 = DASHBOARD_DATA.sku_detail 키 (BuSan, DaeGu&JeJu — 공백 없음에 주의)
+const ROFO_JUN_REGIONS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
+const ROFO_JUN_REGION_LABEL = { Seoul:'Seoul', BuSan:'Busan', 'DaeGu&JeJu':'D&J (대구·제주)', DaeJeon:'대전', GwangJu:'광주' };
+
+function _rofoFmt(v){ return v==null ? '—' : Math.round(v).toLocaleString('ko-KR'); }
+function _rofoFmt1(v){ return v==null ? '—' : v.toLocaleString('ko-KR',{maximumFractionDigits:1}); }
+function _rofoPct(v){ return v==null ? '—' : Math.round(v*100)+'%'; }
+const _RA = 'text-align:right';
+
+function renderRofoSheet() {
+  const JUNE = 5;                                  // 0-indexed 6월
+  const cur = (typeof _upGetFcstMonth === 'function') ? _upGetFcstMonth() : null;  // 1-indexed 현재 FCST 월
+  const juneInProgress = (cur === 6);              // 6월이 진행 중인지(마감이면 최종 달성률)
+  const wd = DASHBOARD_DATA.wd_progress || {};
+  const wdPct = (typeof wd.pct === 'number' && wd.pct > 0) ? wd.pct : null;
+  const elapsedFrac = juneInProgress ? (wdPct != null ? wdPct : 1) : 1;   // 페이스/벤치마크 기준 경과율
+  const bench = elapsedFrac;                        // 달성률 판정 기준선
+
+  function achClass(ach){
+    if (ach == null) return '';
+    if (ach >= bench) return 'ach-high';
+    if (ach >= bench - 0.05) return 'ach-mid';
+    return 'ach-low';
+  }
+  function achColor(cls){
+    return cls==='ach-high' ? 'var(--positive)' : cls==='ach-mid' ? 'var(--neutral)'
+         : cls==='ach-low' ? 'var(--negative)' : 'var(--text-muted)';
+  }
+  // 6월 실적(HL) 맵: act_monthly[5](6월 actual) 우선, 6월 진행 중이면 mtd로 보완.
+  // P06_V1 타깃은 HL, 대시보드 actual은 표준 c/s → SKU별 hl_factor로 HL 환산해 단위 일치.
+  function buildJuneMap(region){
+    const map = {};
+    const arr = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail[region]) || [];
+    arr.forEach(b => (b.skus||[]).forEach(s => {
+      const d = s && s.data; if (!d) return;
+      let raw = (Array.isArray(d.act_monthly) && d.act_monthly[JUNE] != null) ? d.act_monthly[JUNE] : null;
+      if (raw == null && juneInProgress && d.mtd != null) raw = d.mtd;
+      if (raw != null) {
+        const f = (d.hl_factor != null) ? d.hl_factor : 0.0792;
+        map[s.sku] = raw * f;
+      }
+    }));
+    return map;
+  }
+
+  const metaEl = document.getElementById('rofo-sheet-meta');
+  if (metaEl) {
+    const statusTxt = juneInProgress
+      ? ('6월 진행 중 · 영업일 경과율 <b>' + (wdPct!=null?Math.round(wdPct*100)+'%':'—') + '</b> ('
+         + (wd.elapsed!=null?wd.elapsed:'—') + '/' + (wd.total!=null?wd.total:'—') + 'WD) · 페이스 = 실적÷(타깃×경과율), 100%=정상')
+      : '6월 마감 · 최종 달성률 = 실적÷타깃 (기준 100%)';
+    metaEl.innerHTML = '타깃 <b>P06_V1</b> (6월 Rofo AP 지점 분배, HL) · 실적 대시보드 6월 actual (c/s→HL 환산) · '
+      + '달성률 = 실적÷타깃 · ' + statusTxt;
+  }
+
+  // 지점별 집계
+  const regionData = ROFO_JUN_REGIONS.map(region => {
+    const jMap = buildJuneMap(region);
+    const brandOrder = [], brandMap = {};
+    Object.keys(ROFO_JUN_BRANCH).forEach(sku => {
+      const rec = ROFO_JUN_BRANCH[sku];
+      const tgt = rec[region] || 0;
+      if (tgt <= 0) return;
+      const mtd = jMap[sku] != null ? jMap[sku] : null;
+      const ach = (mtd != null) ? mtd / tgt : null;
+      const pace = (juneInProgress && mtd != null) ? mtd / (tgt * elapsedFrac) : null;
+      if (!brandMap[rec.brand]) { brandMap[rec.brand] = []; brandOrder.push(rec.brand); }
+      brandMap[rec.brand].push({ sku, tgt, mtd, ach, pace });
+    });
+    let totTgt=0, totMtd=0, issueCount=0; const issues=[];
+    brandOrder.forEach(br => brandMap[br].forEach(r => {
+      totTgt += r.tgt; if (r.mtd != null) totMtd += r.mtd;
+      if (r.ach != null && r.ach < bench - 0.05) { issueCount++; issues.push(r); }
+    }));
+    const totAch  = totTgt > 0 ? totMtd / totTgt : null;
+    const totPace = (juneInProgress && totTgt > 0) ? totMtd / (totTgt * elapsedFrac) : null;
+    issues.sort((a,b) => (bench-(a.ach==null?0:a.ach)) < (bench-(b.ach==null?0:b.ach)) ? 1 : -1);
+    return { region, brandOrder, brandMap, totTgt, totMtd, totAch, totPace, issueCount, issues };
+  });
+
+  // 요약 스트립
+  const sumEl = document.getElementById('rofo-sheet-summary');
+  if (sumEl) {
+    sumEl.innerHTML = regionData.map(rd => {
+      const cls = achClass(rd.totAch);
+      const paceTxt = juneInProgress ? (' · 페이스 ' + _rofoPct(rd.totPace)) : '';
+      return '<div class="table-wrap" style="padding:12px 14px;margin-bottom:0;">'
+        + '<div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px;">' + ROFO_JUN_REGION_LABEL[rd.region] + '</div>'
+        + '<div style="font-size:22px;font-weight:800;color:' + achColor(cls) + ';line-height:1;">' + _rofoPct(rd.totAch) + '</div>'
+        + '<div style="font-size:10px;color:var(--text-muted);margin:4px 0 6px;">달성률' + paceTxt + '</div>'
+        + '<div style="font-size:10.5px;color:#555;">실적 ' + _rofoFmt(rd.totMtd) + ' / 타깃 ' + _rofoFmt(rd.totTgt) + ' HL</div>'
+        + '<div style="font-size:10.5px;margin-top:3px;color:' + (rd.issueCount>0?'var(--negative)':'var(--text-muted)') + ';">' + (rd.issueCount>0 ? '🔴 미달 SKU ' + rd.issueCount + '개' : '✅ 미달 없음') + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  // 지점별 섹션
+  const bodyEl = document.getElementById('rofo-sheet-body');
+  if (bodyEl) {
+    bodyEl.innerHTML = regionData.map(rd => {
+      let rows = '';
+      rd.brandOrder.forEach(br => {
+        let bTgt=0, bMtd=0, bHas=false;
+        rd.brandMap[br].forEach(r => { bTgt += r.tgt; if (r.mtd != null){ bMtd += r.mtd; bHas=true; } });
+        const bAch = (bTgt > 0 && bHas) ? bMtd / bTgt : null;
+        rows += '<tr class="td-brand"><td>' + br + '</td>'
+          + '<td style="' + _RA + '">' + _rofoFmt1(bTgt) + '</td><td style="' + _RA + '">' + _rofoFmt1(bMtd) + '</td>'
+          + '<td style="' + _RA + '"><span class="' + achClass(bAch) + '">' + _rofoPct(bAch) + '</span></td><td></td><td></td></tr>';
+        rd.brandMap[br].forEach(r => {
+          let status;
+          if (r.ach == null)            status = '<span style="color:var(--text-muted)">데이터 없음</span>';
+          else if (r.ach >= 1)          status = '✅ 달성';
+          else if (r.ach >= bench)      status = '🟢 정상';
+          else if (r.ach >= bench-0.05) status = '🟡 주의';
+          else                          status = '🔴 미달';
+          rows += '<tr><td>&nbsp;&nbsp;' + r.sku + '</td>'
+            + '<td style="' + _RA + '">' + _rofoFmt1(r.tgt) + '</td>'
+            + '<td style="' + _RA + '">' + _rofoFmt1(r.mtd) + '</td>'
+            + '<td style="' + _RA + '"><span class="' + achClass(r.ach) + '">' + _rofoPct(r.ach) + '</span></td>'
+            + '<td style="' + _RA + '">' + (juneInProgress ? _rofoPct(r.pace) : '—') + '</td>'
+            + '<td style="text-align:left">' + status + '</td></tr>';
+        });
+      });
+      rows += '<tr class="td-section"><td>지점 합계</td>'
+        + '<td style="' + _RA + '">' + _rofoFmt1(rd.totTgt) + '</td><td style="' + _RA + '">' + _rofoFmt1(rd.totMtd) + '</td>'
+        + '<td style="' + _RA + '"><span class="' + achClass(rd.totAch) + '">' + _rofoPct(rd.totAch) + '</span></td>'
+        + '<td style="' + _RA + '">' + (juneInProgress ? _rofoPct(rd.totPace) : '—') + '</td><td></td></tr>';
+
+      const issueLabel = juneInProgress ? '경과율 대비 미달' : '타깃 대비 미달';
+      const issuesHtml = rd.issues.length
+        ? '<div style="font-size:11px;color:var(--text-muted);padding:6px 12px 0;">⚠️ 미달 SKU (' + issueLabel + '): '
+          + rd.issues.slice(0,5).map(r => '<b>' + r.sku + '</b> (' + _rofoPct(r.ach) + ')').join(', ') + '</div>'
+        : '';
+      const paceHdr = juneInProgress ? (' · 페이스 ' + _rofoPct(rd.totPace)) : '';
+      return '<div style="margin-bottom:22px;">'
+        + '<div class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+          + ROFO_JUN_REGION_LABEL[rd.region]
+          + '<span class="' + achClass(rd.totAch) + '" style="font-size:12px;">' + _rofoPct(rd.totAch) + '</span>'
+          + '<span style="font-size:11px;font-weight:400;color:var(--text-muted);">실적 ' + _rofoFmt(rd.totMtd) + ' / 타깃 ' + _rofoFmt(rd.totTgt) + ' HL' + paceHdr + '</span>'
+        + '</div>'
+        + '<div class="table-wrap"><table>'
+        + '<thead><tr><th style="text-align:left">Brand / SKU</th><th style="' + _RA + '">6월 타깃 (HL)</th><th style="' + _RA + '">6월 실적 (HL)</th><th style="' + _RA + '">달성률</th><th style="' + _RA + '">페이스</th><th style="text-align:left">상태</th></tr></thead>'
+        + '<tbody>' + rows + '</tbody></table></div>'
+        + issuesHtml
+        + '</div>';
+    }).join('');
+  }
+}
+
 function renderYTDSkuTable() {
   const sec  = document.getElementById('ytdsku-branch')?.value || 'On Trade Total';
   const data = DASHBOARD_DATA.sku_detail[sec] || [];
@@ -6085,13 +6281,14 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tabId).classList.add('active');
-  const tabNames = ['wk10','minutes','ytd','revenue','sku','sku-hist','order','calendar'];
+  const tabNames = ['wk10','rofo-sheet','minutes','ytd','revenue','sku','sku-hist','order','calendar'];
   const btns = document.querySelectorAll('.tab-btn');
   btns[tabNames.indexOf(tabId)]?.classList.add('active');
 
   if (!_tabInitialized[tabId]) {
     _tabInitialized[tabId] = true;
     if (tabId === 'ytd')      { renderYTDCharts(); renderYTDTable(); renderYTDSkuTable(); }
+    if (tabId === 'rofo-sheet'){ renderRofoSheet(); }
     if (tabId === 'revenue')  { initRevenueTab(); }
     if (tabId === 'sku')      { renderSkuTable(); }
     if (tabId === 'sku-hist') { renderSkuHistTable(); renderSkuHistCompare(); }
@@ -6100,6 +6297,7 @@ function switchTab(tabId) {
     if (tabId === 'calendar') { calendarInit(); todoInit(); }
   } else {
     if (tabId === 'ytd')          { renderYTDCharts(); renderYTDTable(); renderYTDSkuTable(); }
+    else if (tabId === 'rofo-sheet'){ renderRofoSheet(); }
     else if (tabId === 'revenue') { initRevenueTab(); }
     else if (tabId === 'sku-hist'){ renderSkuHistTable(); renderSkuHistCompare(); }
     else if (tabId === 'order')   { renderOrderPattern(); }
