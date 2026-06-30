@@ -259,6 +259,9 @@ thead th { background: var(--primary); color: #fff; padding: 6px 8px; text-align
 }
 #tbl-ytdsku tbody tr:nth-child(even) td:first-child { background: #f9fafb; }
 #tbl-ytdsku .td-brand:first-child { background: #f0f7f0; }
+/* ── Rofo 탭: 컬럼 헤더 상단 고정 (페이지 스크롤 기준) ── */
+#rofo-sheet-body .table-wrap { overflow: visible; }
+#rofo-sheet-body thead th { position: sticky; top: 0; z-index: 3; }
 thead th:first-child, thead th:nth-child(2) { text-align: left; }
 thead th::after { content: ' \2195'; opacity: .4; font-size: 10px; }
 thead th.sort-asc::after  { content: ' \2191'; opacity: 1; }
@@ -1663,12 +1666,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
   <!-- Tab: Rofo Sheet (6월 지점별 SKU 진행률 vs P06_V1) -->
   <div id="tab-rofo-sheet" class="tab-content">
-    <div class="section-title">Rofo — 6월 지점별 SKU 진행률 (vs P06_V1 분배, HL)</div>
-    <div id="rofo-sheet-meta" style="font-size:11px;color:var(--text-muted);margin:-4px 0 10px;"></div>
-    <div style="display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-bottom:12px;">
-      <span id="rofo-cmt-status" style="font-size:11px;color:var(--text-muted);"></span>
-      <button onclick="_rofoSaveComments()" style="padding:6px 14px;font-size:12px;font-weight:600;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;">💾 Comment 저장</button>
-    </div>
+    <div class="section-title">Rofo — June Branch / SKU Progress (vs P06_V1 split, HL)</div>
+    <div id="rofo-sheet-meta" style="font-size:11px;color:var(--text-muted);margin:-4px 0 12px;"></div>
     <div id="rofo-sheet-summary" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;"></div>
     <div id="rofo-sheet-body"></div>
   </div>
@@ -4956,7 +4955,7 @@ const ROFO_JUN_BRANCH = {
 };
 // region 키 = DASHBOARD_DATA.sku_detail 키 (BuSan, DaeGu&JeJu — 공백 없음에 주의)
 const ROFO_JUN_REGIONS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
-const ROFO_JUN_REGION_LABEL = { Seoul:'Seoul', BuSan:'Busan', 'DaeGu&JeJu':'D&J (대구·제주)', DaeJeon:'대전', GwangJu:'광주' };
+const ROFO_JUN_REGION_LABEL = { Seoul:'Seoul', BuSan:'Busan', 'DaeGu&JeJu':'D&J (Daegu·Jeju)', DaeJeon:'Daejeon', GwangJu:'Gwangju' };
 
 function _rofoFmt(v){ return v==null ? '—' : Math.round(v).toLocaleString('ko-KR'); }
 function _rofoFmt1(v){ return v==null ? '—' : v.toLocaleString('ko-KR',{maximumFractionDigits:1}); }
@@ -4970,15 +4969,16 @@ function _rofoSetComment(el){
   const v = el.value.trim();
   if (v) DASHBOARD_DATA.rofo_comments[k] = v; else delete DASHBOARD_DATA.rofo_comments[k];
 }
-// Comment를 전체 스냅샷(dashboard_snapshots)에 영구 저장 — 로그인 토큰 사용
-async function _rofoSaveComments(){
-  const statusEl = document.getElementById('rofo-cmt-status');
+// Comment를 전체 스냅샷(dashboard_snapshots)에 영구 저장 — 로그인 토큰 사용.
+// 지점별 버튼이 호출하지만 저장은 전체 코멘트 일괄 저장(_upDeployToSupabase). btn 옆 .rofo-cmt-status에 상태 표시.
+async function _rofoSaveComments(btn){
+  const statusEl = (btn && btn.parentElement) ? btn.parentElement.querySelector('.rofo-cmt-status') : null;
   if (!DASHBOARD_DATA.rofo_comments) DASHBOARD_DATA.rofo_comments = {};
   try {
-    if (typeof _upDeployToSupabase !== 'function') throw new Error('저장 함수 없음');
-    await _upDeployToSupabase(statusEl);
-    if (statusEl) statusEl.textContent = '✓ 저장됨 ' + new Date().toLocaleTimeString('ko-KR');
-  } catch(e){ if (statusEl) statusEl.textContent = '저장 실패: ' + (e.message || e); }
+    if (typeof _upDeployToSupabase !== 'function') throw new Error('save fn missing');
+    await _upDeployToSupabase(statusEl || { });
+    if (statusEl) statusEl.textContent = '✓ Saved ' + new Date().toLocaleTimeString('en-GB');
+  } catch(e){ if (statusEl) statusEl.textContent = 'Save failed: ' + (e.message || e); }
 }
 
 function renderRofoSheet() {
@@ -5021,11 +5021,11 @@ function renderRofoSheet() {
   const metaEl = document.getElementById('rofo-sheet-meta');
   if (metaEl) {
     const statusTxt = juneInProgress
-      ? ('6월 진행 중 · 영업일 경과율 <b>' + (wdPct!=null?Math.round(wdPct*100)+'%':'—') + '</b> ('
-         + (wd.elapsed!=null?wd.elapsed:'—') + '/' + (wd.total!=null?wd.total:'—') + 'WD) · 페이스 = 실적÷(타깃×경과율), 100%=정상')
-      : '6월 마감 · 최종 달성률 = 실적÷타깃 (기준 100%)';
-    metaEl.innerHTML = '타깃 <b>P06_V1</b> (6월 Rofo AP 지점 분배, HL) · 실적 대시보드 6월 actual (c/s→HL 환산) · '
-      + '달성률 = 실적÷타깃 · ' + statusTxt;
+      ? ('June in progress · WD elapsed <b>' + (wdPct!=null?Math.round(wdPct*100)+'%':'—') + '</b> ('
+         + (wd.elapsed!=null?wd.elapsed:'—') + '/' + (wd.total!=null?wd.total:'—') + 'WD)')
+      : 'June closed · final Attainment = Actual ÷ Target (base 100%)';
+    metaEl.innerHTML = 'Target <b>P06_V1</b> (June Rofo branch split, HL) · Actual: dashboard June actual (c/s→HL) · '
+      + 'Attainment = Actual ÷ Target · vs LY = Actual ÷ LY · ' + statusTxt;
   }
 
   // 지점별 집계
@@ -5041,9 +5041,8 @@ function renderRofoSheet() {
       const ly  = ent.ly  != null ? ent.ly  : null;
       const ach = (mtd != null) ? mtd / tgt : null;
       const lyAch = (mtd != null && ly != null && ly > 0) ? mtd / ly : null;
-      const pace = (juneInProgress && mtd != null) ? mtd / (tgt * elapsedFrac) : null;
       if (!brandMap[rec.brand]) { brandMap[rec.brand] = []; brandOrder.push(rec.brand); }
-      brandMap[rec.brand].push({ sku, region, tgt, mtd, ly, ach, lyAch, pace });
+      brandMap[rec.brand].push({ sku, region, tgt, mtd, ly, ach, lyAch });
     });
     let totTgt=0, totMtd=0, totLy=0, totLyHas=false;
     brandOrder.forEach(br => brandMap[br].forEach(r => {
@@ -5051,8 +5050,7 @@ function renderRofoSheet() {
     }));
     const totAch   = totTgt > 0 ? totMtd / totTgt : null;
     const totLyAch = (totLyHas && totLy > 0) ? totMtd / totLy : null;
-    const totPace  = (juneInProgress && totTgt > 0) ? totMtd / (totTgt * elapsedFrac) : null;
-    return { region, brandOrder, brandMap, totTgt, totMtd, totLy: totLyHas?totLy:null, totAch, totLyAch, totPace };
+    return { region, brandOrder, brandMap, totTgt, totMtd, totLy: totLyHas?totLy:null, totAch, totLyAch };
   });
 
   // 요약 스트립
@@ -5060,12 +5058,11 @@ function renderRofoSheet() {
   if (sumEl) {
     sumEl.innerHTML = regionData.map(rd => {
       const cls = achClass(rd.totAch);
-      const paceTxt = juneInProgress ? (' · 페이스 ' + _rofoPct(rd.totPace)) : '';
       return '<div class="table-wrap" style="padding:12px 14px;margin-bottom:0;">'
         + '<div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px;">' + ROFO_JUN_REGION_LABEL[rd.region] + '</div>'
         + '<div style="font-size:22px;font-weight:800;color:' + achColor(cls) + ';line-height:1;">' + _rofoPct(rd.totAch) + '</div>'
-        + '<div style="font-size:10px;color:var(--text-muted);margin:4px 0 6px;">달성률' + paceTxt + '</div>'
-        + '<div style="font-size:10.5px;color:#555;">실적 ' + _rofoFmt(rd.totMtd) + ' / 타깃 ' + _rofoFmt(rd.totTgt) + ' HL</div>'
+        + '<div style="font-size:10px;color:var(--text-muted);margin:4px 0 6px;">Attainment</div>'
+        + '<div style="font-size:10.5px;color:#555;">Actual ' + _rofoFmt(rd.totMtd) + ' / Target ' + _rofoFmt(rd.totTgt) + ' HL</div>'
         + '</div>';
     }).join('');
   }
@@ -5080,7 +5077,7 @@ function renderRofoSheet() {
         rd.brandMap[br].forEach(r => { bTgt += r.tgt; if (r.mtd != null){ bMtd += r.mtd; bHas=true; } if (r.ly != null){ bLy += r.ly; bLyHas=true; } });
         const bAch   = (bTgt > 0 && bHas) ? bMtd / bTgt : null;
         const bLyAch = (bLyHas && bLy > 0 && bHas) ? bMtd / bLy : null;
-        rows += '<tr class="td-brand"><td>' + br + '</td><td></td>'
+        rows += '<tr class="td-brand"><td>' + br + '</td>'
           + '<td style="' + _RA + '">' + _rofoFmt1(bTgt) + '</td><td style="' + _RA + '">' + _rofoFmt1(bMtd) + '</td>'
           + '<td style="' + _RA + '"><span class="' + achClass(bAch) + '">' + _rofoPct(bAch) + '</span></td>'
           + '<td style="' + _RA + '">' + (bLyHas ? _rofoFmt1(bLy) : '—') + '</td>'
@@ -5090,31 +5087,33 @@ function renderRofoSheet() {
           const rk = r.region + '|' + r.sku;
           const cval = (DASHBOARD_DATA.rofo_comments && DASHBOARD_DATA.rofo_comments[rk]) || '';
           rows += '<tr><td>&nbsp;&nbsp;' + r.sku + '</td>'
-            + '<td><input type="text" class="rofo-cmt" data-rk="' + _rofoEsc(rk) + '" value="' + _rofoEsc(cval) + '" placeholder="코멘트…" onchange="_rofoSetComment(this)" style="width:100%;min-width:170px;box-sizing:border-box;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;"></td>'
             + '<td style="' + _RA + '">' + _rofoFmt1(r.tgt) + '</td>'
             + '<td style="' + _RA + '">' + _rofoFmt1(r.mtd) + '</td>'
             + '<td style="' + _RA + '"><span class="' + achClass(r.ach) + '">' + _rofoPct(r.ach) + '</span></td>'
             + '<td style="' + _RA + '">' + (r.ly != null ? _rofoFmt1(r.ly) : '—') + '</td>'
             + '<td style="' + _RA + '"><span class="' + lyClass(r.lyAch) + '">' + _rofoPct(r.lyAch) + '</span></td>'
-            + '<td style="' + _RA + '">' + (juneInProgress ? _rofoPct(r.pace) : '—') + '</td></tr>';
+            + '<td><input type="text" class="rofo-cmt" data-rk="' + _rofoEsc(rk) + '" value="' + _rofoEsc(cval) + '" placeholder="Comment…" onchange="_rofoSetComment(this)" style="width:100%;min-width:170px;box-sizing:border-box;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;"></td></tr>';
         });
       });
-      rows += '<tr class="td-section"><td>지점 합계</td><td></td>'
+      rows += '<tr class="td-section"><td>Branch Total</td>'
         + '<td style="' + _RA + '">' + _rofoFmt1(rd.totTgt) + '</td><td style="' + _RA + '">' + _rofoFmt1(rd.totMtd) + '</td>'
         + '<td style="' + _RA + '"><span class="' + achClass(rd.totAch) + '">' + _rofoPct(rd.totAch) + '</span></td>'
         + '<td style="' + _RA + '">' + (rd.totLy != null ? _rofoFmt1(rd.totLy) : '—') + '</td>'
         + '<td style="' + _RA + '"><span class="' + lyClass(rd.totLyAch) + '">' + _rofoPct(rd.totLyAch) + '</span></td>'
-        + '<td style="' + _RA + '">' + (juneInProgress ? _rofoPct(rd.totPace) : '—') + '</td></tr>';
+        + '<td></td></tr>';
 
-      const paceHdr = juneInProgress ? (' · 페이스 ' + _rofoPct(rd.totPace)) : '';
       return '<div style="margin-bottom:22px;">'
         + '<div class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
           + ROFO_JUN_REGION_LABEL[rd.region]
           + '<span class="' + achClass(rd.totAch) + '" style="font-size:12px;">' + _rofoPct(rd.totAch) + '</span>'
-          + '<span style="font-size:11px;font-weight:400;color:var(--text-muted);">실적 ' + _rofoFmt(rd.totMtd) + ' / 타깃 ' + _rofoFmt(rd.totTgt) + ' HL · vs LY ' + _rofoPct(rd.totLyAch) + paceHdr + '</span>'
+          + '<span style="font-size:11px;font-weight:400;color:var(--text-muted);">Actual ' + _rofoFmt(rd.totMtd) + ' / Target ' + _rofoFmt(rd.totTgt) + ' HL · vs LY ' + _rofoPct(rd.totLyAch) + '</span>'
+          + '<span style="margin-left:auto;display:flex;align-items:center;gap:8px;">'
+            + '<span class="rofo-cmt-status" style="font-size:11px;font-weight:400;color:var(--text-muted);"></span>'
+            + '<button onclick="_rofoSaveComments(this)" style="padding:4px 11px;font-size:11px;font-weight:600;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;">💾 Save</button>'
+          + '</span>'
         + '</div>'
         + '<div class="table-wrap"><table>'
-        + '<thead><tr><th style="text-align:left">Brand / SKU</th><th style="text-align:left">Comment</th><th style="' + _RA + '">6월 타깃 (HL)</th><th style="' + _RA + '">6월 실적 (HL)</th><th style="' + _RA + '">달성률</th><th style="' + _RA + '">LY (HL)</th><th style="' + _RA + '">vs LY</th><th style="' + _RA + '">페이스</th></tr></thead>'
+        + '<thead><tr><th style="text-align:left">Brand / SKU</th><th style="' + _RA + '">Target (HL)</th><th style="' + _RA + '">Actual (HL)</th><th style="' + _RA + '">Attain.</th><th style="' + _RA + '">LY (HL)</th><th style="' + _RA + '">vs LY</th><th style="text-align:left">Comment</th></tr></thead>'
         + '<tbody>' + rows + '</tbody></table></div>'
         + '</div>';
     }).join('');
