@@ -1641,7 +1641,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </div>
     <div class="chart-grid">
       <div class="chart-card full">
-        <div class="chart-title" id="d-chart-title">D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual / 2026 RoFo (HL, On Trade Total)</div>
+        <div class="chart-title" id="d-chart-title">Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual / 2026 RoFo (HL, On Trade Total)</div>
         <div class="chart-wrap tall"><canvas id="chartD"></canvas></div>
         <div id="d-progress-row"
              style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;padding:14px 0 4px;margin-top:10px;border-top:1px solid var(--border);"></div>
@@ -3674,6 +3674,36 @@ function destroyChart(id) {
   if (_charts[id]) { _charts[id].destroy(); delete _charts[id]; }
 }
 
+// ── Blade(단종) 보정 헬퍼 ──────────────────────────────────────────────────
+// Blade 제품은 2026년 7월부터 단종(≈0)이나 2025년 LY엔 큰 볼륨이 남아 YoY를 왜곡.
+// Blade 제외 수치를 KPI 카드·Chart D에 함께 제공.
+function _isBladeSku(name){ return /blade/i.test(name || ''); }
+// On Trade Total 기준 월별 2025 Blade 볼륨(HL)
+function _bladeMonthly2025HL(section){
+  const arr = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail[section || 'On Trade Total']) || [];
+  const out = Array(12).fill(0);
+  arr.forEach(b => (b.skus || []).forEach(s => {
+    if (!_isBladeSku(s.sku) || !s.data) return;
+    const f = (s.data.hl_factor != null) ? s.data.hl_factor : 0.0792;
+    const a = s.data.act_2025_monthly;
+    if (Array.isArray(a)) for (let m = 0; m < 12; m++) { if (a[m] != null) out[m] += a[m] * f; }
+  }));
+  return out;
+}
+// Blade 제외 YoY (현재 FCST 월): Σ非Blade this_week_fcst ÷ Σ非Blade 2025 동월 − 1 (HL 기준)
+function _exclBladeYoY(fcstMonIdx){
+  const arr = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
+  let fcst = 0, ly = 0;
+  arr.forEach(b => (b.skus || []).forEach(s => {
+    if (_isBladeSku(s.sku) || !s.data) return;
+    const f = (s.data.hl_factor != null) ? s.data.hl_factor : 0.0792;
+    if (s.data.this_week_fcst != null) fcst += s.data.this_week_fcst * f;
+    const a = s.data.act_2025_monthly;
+    if (Array.isArray(a) && a[fcstMonIdx] != null) ly += a[fcstMonIdx] * f;
+  }));
+  return ly > 0 ? (fcst / ly - 1) : null;
+}
+
 // ═══════════════════════════════════════════════
 //  KPI CARDS
 // ═══════════════════════════════════════════════
@@ -3724,13 +3754,19 @@ function achBadge(v) {
            : rofoAch >= 0.90 ? 'neutral' : 'negative',
       };
     })(),
-    {
-      label: 'FCST Growth vs LYM',
-      value: fmtPctDelta(ttl.fcst_growth_lym),
-      sub: `FCST: ${fmtHL(ttl.this_week_fcst)} vs LY: ${fmtHL(ttl.ly_month)} HL`,
-      badge: '',
-      cls: (ttl.fcst_growth_lym||0) >= 0 ? 'positive' : 'negative',
-    },
+    (() => {
+      const exBlade = _exclBladeYoY(fcstMon - 1);   // Blade 단종 보정 YoY
+      const exTxt = exBlade != null
+        ? ` · <b style="color:${exBlade >= 0 ? '#16a34a' : '#dc2626'}">excl. Blade ${fmtPctDelta(exBlade)}</b>`
+        : '';
+      return {
+        label: 'FCST Growth vs LYM',
+        value: fmtPctDelta(ttl.fcst_growth_lym),
+        sub: `FCST: ${fmtHL(ttl.this_week_fcst)} vs LY: ${fmtHL(ttl.ly_month)} HL${exTxt}`,
+        badge: '',
+        cls: (ttl.fcst_growth_lym||0) >= 0 ? 'positive' : 'negative',
+      };
+    })(),
   ];
 
   const grid = document.getElementById('kpi-grid');
@@ -3755,7 +3791,7 @@ function renderChartD() {
   const fcstMonIdx = fcstMon - 1;
   const months     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  let act2025, ap2026, act2026, rofo2026, fcstVal, titleText;
+  let act2025, ap2026, act2026, rofo2026, fcstVal, titleText, act2025exBlade = null;
 
   // SKU 선택 파싱
   let selectedBrand = null, selectedSku = null;
@@ -3785,7 +3821,11 @@ function renderChartD() {
     rofo2026 = Array.isArray(rofoTtl) ? [...rofoTtl] : null;
 
     fcstVal   = DASHBOARD_DATA.wk10_summary?.hl?.TTL?.this_week_fcst ?? null;
-    titleText = 'D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual / 2026 RoFo (HL, On Trade Total)';
+    titleText = 'Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual / 2026 RoFo (HL, On Trade Total)';
+
+    // 2025 Actual에서 7월(idx6)부터 Blade 제외 — 2026 Blade 단종(7월~) 기준 YoY 공정 비교용
+    const blade25 = _bladeMonthly2025HL('On Trade Total');
+    act2025exBlade = act2025.map((v, m) => v == null ? null : (m >= 6 ? v - blade25[m] : v));
 
   } else if (!selectedBrand) {
     // ─ CASE 2: 특정 지점 + 전체 (AP: monthly_regional_ap / 실적: dsr_by_month DSR 기준)
@@ -3815,7 +3855,7 @@ function renderChartD() {
     rofo2026 = null;  // RoFo는 On Trade Total 기준으로만 저장 — 지역 분해 없음
 
     fcstVal   = DASHBOARD_DATA.wk10_summary?.hl?.[regKey]?.this_week_fcst ?? null;
-    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual (HL, ${branch})`;
+    titleText = `Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual (HL, ${branch})`;
 
   } else if (selectedBrand && !selectedSku) {
     // ─ CASE 3: 특정 브랜드
@@ -3830,7 +3870,7 @@ function renderChartD() {
       ? bd.rofo_monthly.map(v => v != null ? v * 0.0792 : null)
       : null;
     fcstVal   = bd.this_week_fcst != null ? bd.this_week_fcst * 0.0792 : null;
-    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual${rofo2026 ? ' / 2026 RoFo' : ''} (HL, ${selectedBrand} / ${branch})`;
+    titleText = `Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual${rofo2026 ? ' / 2026 RoFo' : ''} (HL, ${selectedBrand} / ${branch})`;
 
   } else {
     // ─ CASE 4: 특정 SKU
@@ -3848,7 +3888,7 @@ function renderChartD() {
       ? sd.rofo_monthly.map(v => v != null ? v * 0.0792 : null)
       : null;
     fcstVal   = sd.this_week_fcst != null ? sd.this_week_fcst * f : null;
-    titleText = `D. Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual${rofo2026 ? ' / 2026 RoFo' : ''} (HL, ${selectedSku} / ${branch})`;
+    titleText = `Monthly Trend — 2025 Actual / 2026 AP / 2026 Actual${rofo2026 ? ' / 2026 RoFo' : ''} (HL, ${selectedSku} / ${branch})`;
   }
 
   // 현재 FCST 월 교체
@@ -3873,6 +3913,13 @@ function renderChartD() {
       borderColor: '#dc2626', backgroundColor: '#dc262620',
       tension: .3, fill: false, borderDash: [4,4],
       pointRadius: 3, pointBackgroundColor: '#dc2626',
+    });
+  }
+  if (act2025exBlade) {
+    datasets.push({
+      label: '2025 Actual excl. Blade', data: act2025exBlade,
+      borderColor: '#f59e0b', backgroundColor: '#f59e0b20',
+      tension: .3, fill: false, borderDash: [2,2], pointRadius: 2,
     });
   }
 
