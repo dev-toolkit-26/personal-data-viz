@@ -4960,6 +4960,8 @@ const ROFO_JUN_REGION_LABEL = { Seoul:'Seoul', BuSan:'Busan', 'DaeGu&JeJu':'D&J 
 function _rofoFmt(v){ return v==null ? '—' : Math.round(v).toLocaleString('ko-KR'); }
 function _rofoFmt1(v){ return v==null ? '—' : v.toLocaleString('ko-KR',{maximumFractionDigits:1}); }
 function _rofoPct(v){ return v==null ? '—' : Math.round(v*100)+'%'; }
+// vs LY 성장률: 비율(1.47)을 전년比 성장(+47%)로. -100% 적용(=−1) 후 부호 표기.
+function _rofoGrowth(v){ if (v==null) return '—'; const g=Math.round((v-1)*100); return (g>0?'+':'')+g+'%'; }
 const _RA = 'text-align:right';
 function _rofoEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 // Comment 입력 → DASHBOARD_DATA.rofo_comments['region|sku'] 즉시 반영 (저장은 _rofoSaveComments)
@@ -5025,7 +5027,7 @@ function renderRofoSheet() {
          + (wd.elapsed!=null?wd.elapsed:'—') + '/' + (wd.total!=null?wd.total:'—') + 'WD)')
       : 'June closed · final Attainment = Actual ÷ Target (base 100%)';
     metaEl.innerHTML = 'Target <b>P06_V1</b> (June Rofo branch split, HL) · Actual: dashboard June actual (c/s→HL) · '
-      + 'Attainment = Actual ÷ Target · vs LY = Actual ÷ LY · ' + statusTxt;
+      + 'Attainment = Actual ÷ Target · vs LY = Actual ÷ LY − 1 (YoY growth) · ' + statusTxt;
   }
 
   // 지점별 집계
@@ -5081,7 +5083,7 @@ function renderRofoSheet() {
           + '<td style="' + _RA + '">' + _rofoFmt1(bTgt) + '</td><td style="' + _RA + '">' + _rofoFmt1(bMtd) + '</td>'
           + '<td style="' + _RA + '"><span class="' + achClass(bAch) + '">' + _rofoPct(bAch) + '</span></td>'
           + '<td style="' + _RA + '">' + (bLyHas ? _rofoFmt1(bLy) : '—') + '</td>'
-          + '<td style="' + _RA + '"><span class="' + lyClass(bLyAch) + '">' + _rofoPct(bLyAch) + '</span></td>'
+          + '<td style="' + _RA + '"><span class="' + lyClass(bLyAch) + '">' + _rofoGrowth(bLyAch) + '</span></td>'
           + '<td></td></tr>';
         rd.brandMap[br].forEach(r => {
           const rk = r.region + '|' + r.sku;
@@ -5091,7 +5093,7 @@ function renderRofoSheet() {
             + '<td style="' + _RA + '">' + _rofoFmt1(r.mtd) + '</td>'
             + '<td style="' + _RA + '"><span class="' + achClass(r.ach) + '">' + _rofoPct(r.ach) + '</span></td>'
             + '<td style="' + _RA + '">' + (r.ly != null ? _rofoFmt1(r.ly) : '—') + '</td>'
-            + '<td style="' + _RA + '"><span class="' + lyClass(r.lyAch) + '">' + _rofoPct(r.lyAch) + '</span></td>'
+            + '<td style="' + _RA + '"><span class="' + lyClass(r.lyAch) + '">' + _rofoGrowth(r.lyAch) + '</span></td>'
             + '<td><input type="text" class="rofo-cmt" data-rk="' + _rofoEsc(rk) + '" value="' + _rofoEsc(cval) + '" placeholder="Comment…" onchange="_rofoSetComment(this)" style="width:100%;min-width:170px;box-sizing:border-box;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;"></td></tr>';
         });
       });
@@ -5099,14 +5101,14 @@ function renderRofoSheet() {
         + '<td style="' + _RA + '">' + _rofoFmt1(rd.totTgt) + '</td><td style="' + _RA + '">' + _rofoFmt1(rd.totMtd) + '</td>'
         + '<td style="' + _RA + '"><span class="' + achClass(rd.totAch) + '">' + _rofoPct(rd.totAch) + '</span></td>'
         + '<td style="' + _RA + '">' + (rd.totLy != null ? _rofoFmt1(rd.totLy) : '—') + '</td>'
-        + '<td style="' + _RA + '"><span class="' + lyClass(rd.totLyAch) + '">' + _rofoPct(rd.totLyAch) + '</span></td>'
+        + '<td style="' + _RA + '"><span class="' + lyClass(rd.totLyAch) + '">' + _rofoGrowth(rd.totLyAch) + '</span></td>'
         + '<td></td></tr>';
 
       return '<div style="margin-bottom:22px;">'
         + '<div class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
           + ROFO_JUN_REGION_LABEL[rd.region]
           + '<span class="' + achClass(rd.totAch) + '" style="font-size:12px;">' + _rofoPct(rd.totAch) + '</span>'
-          + '<span style="font-size:11px;font-weight:400;color:var(--text-muted);">Actual ' + _rofoFmt(rd.totMtd) + ' / Target ' + _rofoFmt(rd.totTgt) + ' HL · vs LY ' + _rofoPct(rd.totLyAch) + '</span>'
+          + '<span style="font-size:11px;font-weight:400;color:var(--text-muted);">Actual ' + _rofoFmt(rd.totMtd) + ' / Target ' + _rofoFmt(rd.totTgt) + ' HL · vs LY ' + _rofoGrowth(rd.totLyAch) + '</span>'
           + '<span style="margin-left:auto;display:flex;align-items:center;gap:8px;">'
             + '<span class="rofo-cmt-status" style="font-size:11px;font-weight:400;color:var(--text-muted);"></span>'
             + '<button onclick="_rofoSaveComments(this)" style="padding:4px 11px;font-size:11px;font-weight:600;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;">💾 Save</button>'
