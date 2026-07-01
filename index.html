@@ -262,6 +262,19 @@ thead th { background: var(--primary); color: #fff; padding: 6px 8px; text-align
 /* ── Rofo 탭: 컬럼 헤더 상단 고정 (페이지 스크롤 기준) ── */
 #rofo-sheet-body .table-wrap { overflow: visible; }
 #rofo-sheet-body thead th { position: sticky; top: 0; z-index: 3; }
+/* Comment 열이 남는 폭을 모두 차지 (Brand/SKU·수치 열은 내용 폭) */
+#rofo-sheet-body th:last-child, #rofo-sheet-body td:last-child { width: 100%; }
+#rofo-sheet-body th:first-child, #rofo-sheet-body td:first-child { white-space: nowrap; }
+#rofo-sheet-body input.rofo-cmt {
+  width: 100%; min-width: 260px; box-sizing: border-box;
+  font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
+  background: #eef0f2; color: #6b7280; transition: background .12s, border-color .12s, color .12s;
+}
+#rofo-sheet-body input.rofo-cmt::placeholder { color: #b0b4ba; }
+/* 입력된 코멘트는 밝게·강조, 빈 칸은 어둡게 구분 */
+#rofo-sheet-body input.rofo-cmt.filled {
+  background: #eaf5ea; color: #14532d; font-weight: 600; border-color: #9ec59e;
+}
 thead th:first-child, thead th:nth-child(2) { text-align: left; }
 thead th::after { content: ' \2195'; opacity: .4; font-size: 10px; }
 thead th.sort-asc::after  { content: ' \2191'; opacity: 1; }
@@ -1666,7 +1679,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
   <!-- Tab: Rofo Sheet (6월 지점별 SKU 진행률 vs P06_V1) -->
   <div id="tab-rofo-sheet" class="tab-content">
-    <div class="section-title">Rofo — June Branch / SKU Progress (vs P06_V1 split, HL)</div>
+    <div class="section-title">Rofo — Branch / SKU Progress (HL) · 상단 월 버튼으로 월 선택</div>
     <div id="rofo-sheet-meta" style="font-size:11px;color:var(--text-muted);margin:-4px 0 12px;"></div>
     <div id="rofo-sheet-summary" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;"></div>
     <div id="rofo-sheet-body"></div>
@@ -5003,6 +5016,8 @@ const ROFO_JUN_BRANCH = {
 // region 키 = DASHBOARD_DATA.sku_detail 키 (BuSan, DaeGu&JeJu — 공백 없음에 주의)
 const ROFO_JUN_REGIONS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
 const ROFO_JUN_REGION_LABEL = { Seoul:'Seoul', BuSan:'Busan', 'DaeGu&JeJu':'D&J (Daegu·Jeju)', DaeJeon:'Daejeon', GwangJu:'Gwangju' };
+// 월별 Rofo 지점 분배 (월[1~12] → SKU맵). 6월=P06_V1. 새 달 반영 시 여기에 { 7: {...}, ... } 추가.
+const ROFO_BRANCH_BY_MONTH = { 6: ROFO_JUN_BRANCH };
 
 function _rofoFmt(v){ return v==null ? '—' : Math.round(v).toLocaleString('ko-KR'); }
 function _rofoFmt1(v){ return v==null ? '—' : v.toLocaleString('ko-KR',{maximumFractionDigits:1}); }
@@ -5015,6 +5030,7 @@ function _rofoEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(
 // 빈 값도 ''로 유지 → 저장 시 해당 행을 DB에서 삭제하기 위함.
 function _rofoSetComment(el){
   if (!DASHBOARD_DATA.rofo_comments) DASHBOARD_DATA.rofo_comments = {};
+  el.classList.toggle('filled', !!el.value.trim());   // 입력 여부 시각 구분
   DASHBOARD_DATA.rofo_comments[el.getAttribute('data-rk')] = el.value.trim();
 }
 // 코멘트는 전용 테이블 rofo_comments(공개 RLS)에 직접 저장 → 모든 직원이 저장 가능.
@@ -5024,7 +5040,6 @@ async function _rofoLoadComments(){
   try {
     const { data, error } = await _supabase.from('rofo_comments').select('region,sku,comment');
     if (error) throw error;
-    // 기존 스냅샷 코멘트를 시작점으로, 테이블 값이 우선 (마이그레이션 호환)
     const map = { ...(DASHBOARD_DATA.rofo_comments || {}) };
     (data || []).forEach(r => { if (r.comment) map[r.region + '|' + r.sku] = r.comment; });
     DASHBOARD_DATA.rofo_comments = map;
@@ -5056,12 +5071,33 @@ async function _rofoSaveComments(btn){
 
 function renderRofoSheet() {
   if (!DASHBOARD_DATA.rofo_comments) DASHBOARD_DATA.rofo_comments = {};
-  const JUNE = 5;                                  // 0-indexed 6월
-  const cur = (typeof _upGetFcstMonth === 'function') ? _upGetFcstMonth() : null;  // 1-indexed 현재 FCST 월
-  const juneInProgress = (cur === 6);              // 6월이 진행 중인지(마감이면 최종 달성률)
+  const MN = (typeof MONTH_NAMES_KR !== 'undefined') ? MONTH_NAMES_KR
+           : ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const cur = (typeof _upGetFcstMonth === 'function') ? _upGetFcstMonth() : 7;   // 현재 FCST 월
+  const mon = (typeof _selectedMonth === 'number' && _selectedMonth >= 1) ? _selectedMonth : cur;  // 상단 월 버튼 선택
+  const monIdx  = mon - 1;
+  const monName = MN[monIdx] || ('M' + mon);
+  const monData = ROFO_BRANCH_BY_MONTH[mon] || null;
+  const metaEl = document.getElementById('rofo-sheet-meta');
+  const sumEl  = document.getElementById('rofo-sheet-summary');
+  const bodyEl = document.getElementById('rofo-sheet-body');
+
+  // 선택 월에 Rofo 지점 분배 데이터 없으면 안내 (현재 6월부터 제공)
+  if (!monData) {
+    const avail = Object.keys(ROFO_BRANCH_BY_MONTH).map(Number).sort((a,b)=>a-b).map(m => MN[m-1]).join(', ');
+    if (metaEl) metaEl.innerHTML = '';
+    if (sumEl)  sumEl.innerHTML  = '';
+    if (bodyEl) bodyEl.innerHTML = '<div class="table-wrap" style="padding:20px 16px;color:var(--text-muted);font-size:13px;">'
+      + '<b>' + monName + '</b> Rofo 지점 분배 데이터가 아직 없습니다.'
+      + (avail ? ' 상단 월 버튼에서 <b>' + avail + '</b> 선택 시 표시됩니다.' : '')
+      + '</div>';
+    return;
+  }
+
+  const monInProgress = (mon === cur);            // 선택 월이 진행 중이면 페이스, 마감이면 최종 달성률
   const wd = DASHBOARD_DATA.wd_progress || {};
   const wdPct = (typeof wd.pct === 'number' && wd.pct > 0) ? wd.pct : null;
-  const elapsedFrac = juneInProgress ? (wdPct != null ? wdPct : 1) : 1;   // 페이스/벤치마크 기준 경과율
+  const elapsedFrac = monInProgress ? (wdPct != null ? wdPct : 1) : 1;
   const bench = elapsedFrac;                        // 달성률 판정 기준선
 
   function achClass(ach){
@@ -5074,39 +5110,38 @@ function renderRofoSheet() {
     return cls==='ach-high' ? 'var(--positive)' : cls==='ach-mid' ? 'var(--neutral)'
          : cls==='ach-low' ? 'var(--negative)' : 'var(--text-muted)';
   }
-  // 6월 실적·LY(HL) 맵. 실적: act_monthly[5](6월) 우선, 6월 진행 중이면 mtd 보완.
-  // LY: act_2025_monthly[5](2025년 6월). 대시보드 c/s → SKU별 hl_factor로 HL 환산 (타깃 HL과 단위 일치).
-  function buildJuneMap(region){
+  // 선택 월 실적·LY(HL) 맵. 실적: act_monthly[monIdx] 우선, 진행 중이면 mtd 보완.
+  // LY: act_2025_monthly[monIdx]. 대시보드 c/s → SKU별 hl_factor로 HL 환산 (타깃 HL과 단위 일치).
+  function buildMonthMap(region){
     const map = {};
     const arr = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail[region]) || [];
     arr.forEach(b => (b.skus||[]).forEach(s => {
       const d = s && s.data; if (!d) return;
       const f = (d.hl_factor != null) ? d.hl_factor : 0.0792;
-      let raw = (Array.isArray(d.act_monthly) && d.act_monthly[JUNE] != null) ? d.act_monthly[JUNE] : null;
-      if (raw == null && juneInProgress && d.mtd != null) raw = d.mtd;
-      const lyRaw = (Array.isArray(d.act_2025_monthly) && d.act_2025_monthly[JUNE] != null) ? d.act_2025_monthly[JUNE] : null;
+      let raw = (Array.isArray(d.act_monthly) && d.act_monthly[monIdx] != null) ? d.act_monthly[monIdx] : null;
+      if (raw == null && monInProgress && d.mtd != null) raw = d.mtd;
+      const lyRaw = (Array.isArray(d.act_2025_monthly) && d.act_2025_monthly[monIdx] != null) ? d.act_2025_monthly[monIdx] : null;
       map[s.sku] = { mtd: raw != null ? raw * f : null, ly: lyRaw != null ? lyRaw * f : null };
     }));
     return map;
   }
   function lyClass(v){ return v == null ? '' : v >= 1 ? 'ach-high' : 'ach-low'; }   // vs LY: 전년比 성장 green/감소 red
 
-  const metaEl = document.getElementById('rofo-sheet-meta');
   if (metaEl) {
-    const statusTxt = juneInProgress
-      ? ('June in progress · WD elapsed <b>' + (wdPct!=null?Math.round(wdPct*100)+'%':'—') + '</b> ('
+    const statusTxt = monInProgress
+      ? (monName + ' in progress · WD elapsed <b>' + (wdPct!=null?Math.round(wdPct*100)+'%':'—') + '</b> ('
          + (wd.elapsed!=null?wd.elapsed:'—') + '/' + (wd.total!=null?wd.total:'—') + 'WD)')
-      : 'June closed · final Attainment = Actual ÷ Target (base 100%)';
-    metaEl.innerHTML = 'Target <b>P06_V1</b> (June Rofo branch split, HL) · Actual: dashboard June actual (c/s→HL) · '
+      : (monName + ' closed · final Attainment = Actual ÷ Target (base 100%)');
+    metaEl.innerHTML = 'Target: <b>' + monName + '</b> Rofo branch split (HL) · Actual: dashboard ' + monName + ' actual (c/s→HL) · '
       + 'Attainment = Actual ÷ Target · vs LY = Actual ÷ LY − 1 (YoY growth) · ' + statusTxt;
   }
 
   // 지점별 집계
   const regionData = ROFO_JUN_REGIONS.map(region => {
-    const jMap = buildJuneMap(region);
+    const jMap = buildMonthMap(region);
     const brandOrder = [], brandMap = {};
-    Object.keys(ROFO_JUN_BRANCH).forEach(sku => {
-      const rec = ROFO_JUN_BRANCH[sku];
+    Object.keys(monData).forEach(sku => {
+      const rec = monData[sku];
       const tgt = rec[region] || 0;
       if (tgt <= 0) return;
       const ent = jMap[sku] || {};
@@ -5127,7 +5162,6 @@ function renderRofoSheet() {
   });
 
   // 요약 스트립
-  const sumEl = document.getElementById('rofo-sheet-summary');
   if (sumEl) {
     sumEl.innerHTML = regionData.map(rd => {
       const cls = achClass(rd.totAch);
@@ -5141,7 +5175,6 @@ function renderRofoSheet() {
   }
 
   // 지점별 섹션
-  const bodyEl = document.getElementById('rofo-sheet-body');
   if (bodyEl) {
     bodyEl.innerHTML = regionData.map(rd => {
       let rows = '';
@@ -5165,7 +5198,7 @@ function renderRofoSheet() {
             + '<td style="' + _RA + '"><span class="' + achClass(r.ach) + '">' + _rofoPct(r.ach) + '</span></td>'
             + '<td style="' + _RA + '">' + (r.ly != null ? _rofoFmt1(r.ly) : '—') + '</td>'
             + '<td style="' + _RA + '"><span class="' + lyClass(r.lyAch) + '">' + _rofoGrowth(r.lyAch) + '</span></td>'
-            + '<td><input type="text" class="rofo-cmt" data-rk="' + _rofoEsc(rk) + '" value="' + _rofoEsc(cval) + '" placeholder="Comment…" onchange="_rofoSetComment(this)" style="width:100%;min-width:170px;box-sizing:border-box;font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;"></td></tr>';
+            + '<td><input type="text" class="rofo-cmt' + (cval ? ' filled' : '') + '" data-rk="' + _rofoEsc(rk) + '" value="' + _rofoEsc(cval) + '" placeholder="Comment…" oninput="_rofoSetComment(this)"></td></tr>';
         });
       });
       rows += '<tr class="td-section"><td>Branch Total</td>'
@@ -6230,6 +6263,9 @@ function selectMonth(mon) {
   renderWK10Tables();
   if (document.getElementById('tab-sku').classList.contains('active')) {
     renderSkuTable();
+  }
+  if (document.getElementById('tab-rofo-sheet')?.classList.contains('active')) {
+    renderRofoSheet();
   }
 }
 
