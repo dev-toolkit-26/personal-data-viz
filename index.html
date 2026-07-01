@@ -262,11 +262,11 @@ thead th { background: var(--primary); color: #fff; padding: 6px 8px; text-align
 /* ── Rofo 탭: 컬럼 헤더 상단 고정 (페이지 스크롤 기준) ── */
 #rofo-sheet-body .table-wrap { overflow: visible; }
 #rofo-sheet-body thead th { position: sticky; top: 0; z-index: 3; }
-/* Comment 열이 남는 폭을 모두 차지 (Brand/SKU·수치 열은 내용 폭) */
-#rofo-sheet-body th:last-child, #rofo-sheet-body td:last-child { width: 100%; }
+/* 표는 내용 폭(width:auto) → Comment는 절반 정도, 표 오른쪽은 여유공간으로 남김 */
+#rofo-sheet-body table { width: auto; }
 #rofo-sheet-body th:first-child, #rofo-sheet-body td:first-child { white-space: nowrap; }
 #rofo-sheet-body input.rofo-cmt {
-  width: 100%; min-width: 260px; box-sizing: border-box;
+  width: 100%; min-width: 420px; box-sizing: border-box;
   font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
   background: #eef0f2; color: #6b7280; transition: background .12s, border-color .12s, color .12s;
 }
