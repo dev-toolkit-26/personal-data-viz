@@ -5024,6 +5024,22 @@ const ROFO_JUN_REGION_LABEL = { Seoul:'Seoul', BuSan:'Busan', 'DaeGu&JeJu':'D&J 
 // 월별 Rofo 지점 분배 (월[1~12] → SKU맵). 6월=P06_V1. 새 달 반영 시 여기에 { 7: {...}, ... } 추가.
 const ROFO_BRANCH_BY_MONTH = { 6: ROFO_JUN_BRANCH };
 
+// 월별 On-Trade Review 요약 (Claude가 코멘트·데이터 기반으로 작성한 읽기전용 executive summary).
+// 대형 볼륨 위주, 소볼륨 SKU 이슈는 제외. 매월 코멘트 갱신 후 재작성해 교체.
+const ROFO_SUMMARY_BY_MONTH = {
+  6: '<div style="font-size:12px;line-height:1.65;">'
+    + '<div style="margin-bottom:5px;"><b>On-Trade 6월 110% 달성</b> (Actual 4,623 / Target 4,203 HL · YoY <b style="color:#16a34a">+6%</b>) — 대형 볼륨 위주</div>'
+    + '<ul style="margin:0;padding-left:18px;">'
+    + '<li><b>HE 20L Air Keg</b> (최대 볼륨) <b style="color:#16a34a">116% · YoY +34%</b> — Blade 단종분의 20L 전환 + 인천공항·골프장 등 신규 채널 확대가 성장 견인.</li>'
+    + '<li><b>HE 330 Bottle</b> 95% · YoY <b style="color:#dc2626">−11%</b> — 전년 대량 푸쉬 기저효과·재고 소진·일부 거래처 이탈로 감소.</li>'
+    + '<li><b>HE 330 Can</b> <b style="color:#16a34a">123%</b> — 월말 푸쉬 + 신규 골프장/호텔 볼륨으로 목표 초과.</li>'
+    + '<li><b>HE 0.0 330 Bottle</b> YoY <b style="color:#16a34a">+52%</b> — NA 신규 리스팅(라이프스타일·라이브클럽) 확대.</li>'
+    + '<li><b>Paulaner 20L Keg</b> <b style="color:#16a34a">117%</b> — Special/Outlet 채널 신규 개발.</li>'
+    + '</ul>'
+    + '<div style="margin-top:5px;color:var(--text-muted);font-size:11px;">※ 소볼륨 SKU 이슈는 제외.</div>'
+    + '</div>',
+};
+
 function _rofoFmt(v){ return v==null ? '—' : Math.round(v).toLocaleString('ko-KR'); }
 function _rofoFmt1(v){ return v==null ? '—' : v.toLocaleString('ko-KR',{maximumFractionDigits:1}); }
 function _rofoPct(v){ return v==null ? '—' : Math.round(v*100)+'%'; }
@@ -5037,6 +5053,7 @@ function _rofoSetComment(el){
   if (!DASHBOARD_DATA.rofo_comments) DASHBOARD_DATA.rofo_comments = {};
   el.classList.toggle('filled', !!el.value.trim());   // 입력 여부 시각 구분
   DASHBOARD_DATA.rofo_comments[el.getAttribute('data-rk')] = el.value.trim();
+  if (typeof _rofoRefreshSummary === 'function') _rofoRefreshSummary();   // 코멘트 편집 시 서머리 갱신
 }
 // 코멘트는 전용 테이블 rofo_comments(공개 RLS)에 직접 저장 → 모든 직원이 저장 가능.
 // (이전엔 deploy-snapshot=관리자 전용이라 비관리자 저장 실패. todos/calendar_events와 동일 모델)
@@ -5072,6 +5089,59 @@ async function _rofoSaveComments(btn){
     for (const d of dels) { await _supabase.from('rofo_comments').delete().eq('region', d.region).eq('sku', d.sku); }
     if (statusEl) statusEl.textContent = '✓ Saved ' + new Date().toLocaleTimeString('en-GB');
   } catch(e){ if (statusEl) statusEl.textContent = 'Save failed: ' + (e.message || e); }
+}
+
+// ── On-Trade Total 리뷰(서머리) — 읽기전용 자동 요약 ──────────────────────────
+// 전국(On Trade Total) Comment = 저장값 우선, 없으면 지점 코멘트 결합(seed). 편집은 전국 Comment 칸에서.
+// 서머리는 편집 불가: 전국 코멘트 기반으로 큰 볼륨·큰 변동 SKU를 깔끔한 리스트로 자동 요약.
+let _rofoTotalRD = null, _rofoSelectedMon = null;
+function _rofoNationalComment(sku){
+  const cm = DASHBOARD_DATA.rofo_comments || {};
+  const stored = (cm['On Trade Total|' + sku] || '').trim();
+  if (stored) return stored;                                     // 사용자가 편집·저장한 전국 코멘트 우선
+  const parts = [];                                              // 없으면 지점 코멘트 결합(seed)
+  ROFO_JUN_REGIONS.forEach(rg => { const c = (cm[rg + '|' + sku] || '').trim(); if (c && c !== '__SUMMARY__' && !parts.includes(c)) parts.push(c); });
+  return parts.join(' · ');
+}
+function _rofoSummaryHtml(rd){
+  const authored = ROFO_SUMMARY_BY_MONTH[_rofoSelectedMon];   // Claude 작성 요약(우선)
+  if (authored) return authored;
+  // 미작성 월: 큰 볼륨·큰 변동 SKU 자동 초안(폴백)
+  if (!rd) return '';
+  const skus = [];
+  rd.brandOrder.forEach(br => rd.brandMap[br].forEach(r => skus.push(r)));
+  const vol = r => Math.max(r.tgt || 0, r.mtd || 0);
+  const floor = Math.max(20, (rd.totTgt || 0) * 0.03);            // 소볼륨 제외
+  const big = skus.filter(r => vol(r) >= floor);
+  const varScore = r => Math.abs((r.ach == null ? 1 : r.ach) - 1) + Math.abs((r.lyAch == null ? 1 : r.lyAch) - 1);
+  let picked = big.filter(r => varScore(r) >= 0.1).sort((a, b) => (varScore(b) * vol(b)) - (varScore(a) * vol(a))).slice(0, 5);
+  if (!picked.length) picked = [...big].sort((a, b) => vol(b) - vol(a)).slice(0, 4);
+  if (!picked.length) return '<span style="color:var(--text-muted);font-size:12px;">요약할 데이터가 없습니다.</span>';
+  const items = picked.map(r => {
+    const achv = r.ach != null ? Math.round(r.ach * 100) + '%' : '—';
+    const achCol = r.ach == null ? '#888' : (r.ach >= 1 ? '#16a34a' : (r.ach >= 0.95 ? '#d97706' : '#dc2626'));
+    const yoy = r.lyAch != null ? ((r.lyAch >= 1 ? '+' : '') + Math.round((r.lyAch - 1) * 100) + '%') : '—';
+    const yoyCol = r.lyAch == null ? '#888' : (r.lyAch >= 1 ? '#16a34a' : '#dc2626');
+    const cRaw = (_rofoNationalComment(r.sku) || '').trim();
+    const c = _rofoEsc(cRaw.length > 130 ? cRaw.slice(0, 128) + '…' : cRaw);
+    return '<li style="margin:2px 0;line-height:1.5;">'
+      + '<b>' + r.sku + '</b> · <span style="color:' + achCol + ';font-weight:600;">' + achv + '</span>'
+      + ' · YoY <span style="color:' + yoyCol + ';">' + yoy + '</span>'
+      + (c ? ' — <span style="color:#374151;">' + c + '</span>' : '')
+      + '</li>';
+  });
+  return '<ul style="margin:0;padding-left:18px;font-size:12px;">' + items.join('') + '</ul>';
+}
+function _rofoReviewBoxHtml(){
+  return '<div class="rofo-total-review" style="margin:2px 0 12px;padding:10px 14px;background:#f0f7f0;border:1px solid #cfe3cf;border-radius:8px;">'
+    + '<div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:6px;">On-Trade Review'
+      + ' <span style="font-weight:400;color:var(--text-muted);">— 월간 요약 (대형 볼륨 위주 · 소볼륨 이슈 제외)</span></div>'
+    + '<div id="rofo-summary-out">' + _rofoSummaryHtml(_rofoTotalRD) + '</div>'
+  + '</div>';
+}
+function _rofoRefreshSummary(){
+  const el = document.getElementById('rofo-summary-out');
+  if (el && _rofoTotalRD) el.innerHTML = _rofoSummaryHtml(_rofoTotalRD);
 }
 
 function renderRofoSheet() {
@@ -5141,13 +5211,13 @@ function renderRofoSheet() {
       + 'Attainment = Actual ÷ Target · vs LY = Actual ÷ LY − 1 (YoY growth) · ' + statusTxt;
   }
 
-  // 지점별 집계
-  const regionData = ROFO_JUN_REGIONS.map(region => {
+  // 집계 (region=실적 소스, targetFn=SKU별 타깃)
+  function buildRD(region, label, targetFn){
     const jMap = buildMonthMap(region);
     const brandOrder = [], brandMap = {};
     Object.keys(monData).forEach(sku => {
       const rec = monData[sku];
-      const tgt = rec[region] || 0;
+      const tgt = targetFn(sku) || 0;
       if (tgt <= 0) return;
       const ent = jMap[sku] || {};
       const mtd = ent.mtd != null ? ent.mtd : null;
@@ -5163,8 +5233,16 @@ function renderRofoSheet() {
     }));
     const totAch   = totTgt > 0 ? totMtd / totTgt : null;
     const totLyAch = (totLyHas && totLy > 0) ? totMtd / totLy : null;
-    return { region, brandOrder, brandMap, totTgt, totMtd, totLy: totLyHas?totLy:null, totAch, totLyAch };
-  });
+    return { region, label, brandOrder, brandMap, totTgt, totMtd, totLy: totLyHas?totLy:null, totAch, totLyAch };
+  }
+  // 지점별
+  const regionData = ROFO_JUN_REGIONS.map(region =>
+    buildRD(region, ROFO_JUN_REGION_LABEL[region], sku => monData[sku][region]));
+  // On Trade Total: 타깃=지점 합, 실적=On Trade Total actual (Seoul 위에 표시)
+  const totalRD = buildRD('On Trade Total', 'On Trade Total',
+    sku => ROFO_JUN_REGIONS.reduce((s, rg) => s + (monData[sku][rg] || 0), 0));
+  _rofoTotalRD = totalRD;
+  _rofoSelectedMon = mon;
 
   // 요약 스트립
   if (sumEl) {
@@ -5179,9 +5257,10 @@ function renderRofoSheet() {
     }).join('');
   }
 
-  // 지점별 섹션
+  // 섹션: On Trade Total(맨 위) + 지점별
   if (bodyEl) {
-    bodyEl.innerHTML = regionData.map(rd => {
+    bodyEl.innerHTML = [totalRD].concat(regionData).map(rd => {
+      const isTotal = (rd === totalRD);
       let rows = '';
       rd.brandOrder.forEach(br => {
         let bTgt=0, bMtd=0, bLy=0, bHas=false, bLyHas=false;
@@ -5195,8 +5274,9 @@ function renderRofoSheet() {
           + '<td style="' + _RA + '"><span class="' + lyClass(bLyAch) + '">' + _rofoGrowth(bLyAch) + '</span></td>'
           + '<td></td></tr>';
         rd.brandMap[br].forEach(r => {
-          const rk = r.region + '|' + r.sku;
-          const cval = (DASHBOARD_DATA.rofo_comments && DASHBOARD_DATA.rofo_comments[rk]) || '';
+          const rk = r.region + '|' + r.sku;   // Total: 'On Trade Total|sku'
+          const cval = isTotal ? _rofoNationalComment(r.sku)
+                               : ((DASHBOARD_DATA.rofo_comments && DASHBOARD_DATA.rofo_comments[rk]) || '');
           rows += '<tr><td>&nbsp;&nbsp;' + r.sku + '</td>'
             + '<td style="' + _RA + '">' + _rofoFmt1(r.tgt) + '</td>'
             + '<td style="' + _RA + '">' + _rofoFmt1(r.mtd) + '</td>'
@@ -5206,7 +5286,7 @@ function renderRofoSheet() {
             + '<td><input type="text" class="rofo-cmt' + (cval ? ' filled' : '') + '" data-rk="' + _rofoEsc(rk) + '" value="' + _rofoEsc(cval) + '" placeholder="Comment…" oninput="_rofoSetComment(this)"></td></tr>';
         });
       });
-      rows += '<tr class="td-section"><td>Branch Total</td>'
+      rows += '<tr class="td-section"><td>' + (isTotal ? 'On Trade Total' : 'Branch Total') + '</td>'
         + '<td style="' + _RA + '">' + _rofoFmt1(rd.totTgt) + '</td><td style="' + _RA + '">' + _rofoFmt1(rd.totMtd) + '</td>'
         + '<td style="' + _RA + '"><span class="' + achClass(rd.totAch) + '">' + _rofoPct(rd.totAch) + '</span></td>'
         + '<td style="' + _RA + '">' + (rd.totLy != null ? _rofoFmt1(rd.totLy) : '—') + '</td>'
@@ -5214,8 +5294,8 @@ function renderRofoSheet() {
         + '<td></td></tr>';
 
       return '<div style="margin-bottom:22px;">'
-        + '<div class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
-          + ROFO_JUN_REGION_LABEL[rd.region]
+        + '<div class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;' + (isTotal ? 'border-left-color:var(--primary);' : '') + '">'
+          + (isTotal ? '<b>' + rd.label + '</b>' : rd.label)
           + '<span class="' + achClass(rd.totAch) + '" style="font-size:12px;">' + _rofoPct(rd.totAch) + '</span>'
           + '<span style="font-size:11px;font-weight:400;color:var(--text-muted);">Actual ' + _rofoFmt(rd.totMtd) + ' / Target ' + _rofoFmt(rd.totTgt) + ' HL · vs LY ' + _rofoGrowth(rd.totLyAch) + '</span>'
           + '<span style="margin-left:auto;display:flex;align-items:center;gap:8px;">'
@@ -5223,6 +5303,7 @@ function renderRofoSheet() {
             + '<button onclick="_rofoSaveComments(this)" style="padding:4px 11px;font-size:11px;font-weight:600;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;">💾 Save</button>'
           + '</span>'
         + '</div>'
+        + (isTotal ? _rofoReviewBoxHtml() : '')
         + '<div class="table-wrap"><table>'
         + '<thead><tr><th style="text-align:left">Brand / SKU</th><th style="' + _RA + '">Target (HL)</th><th style="' + _RA + '">Actual (HL)</th><th style="' + _RA + '">Attain.</th><th style="' + _RA + '">LY (HL)</th><th style="' + _RA + '">vs LY</th><th style="text-align:left">Comment</th></tr></thead>'
         + '<tbody>' + rows + '</tbody></table></div>'
