@@ -262,11 +262,16 @@ thead th { background: var(--primary); color: #fff; padding: 6px 8px; text-align
 /* ── Rofo 탭: 컬럼 헤더 상단 고정 (페이지 스크롤 기준) ── */
 #rofo-sheet-body .table-wrap { overflow: visible; }
 #rofo-sheet-body thead th { position: sticky; top: 0; z-index: 3; }
-/* 표는 내용 폭(width:auto) → Comment는 절반 정도, 표 오른쪽은 여유공간으로 남김 */
-#rofo-sheet-body table { width: auto; }
-#rofo-sheet-body th:first-child, #rofo-sheet-body td:first-child { white-space: nowrap; }
+/* 표 전체 폭 사용(fixed layout) — 컬럼 비율 지정. Comment는 우측 ~35%, 나머지 컬럼은 넉넉히. */
+#rofo-sheet-body table { width: 100%; table-layout: fixed; }
+#rofo-sheet-body th:nth-child(1) { width: 15%; }                                   /* Brand / SKU */
+#rofo-sheet-body th:nth-child(2), #rofo-sheet-body th:nth-child(3),
+#rofo-sheet-body th:nth-child(4), #rofo-sheet-body th:nth-child(5),
+#rofo-sheet-body th:nth-child(6) { width: 7%; }                                    /* Target·Actual·Attain·LY·vsLY */
+#rofo-sheet-body th:nth-child(7) { width: 50%; }                                   /* Comment (넓힘) */
+#rofo-sheet-body td:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #rofo-sheet-body input.rofo-cmt {
-  width: 100%; min-width: 420px; box-sizing: border-box;
+  width: 100%; min-width: 0; box-sizing: border-box;
   font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px;
   background: #eef0f2; color: #6b7280; transition: background .12s, border-color .12s, color .12s;
 }
