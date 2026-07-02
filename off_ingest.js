@@ -1,0 +1,234 @@
+// ═══════════════════════════════════════════════════════════════════
+//  off_ingest.js — Off-Trade DSR 파싱/집계 공용 모듈 (On·Off 공유)
+//  · window.OffIngest 로 노출. XLSX(SheetJS) 전역 필요.
+//  · parseDsrWorkbook: 라인아이템 워크북 → {HL,Qty,NSV} 키="ch|acct|sku"→[12].
+//    (Segment 없으면 Group으로 채널 역추론. On-Trade 행은 Group이 지역명이라
+//     매핑에 없어 자동 스킵되므로, On+Off 통합 원본을 그대로 넣어도 Off분만 집계됨.)
+//  · applyDsrToRows: 집계 결과를 Off rows 배열에 반영(순수 함수, OFF_SEED 비의존).
+//  Off/index.html 및 index.html(On) 양쪽에서 재사용.
+// ═══════════════════════════════════════════════════════════════════
+(function (global) {
+  'use strict';
+
+  function _offCellNum(cell) {
+    if (!cell) return 0;
+    const v = cell.v;
+    if (v === undefined || v === null || v === '') return 0;
+    const n = Number(v);
+    return isFinite(n) ? n : 0;
+  }
+  function _offCellStr(cell) {
+    if (!cell) return null;
+    if (cell.v == null) return null;
+    return String(cell.v).trim();
+  }
+
+  // Segment(채널)·Group(거래처) → Off 표준 키 매핑
+  const _OFF_TR_CH_MAP = { 'CVS':'CVS','CLSM':'SM','ALSM':'ALSM','Hyper':'HYPER','Cash&Carry':'C&C','Union Shop':'UNION' };
+  const _OFF_TR_AC_MAP = {
+    'GS25':'GS25','CU':'CU','KoreaSeven':'K7','Emart24':'E24','cspace':'Cspace',
+    'Emart':'E-mart','LotteMart':'Lottemart','Lottemart':'Lottemart','Megamart':'Megamart','Homeplus':'Homeplus','NewCore':'Lottemart',
+    'Hanaromart':'Hanaro','Costco':'Costco','E-Traders':'E-Traders','Vic Market':'Costco',
+    'GSSuper':'GS Super','LotteSuper':'Lotte Super','Everyday':'Everyday','NoBrand':'Nobrand',
+    'Seowon':'Seowon','Korail':'Korail','Express':'Express',
+    'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM'
+  };
+  // Segment 컬럼이 없을 때 Group으로 채널 역추론
+  const _OFF_GRP_CH = {
+    'GS25':'CVS','CU':'CVS','KoreaSeven':'CVS','Emart24':'CVS','cspace':'CVS',
+    'GSSuper':'SM','LotteSuper':'SM','Everyday':'SM','NoBrand':'SM','Seowon':'SM','Korail':'SM','Express':'SM',
+    'Emart':'HYPER','LotteMart':'HYPER','Lottemart':'HYPER','Megamart':'HYPER','Homeplus':'HYPER','NewCore':'HYPER',
+    'Costco':'C&C','E-Traders':'C&C','Vic Market':'C&C',
+    'Hanaromart':'UNION',
+    'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM'
+  };
+
+  // 헤더 텍스트로 컬럼 찾기 (대소문자/공백 무시)
+  function _offFindColByHeader(sh, range, ...candidates) {
+    const norm = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cell = sh[XLSX.utils.encode_cell({ r: range.s.r, c: C })];
+      const h = norm(cell && cell.v);
+      if (!h) continue;
+      for (const cand of candidates) {
+        if (h === norm(cand) || h.includes(norm(cand))) return C;
+      }
+    }
+    return -1;
+  }
+
+  // DSR 라인아이템 워크북 → {HL,Qty,NSV,total,matched,skipped,year}. 키 "ch|acct|sku" → [12 monthly].
+  function parseDsrWorkbook(wb, expectedYear) {
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const range = XLSX.utils.decode_range(sh['!ref']);
+    const cSeg  = _offFindColByHeader(sh, range, 'Segment');
+    const cGrp  = _offFindColByHeader(sh, range, 'Group');
+    const cSku  = _offFindColByHeader(sh, range, 'New SKU', 'NEW SKU');
+    const cDate = _offFindColByHeader(sh, range, 'Date');
+    const cMon  = _offFindColByHeader(sh, range, 'Month');
+    const cHl   = _offFindColByHeader(sh, range, 'HL');
+    const cQty  = _offFindColByHeader(sh, range, 'Qty');
+    const cNsv  = _offFindColByHeader(sh, range, 'NSV');
+    if (cGrp < 0 || cSku < 0 || cHl < 0 || (cDate < 0 && cMon < 0)) {
+      throw new Error('필수 컬럼 누락: Group=' + cGrp + ' SKU=' + cSku + ' HL=' + cHl + ' Date=' + cDate + ' Month=' + cMon);
+    }
+    const aggHl = {}, aggQt = {}, aggNv = {};
+    let total = 0, skipped = 0, yearMatched = 0, yearSeen = new Set();
+    const monthsSeen = new Set();   // 이 업로드가 커버하는 월 인덱스(증분 병합용)
+    for (let R = range.s.r + 1; R <= range.e.r; R++) {
+      total++;
+      const seg = cSeg >= 0 ? _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSeg })]) : null;
+      const grp = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cGrp })]);
+      const sku = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSku })]);
+      if (!grp || !sku) { skipped++; continue; }
+      const chKey = seg ? _OFF_TR_CH_MAP[seg] : _OFF_GRP_CH[grp];
+      const acKey = _OFF_TR_AC_MAP[grp];
+      if (!chKey || !acKey) { skipped++; continue; }  // On-Trade 지역 행 등은 여기서 스킵
+      let mi = -1, year = expectedYear || 2026;
+      if (cDate >= 0) {
+        const dCell = sh[XLSX.utils.encode_cell({ r: R, c: cDate })];
+        if (dCell) {
+          if (dCell.t === 'n') { const d = XLSX.SSF.parse_date_code(dCell.v); if (d) { year = d.y; mi = d.m - 1; } }
+          else if (dCell.t === 'd') { year = dCell.v.getFullYear(); mi = dCell.v.getMonth(); }
+        }
+      }
+      if (mi < 0 && cMon >= 0) {
+        const mCell = sh[XLSX.utils.encode_cell({ r: R, c: cMon })];
+        if (mCell) {
+          if (mCell.t === 'n') {
+            if (mCell.v >= 1 && mCell.v <= 12) { mi = Math.floor(mCell.v) - 1; }
+            else { const d = XLSX.SSF.parse_date_code(mCell.v); if (d) { year = d.y; mi = d.m - 1; } }
+          } else if (typeof mCell.v === 'string') {
+            const s = mCell.v.toString().trim();
+            const km = s.match(/^(\d{1,2})\s*월/);
+            if (km) { mi = parseInt(km[1], 10) - 1; }
+            else {
+              const monAbbr = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+              const idx = monAbbr.indexOf(s.slice(0, 3).toLowerCase());
+              if (idx >= 0) mi = idx;
+            }
+          }
+        }
+      }
+      yearSeen.add(year);
+      if (mi < 0) { skipped++; continue; }
+      if (expectedYear && year !== expectedYear) { continue; }
+      yearMatched++;
+      const hlN = _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cHl })]);
+      const qtN = cQty >= 0 ? _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cQty })]) : 0;
+      const nvN = cNsv >= 0 ? _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cNsv })]) : 0;
+      const k = chKey + '|' + acKey + '|' + sku.trim();
+      if (!aggHl[k]) { aggHl[k] = Array(12).fill(0); aggQt[k] = Array(12).fill(0); aggNv[k] = Array(12).fill(0); }
+      aggHl[k][mi] += hlN;
+      aggQt[k][mi] += qtN;
+      aggNv[k][mi] += nvN;
+      monthsSeen.add(mi);
+    }
+    const months = [...monthsSeen].sort((a, b) => a - b);
+    console.log('[OffIngest DSR] 총 ' + total + '행 / 매칭 ' + yearMatched + '행 (연도 ' + expectedYear + ') / 무시 ' + skipped + '행 / 조합 ' + Object.keys(aggHl).length + ' / 커버월(0-based) [' + months.join(',') + '] / 감지 연도 [' + [...yearSeen].join(',') + ']');
+    return { HL: aggHl, Qty: aggQt, NSV: aggNv, total, matched: yearMatched, skipped, year: expectedYear, months };
+  }
+
+  // 집계 결과(res)를 Off rows 배열에 **월 단위 병합**(mutate). isLy → ly_*, else act_*.
+  // res.months(업로드가 커버한 월)만 덮어쓰고 나머지 월은 보존 → 증분(최신월만) 업로드 지원.
+  // 반환 {rows, updated, added, actual_months(26Y만 계산, ly면 null), months}.
+  function applyDsrToRows(rows, res, isLy) {
+    const z = () => Array(12).fill(0);
+    // res.months 미제공(undefined)이면 전체 12개월. 빈 배열([])이면 "해당 연도 데이터 없음" → 아무것도 건드리지 않음(베이스라인 보존).
+    const months = (res.months === undefined) ? Array.from({ length: 12 }, (_, i) => i) : res.months;
+    const hlF = isLy ? 'ly_hl_m' : 'act_hl_m';
+    const qF  = isLy ? 'ly_q_m'  : 'act_q_m';
+    const nF  = isLy ? 'ly_nsv_m' : 'act_nsv_m';
+    const aliasF = isLy ? 'ly_m' : 'act_m';
+    let updated = 0, added = 0;
+    if (months.length) {
+      // 1. 대상 월만 0으로 초기화(그 월 무판매 SKU가 0이 되도록) — 나머지 월은 그대로 보존
+      const rowByKey = {};
+      for (const r of rows) {
+        if (!r[hlF]) r[hlF] = z();
+        if (!r[qF])  r[qF]  = z();
+        if (!r[nF])  r[nF]  = z();
+        for (const mi of months) { r[hlF][mi] = 0; r[qF][mi] = 0; r[nF][mi] = 0; }
+        rowByKey[r.ch + '|' + r.acct + '|' + r.sku] = r;
+      }
+      // 2. 집계값을 대상 월에 반영 (없는 조합은 신규 row 생성)
+      for (const k of Object.keys(res.HL)) {
+        let r = rowByKey[k];
+        if (!r) {
+          const p = k.split('|');
+          r = { ch: p[0], acct: p[1], brand: '', sku: p[2], ap_m: z(), rofo_m: z(),
+                ly_hl_m: z(), ly_q_m: z(), ly_nsv_m: z(), act_hl_m: z(), act_q_m: z(), act_nsv_m: z(), ly_m: z(), act_m: z() };
+          rows.push(r); rowByKey[k] = r; added++;
+        } else updated++;
+        for (const mi of months) { r[hlF][mi] = res.HL[k][mi]; r[qF][mi] = res.Qty[k][mi]; r[nF][mi] = res.NSV[k][mi]; }
+      }
+      // 3. 별칭(act_m/ly_m) = *_hl_m 동기화
+      for (const r of rows) r[aliasF] = r[hlF];
+    }
+    // 4. actual_months = act_hl_m 전 월에서 마지막 비영 월 (베이스라인+신규 모두 반영, 26Y만)
+    let actual_months = null;
+    if (!isLy) {
+      actual_months = 0;
+      for (let i = 0; i < 12; i++) {
+        let s = 0; for (const r of rows) s += (r.act_hl_m && r.act_hl_m[i]) || 0;
+        if (s > 0.01) actual_months = i + 1;
+      }
+    }
+    return { rows, updated, added, actual_months, months };
+  }
+
+  // ── P07 "01. 2026 Volume" RoFo 파서 ──────────────────────────────────
+  // 시트 2026RF07: Team/Channel/Brand/SKU(FCST) + Jan~Dec(HL). block1(Jan열~)만 HL.
+  // 반환 { offChannel:{offKey:[12]}, onTotal:[12] }. 소계/합계행·비대상 Team 제외.
+  const _VOL_CH_MAP = { 'CVS':'CVS','Hyper':'HYPER','Cash & Carry':'C&C','Cash&Carry':'C&C','Union Shop':'UNION','CLSM':'SM','ALSM':'ALSM' };
+  function parseVolumeRofo(wb, sheetName) {
+    const sn = sheetName || '2026RF07';
+    const sh = wb.Sheets[sn];
+    if (!sh) throw new Error("'" + sn + "' 시트 없음 (P07 Volume 파일 확인)");
+    const range = XLSX.utils.decode_range(sh['!ref']);
+    // 헤더 행 탐색: Team/Channel/Jan 이 있는 행
+    let hr = -1, cTeam, cCh, cBrand, cSku, cJan;
+    for (let r = range.s.r; r <= Math.min(range.s.r + 15, range.e.r); r++) {
+      const map = {};
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const v = sh[XLSX.utils.encode_cell({ r, c })];
+        if (v && v.v != null) { const kk = String(v.v).trim(); if (map[kk] == null) map[kk] = c; }  // 첫 occurrence 유지(Jan~Dec가 HL/변동분 2번 나옴 → HL block 선택)
+      }
+      if (map['Team'] != null && map['Channel'] != null && map['Jan'] != null) {
+        hr = r; cTeam = map['Team']; cCh = map['Channel']; cBrand = map['Brand']; cSku = map['SKU(FCST)']; cJan = map['Jan']; break;
+      }
+    }
+    if (hr < 0) throw new Error('헤더(Team/Channel/Jan) 못 찾음');
+    const z = () => Array(12).fill(0);
+    const gs = (r, c) => _offCellStr(sh[XLSX.utils.encode_cell({ r, c })]);
+    const gn = (r, c) => _offCellNum(sh[XLSX.utils.encode_cell({ r, c })]);
+    const offChannel = {}; const onTotal = z(); const onSku = {}; const onSkuBrand = {};
+    let offRows = 0, onRows = 0;
+    for (let r = hr + 1; r <= range.e.r; r++) {
+      const team = gs(r, cTeam), ch = gs(r, cCh);
+      const brand = cBrand != null ? gs(r, cBrand) : '';
+      const sku = cSku != null ? gs(r, cSku) : '';
+      if (!sku || sku === '0') continue;
+      if (!brand || brand === 'TOTAL' || brand === 'Brand') continue;    // 합계/헤더행 제외
+      if (ch && /total/i.test(ch)) continue;                              // "CVS Total" 등 소계 제외
+      if (team === 'OFF') {
+        const key = _VOL_CH_MAP[ch]; if (!key) continue;
+        if (!offChannel[key]) offChannel[key] = z();
+        for (let m = 0; m < 12; m++) offChannel[key][m] += gn(r, cJan + m);
+        offRows++;
+      } else if (team === 'ON') {
+        if (!onSku[sku]) { onSku[sku] = z(); onSkuBrand[sku] = brand; }
+        for (let m = 0; m < 12; m++) { const v = gn(r, cJan + m); onTotal[m] += v; onSku[sku][m] += v; }
+        onRows++;
+      }
+    }
+    console.log('[OffIngest Volume] 시트 ' + sn + ' / OFF ' + offRows + '행(' + Object.keys(offChannel).join(',') + ') / ON ' + onRows + '행(SKU ' + Object.keys(onSku).length + ')');
+    return { offChannel, onTotal, onSku, onSkuBrand };
+  }
+
+  global.OffIngest = {
+    parseDsrWorkbook, applyDsrToRows, parseVolumeRofo,
+    _OFF_TR_CH_MAP, _OFF_TR_AC_MAP, _OFF_GRP_CH, _VOL_CH_MAP,
+    _offFindColByHeader, _offCellStr, _offCellNum
+  };
+})(typeof window !== 'undefined' ? window : this);
