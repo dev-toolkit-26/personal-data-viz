@@ -105,8 +105,8 @@ function finalizeOff(rows){
     ch.m = offAggMetrics(ch.accounts);
   }
   const total = offAggMetrics(channels);
-  // 채널 단위 RoFo 오버라이드 (P07 Volume 업로드분 — 거래처 분해 없음). window._OFF_ROFO_CH = {chKey:[12]}.
-  const rofoCh = window._OFF_ROFO_CH;
+  // 채널 RoFo는 RoFo 파일(SKU별 rofo_m) 합계로 통일 — P07 채널 override 비활성화.
+  const rofoCh = null;  // (구) window._OFF_ROFO_CH
   if(rofoCh){
     const am = _OFF_ACT_MONTHS;
     const tot = offZero12();
@@ -5093,12 +5093,14 @@ function renderFcstTable(){
       </tr>`);
     }
   }
-  const _wkYear = (window.OFF_SEED && OFF_SEED.meta && OFF_SEED.meta.year) || 2026;
-  const wkRanges = _offWeekRangesOfMonth(_wkYear, wkMonth);
   const head = `<thead><tr>
     <th style="text-align:left">채널 / 거래처</th>
     <th>${period} RoFo</th>
-    ${wkRanges.map(w => `<th style="font-size:11px">${w.wk}${w.label ? `<br><span style="font-weight:400;color:#94a3b8;font-size:9px">${w.label}</span>` : ''}</th>`).join('')}
+    <th style="font-size:11px">W1</th>
+    <th style="font-size:11px">W2</th>
+    <th style="font-size:11px">W3</th>
+    <th style="font-size:11px">W4</th>
+    <th style="font-size:11px">W5</th>
     <th>${period} FCST</th>
     <th style="background:rgba(227,6,19,0.06);color:#9e1310">FCST/RoFo</th>
     <th>${period} Actual</th>
@@ -5306,7 +5308,7 @@ function renderFcstSkuVsLmLy(){
         return `<div class="issue-item"${klass ? ` style="${klass}"`:''}${isBrand ? ' onclick="toggleFcstBrand(this)"':''}>
           <span class="issue-sku" title="${label}" style="${skuStyle}">${labelHtml}</span>
           ${wCells}
-          <span class="issue-ref" style="justify-content:center;color:${vsRofoCol};font-weight:600;">${vsRofo==null?'—':(vsRofo*100).toFixed(0)+'%'}</span>
+          <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.ro)}</span><span style="color:${vsRofoCol};font-weight:600;">${vsRofo==null?'—':(vsRofo*100).toFixed(0)+'%'}</span></span>
           <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.prev)}</span>${fmtPct(lmPct)}</span>
           <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.ly)}</span>${fmtPct(lyPct)}</span>
         </div>`;
