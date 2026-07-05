@@ -5200,11 +5200,12 @@ function renderFcstSkuVsLmLy(){
       for(const s of (acc.skus || [])){
         const name = _offNormalizeSku(s);
         let g = m.get(name);
-        if(!g){ g = { cur:0, prev:0, fc:0, ly:0 }; m.set(name, g); }
+        if(!g){ g = { cur:0, prev:0, fc:0, ly:0, ro:0 }; m.set(name, g); }
         g.cur += (s.act_m?.[curIdx] || 0);
         g.prev += (s.act_m?.[curIdx] || 0);                  // LM = 지난 완료월(6월) actual
         g.fc  += (s.fcst_m?.[fcstIdx] || 0);                 // 최신 FCST(예측월 7월)
         g.ly  += (s.ly_m?.[fcstIdx]  || 0);                  // LY = 예측월 전년(7월 '25)
+        g.ro  += (s.rofo_m?.[fcstIdx] || 0);                 // SKU RoFo(7월) — Account Volume RoFo 파일
         total += g.cur;
       }
       return { name: acc.name, total, valueMap: m, accountList: [acc.name], wk: weeklyFor(cc.key, [acc.name]) };
@@ -5225,8 +5226,8 @@ function renderFcstSkuVsLmLy(){
     for(const a of accCells){
       for(const [name, v] of a.valueMap.entries()){
         let g = totalMap.get(name);
-        if(!g){ g = { cur:0, prev:0, fc:0, ly:0 }; totalMap.set(name, g); }
-        g.cur += v.cur; g.prev += v.prev; g.fc += v.fc; g.ly += v.ly;
+        if(!g){ g = { cur:0, prev:0, fc:0, ly:0, ro:0 }; totalMap.set(name, g); }
+        g.cur += v.cur; g.prev += v.prev; g.fc += v.fc; g.ly += v.ly; g.ro += (v.ro||0);
       }
       chTotal += a.total;
     }
@@ -5246,8 +5247,8 @@ function renderFcstSkuVsLmLy(){
     const PRORATE_WEEKS = 4.33;
     const renderCard = (cell, klass) => {
       // 셀 전체 cur/prev/fc 합 (share 분모) + 동일 주차 실현 MTD (vs LM 계산용)
-      let cellCur = 0, cellPrev = 0, cellFc = 0;
-      for(const v of cell.valueMap.values()){ cellCur += v.cur; cellPrev += v.prev; cellFc += v.fc; }
+      let cellCur = 0, cellPrev = 0, cellFc = 0, cellRo = 0;
+      for(const v of cell.valueMap.values()){ cellCur += v.cur; cellPrev += v.prev; cellFc += v.fc; cellRo += (v.ro||0); }
       const realized = cell.wk?.realized || 0;
       const curW  = cell.wk?.curW  || [0,0,0,0,0];
       const prevW = cell.wk?.prevW || [0,0,0,0,0];
@@ -5266,8 +5267,7 @@ function renderFcstSkuVsLmLy(){
         }
         if(any) cellFcstW = sum;
       }
-      const chRofo = (cc.m && cc.m.rofo_m && cc.m.rofo_m[fcstIdx]) || 0;   // 채널 RoFo(P07); brand/SKU RoFo는 없음
-      const cellVsRofo = chRofo ? cellFc / chRofo : null;
+      const cellVsRofo = cellRo ? cellFc / cellRo : null;   // 셀 FCST ÷ 셀 RoFo(SKU 합계)
 
       let h = `<div class="fcst-acct-card ${klass}"><div class="fcst-acct-title">${cell.name}${cellVsRofo!=null?` · <span style="font-weight:600;color:#9e1310;">FCST/RoFo ${(cellVsRofo*100).toFixed(0)}%</span>`:''}</div>`;
       h += `<div class="issue-item" style="border-bottom:1px solid #e5e7eb;padding:0 0 3px;margin-bottom:2px;font-size:9px;color:#9ca3af;font-weight:600;">
@@ -5288,7 +5288,8 @@ function renderFcstSkuVsLmLy(){
         const shareFc   = cellFc   > EPS ? v.fc   / cellFc   : shareCur;   // FCST share, fallback to actual share
         const lmPct = safePct(v.fc, v.prev);   // 최신 FCST 대비 LM %
         const lyPct = safePct(v.fc, v.ly);     // 최신 FCST 대비 LY %
-        const vsRofo = chRofo ? v.fc / chRofo : null;   // FCST ÷ 채널 RoFo (brand/SKU RoFo 없음)
+        const vsRofo = v.ro ? v.fc / v.ro : null;   // FCST ÷ 브랜드/SKU RoFo
+        const vsRofoCol = (vsRofo==null)?'#d1d5db':(vsRofo>=0.95?'#16a34a':vsRofo>=0.9?'#d97706':'#dc2626');
 
         // W1~W5: FCST 파일에서 받은 누적값 × SKU FCST share
         // 파일 미업로드 시 cellFcstW = null → 모든 셀 "—"
@@ -5305,7 +5306,7 @@ function renderFcstSkuVsLmLy(){
         return `<div class="issue-item"${klass ? ` style="${klass}"`:''}${isBrand ? ' onclick="toggleFcstBrand(this)"':''}>
           <span class="issue-sku" title="${label}" style="${skuStyle}">${labelHtml}</span>
           ${wCells}
-          <span class="issue-ref" style="justify-content:center;">${vsRofo==null?'<span style="color:#d1d5db;">—</span>':'<span style="color:#374151;font-weight:600;">'+(vsRofo*100).toFixed(0)+'%</span>'}</span>
+          <span class="issue-ref" style="justify-content:center;color:${vsRofoCol};font-weight:600;">${vsRofo==null?'—':(vsRofo*100).toFixed(0)+'%'}</span>
           <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.prev)}</span>${fmtPct(lmPct)}</span>
           <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.ly)}</span>${fmtPct(lyPct)}</span>
         </div>`;
@@ -5313,10 +5314,10 @@ function renderFcstSkuVsLmLy(){
 
       for(const bg of masterBrands){
         // Brand 요약 = 자식 SKU 값 합산
-        const bSum = { cur:0, prev:0, fc:0, ly:0 };
+        const bSum = { cur:0, prev:0, fc:0, ly:0, ro:0 };
         for(const sg of bg.skus){
           const v = cell.valueMap.get(sg.name);
-          if(v){ bSum.cur += v.cur; bSum.prev += v.prev; bSum.fc += v.fc; bSum.ly += v.ly; }
+          if(v){ bSum.cur += v.cur; bSum.prev += v.prev; bSum.fc += v.fc; bSum.ly += v.ly; bSum.ro += (v.ro||0); }
         }
         h += renderRow(bg.brand, bSum, 'background:#f0f7f0;border-top:2px solid #205527;font-weight:700;margin-top:4px;padding:4px 2px;cursor:pointer;', false, true);
         h += `<div class="fcst-sku-children" style="display:none;">`;
