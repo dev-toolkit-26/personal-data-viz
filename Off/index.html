@@ -1019,9 +1019,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
     var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     var T = OFF.total || {};
     var am = _OFF_ACT_MONTHS || 4;
-    var ci = am - 1;                 // 당월(=실현월 중 최신) 인덱스 — FCST 탭과 동일
+    var ci = am - 1;
+    for(var _fi=11;_fi>=0;_fi--){ if(((T.fcst_m||[])[_fi]||0) > 0){ ci = _fi; break; } }  // 예측월(7월) — FCST 탭과 동일
     var curMon = MON[ci] || '';
-    function fHL(v){ return (v==null)?'—':Number(v).toLocaleString('ko-KR',{maximumFractionDigits:1}); }
+    function fHL(v){ return (v==null)?'—':Number(v).toLocaleString('ko-KR',{maximumFractionDigits:0}); }
     function fPct(v){ return (v==null)?'—':(v*100).toFixed(1)+'%'; }
     function fDelta(v){ if(v==null) return '—'; return (v>=0?'+':'')+(v*100).toFixed(1)+'%'; }
     function achC(v){ if(v==null) return '#6b7280'; return v>=0.95?'#4ade80':v>=0.90?'#fbbf24':'#f87171'; }
@@ -1030,9 +1031,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
     // ── Slide 0: Hero + KPI (기준: 당월 FCST) ──
     var tAct = mv(T,'act_m'), tFcst = mv(T,'fcst_m'), tRofo = mv(T,'rofo_m'), tLy = mv(T,'ly_m');
-    var achFcst = tFcst ? tAct/tFcst : null;   // 당월 Actual/FCST (주 지표)
-    var achRofo = tRofo ? tAct/tRofo : null;
-    var yoy = tLy ? tAct/tLy - 1 : null;
+    var achFcst = (tFcst && tAct) ? tAct/tFcst : null;   // 실적 없으면(예측월) — 로 표시
+    var achRofo = (tRofo && tAct) ? tAct/tRofo : null;
+    var yoy = (tLy && tAct) ? tAct/tLy - 1 : null;
     var status = (achFcst==null)?'—':achFcst>=0.95?'On Track':achFcst>=0.90?'목표 근접':'주의';
     var heroEl = document.getElementById('sum-hero-headline');
     if(heroEl) heroEl.textContent = curMon+' FCST '+fHL(tFcst)+' HL ('+status+')';
@@ -1040,7 +1041,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
       { label:curMon+' FCST 목표', value:fHL(tFcst)+' HL', sub:'Off Total', v:null, icon:'🎯' },
       { label:'Actual / FCST ('+curMon+')', value:fPct(achFcst), sub:'Act '+fHL(tAct)+' HL', v:achFcst, icon:'📊' },
       { label:'Actual / RoFo ('+curMon+')', value:fPct(achRofo), sub:'RoFo '+fHL(tRofo)+' HL', v:achRofo, icon:'📈' },
-      { label:'전년 대비 ('+curMon+')', value:fDelta(yoy), sub:'LY '+fHL(tLy)+' HL', v:(yoy!=null&&yoy>=0)?1:0, icon:(yoy!=null&&yoy>=0)?'⬆':'⬇' },
+      { label:'전년 대비 ('+curMon+')', value:fDelta(yoy), sub:'LY '+fHL(tLy)+' HL', v:(yoy==null)?null:(yoy>=0?1:0), icon:(yoy==null)?'➖':(yoy>=0?'⬆':'⬇') },
     ];
     var kg = document.getElementById('sum-kpi-grid');
     if(kg) kg.innerHTML = kpis.map(function(k){
@@ -1059,7 +1060,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
       var apC=achC(achFcst), grC=(yoy!=null&&yoy>=0)?'#4ade80':'#f87171';
       cmt.innerHTML = '📊 '+curMon+' Actual '+hi(fHL(tAct)+' HL',apC)+' vs FCST '+fHL(tFcst)+' HL ('+hi(fPct(achFcst),apC)+'). '
         + 'RoFo 대비 '+hi(fPct(achRofo),achC(achRofo))+', 전년 동월 대비 '+hi(fDelta(yoy),grC)+'. '
-        + (achFcst!=null && achFcst>=1 ? '✅ FCST 대비 순항.' : '⚠️ FCST 대비 관리 필요.');
+        + (achFcst==null ? 'ℹ️ '+curMon+' 실적 집계 전 — 예측 기준.' : (achFcst>=1 ? '✅ FCST 대비 순항.' : '⚠️ FCST 대비 관리 필요.'));
     }
     var nar = document.getElementById('sum-overview-narrative'); if(nar) nar.innerHTML = '';
 
@@ -1068,7 +1069,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     if(ctx){
       if(window._sumChartDOff){ window._sumChartDOff.destroy(); }
       var actDisp = (T.act_m||[]).map(function(v,i){ return i<am?v:null; });
-      var curIdx = am-1;
+      var curIdx = ci;   // 예측월(7월)에 FCST 막대
       var fcstCurOnly = Array.from({length:12}, function(_,i){ return i===curIdx?((T.fcst_m||[])[curIdx]||null):null; });
       window._sumChartDOff = new Chart(ctx, {
         type:'bar',
@@ -1094,15 +1095,15 @@ td:first-child, td:nth-child(2) { text-align: left; }
     if(dEl){
       dEl.style.gridTemplateColumns = 'repeat('+Math.max(chans.length,1)+',1fr)';
       dEl.innerHTML = chans.map(function(c){
-        var m=c.m||{}; var cf=mv(m,'fcst_m'), ca=mv(m,'act_m'); var ach = cf?ca/cf:0;
-        var pct=Math.min(ach*100,100), pr=Math.round(ach*100), ac=achC(ach), off=C-(C*pct/100);
+        var m=c.m||{}; var cf=mv(m,'fcst_m'), ca=mv(m,'act_m'); var ach = (cf && ca)?ca/cf:null;
+        var pct=Math.min((ach||0)*100,100), pr=(ach==null)?'—':Math.round(ach*100)+'%', ac=achC(ach), off=C-(C*pct/100);
         return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">'
           +'<div style="position:relative;width:118px;height:118px;">'
           +'<svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">'
           +'<circle cx="59" cy="59" r="'+R+'" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/>'
           +'<circle class="kn-donut-arc" cx="59" cy="59" r="'+R+'" fill="none" stroke="'+ac+'" stroke-width="14" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+C+'" data-target-offset="'+off+'" data-full-offset="'+C+'" style="transition:stroke-dashoffset 1.2s cubic-bezier(.65,.05,.36,1);"/>'
           +'</svg>'
-          +'<div style="position:absolute;inset:14px;background:rgba(0,0,0,.78);border-radius:50%;display:flex;align-items:center;justify-content:center;"><div style="font-size:24px;font-weight:700;color:'+ac+';line-height:1;">'+pr+'%</div></div>'
+          +'<div style="position:absolute;inset:14px;background:rgba(0,0,0,.78);border-radius:50%;display:flex;align-items:center;justify-content:center;"><div style="font-size:24px;font-weight:700;color:'+ac+';line-height:1;">'+pr+'</div></div>'
           +'</div>'
           +'<div style="font-size:13px;font-weight:700;color:#fff;text-align:center;white-space:nowrap;">'+(c.label||c.key)+'</div>'
           +'<div style="font-size:12px;color:rgba(255,255,255,.7);text-align:center;">Act <strong style="color:#fff;">'+fHL(ca)+'</strong> HL</div>'
@@ -1112,16 +1113,16 @@ td:first-child, td:nth-child(2) { text-align: left; }
     }
     var caC=document.getElementById('sum-chartA-comment');
     if(caC){
-      var over=chans.filter(function(c){var f=mv(c.m,'fcst_m');return f && (mv(c.m,'act_m')/f)>=1;}).map(function(c){return c.label||c.key;});
-      var under=chans.filter(function(c){var f=mv(c.m,'fcst_m');return f && (mv(c.m,'act_m')/f)<0.95;}).map(function(c){return c.label||c.key;});
+      var over=chans.filter(function(c){var f=mv(c.m,'fcst_m'),a=mv(c.m,'act_m');return f && a && (a/f)>=1;}).map(function(c){return c.label||c.key;});
+      var under=chans.filter(function(c){var f=mv(c.m,'fcst_m'),a=mv(c.m,'act_m');return f && a && (a/f)<0.95;}).map(function(c){return c.label||c.key;});
       caC.innerHTML = (over.length?'<strong style="color:#4ade80;">FCST 초과 채널('+curMon+'):</strong> '+over.join(', ')+'<br>':'')
         + (under.length?'<strong style="color:#f87171;">FCST 미달 채널('+curMon+'):</strong> '+under.join(', '):'');
     }
     var badgeEl=document.getElementById('sum-region-badges');
     if(badgeEl){
       badgeEl.innerHTML = chans.map(function(c){
-        var m=c.m||{}; var cf=mv(m,'fcst_m'), ca=mv(m,'act_m'), cl=mv(m,'ly_m'); var ach=cf?ca/cf:null; var ac=achC(ach), ab=achBg(ach);
-        var g=cl?ca/cl-1:null, gc=(g!=null&&g>=0)?'#4ade80':'#f87171';
+        var m=c.m||{}; var cf=mv(m,'fcst_m'), ca=mv(m,'act_m'), cl=mv(m,'ly_m'); var ach=(cf && ca)?ca/cf:null; var ac=achC(ach), ab=achBg(ach);
+        var g=(cl && ca)?ca/cl-1:null, gc=(g!=null&&g>=0)?'#4ade80':'#f87171';
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);border-left:2px solid '+ac+';border-radius:8px;padding:9px 14px;">'
           +'<span style="color:#fff;font-size:12px;font-weight:600;">'+(c.label||c.key)+'</span>'
           +'<div style="display:flex;gap:10px;align-items:center;">'
@@ -1136,7 +1137,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     if(mtdEl){
       var maxV=1; chans.forEach(function(c){ maxV=Math.max(maxV, mv(c.m,'fcst_m'), mv(c.m,'act_m')); });
       var bars=chans.map(function(c){
-        var m=c.m||{}; var cf=mv(m,'fcst_m'), ca=mv(m,'act_m'); var ach=cf?ca/cf:null; var ac=achC(ach);
+        var m=c.m||{}; var cf=mv(m,'fcst_m'), ca=mv(m,'act_m'); var ach=(cf && ca)?ca/cf:null; var ac=achC(ach);
         var fW=Math.round(cf/maxV*100), acW=Math.round(ca/maxV*100);
         return '<div style="margin-bottom:12px;">'
           +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#fff;margin-bottom:4px;"><span>'+(c.label||c.key)+'</span><span style="color:'+ac+';font-weight:700;">'+fPct(ach)+'</span></div>'
