@@ -245,10 +245,18 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 .min-action-del:hover { color:#ef4444; }
 .min-actions-empty { padding:16px; font-size:12px; color:#d1d5db; text-align:center; }
 /* 회의록 카테고리 필터 — 3열 × 2행 */
-.min-cat-bar { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; padding:6px 10px 8px; }
+.min-cat-bar { display:flex; flex-direction:column; gap:2px; padding:6px 10px 8px; }
 .min-cat-btn { display:flex; align-items:center; justify-content:center; text-align:center; padding:6px 8px; border:1px solid rgba(0,0,0,.08); border-radius:6px; background:#fff; color:#6b7280; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
 .min-cat-btn:hover { background:#f3f4f6; color:#1f2937; }
 .min-cat-btn.active { background:#205527; color:#fff; border-color:#205527; }
+/* Off 2단(대분류▸소분류) 사이드바 */
+.min-cat-group { display:flex; flex-direction:column; gap:3px; margin-top:5px; }
+.min-cat-btn.min-cat-ch { justify-content:flex-start; font-weight:700; }
+.min-cat-btn.min-cat-ch::before { content:''; display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:6px; background:var(--ch-color,#9ca3af); flex:0 0 auto; }
+.min-cat-btn.min-cat-ch.active::before { background:#fff; }
+.min-cat-accts { display:flex; flex-wrap:wrap; gap:3px; padding-left:10px; }
+.min-cat-btn.min-sub { flex:0 0 auto; padding:4px 7px; font-size:10px; font-weight:500; border-style:dashed; }
+.min-cat-btn.min-sub.active { border-style:solid; }
 /* 회의록 에디터 — Month 드롭다운(제목 역할) */
 .min-month-select { border:none; border-bottom:2px solid rgba(32,85,39,.25); background:transparent; font-size:32px; font-weight:700; color:#1f2937; font-family:inherit; cursor:pointer; outline:none; padding:2px 24px 2px 4px; min-width:120px; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path fill='%239ca3af' d='M2 4l4 4 4-4z'/></svg>"); background-repeat:no-repeat; background-position:right 4px center; }
 .min-month-select:focus { border-bottom-color:#205527; }
@@ -396,8 +404,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
   box-shadow: 0 1px 2px rgba(0,0,0,.04); border-top: 3px solid var(--accent);
 }
 .issue-ref-w {                                                   /* 주차 셀 — 좁고 1줄 HL만 */
-  width: 36px; text-align: right; font-size: 10px;
+  width: 42px; min-width: 42px; text-align: right; font-size: 10px;
   color: #555; flex-shrink: 0;
+  box-sizing: border-box; border-left: 1px solid #bcc2ca; padding-right: 2px;  /* 주차 경계 */
 }
 .issue-ref-w.latest { color: #205527; font-weight: 700; background: rgba(32,85,39,0.08); border-radius: 3px; }
 .issue-ref-w.future { color: #94a3b8; font-style: italic; }      /* 향후 주차(FCST 자리) */
@@ -417,7 +426,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .issue-item { display: flex; justify-content: space-between; align-items: center; padding: 3px 0; border-bottom: 1px dashed #f0f0f0; font-size: 11px; gap: 4px; }
 .issue-item:last-child { border-bottom: none; }
 .issue-sku { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: 11px; }
-.issue-ref { width: 44px; text-align: right; display: inline-flex; flex-direction: column; line-height: 1.2; font-size: 10px; flex-shrink: 0; }
+.issue-ref { width: 46px; min-width: 46px; text-align: right; display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.2; font-size: 10px; flex-shrink: 0; box-sizing: border-box; border-left: 1px solid #bcc2ca; padding-right: 2px; }
+.issue-ref-w + .issue-ref { border-left: 1.5px solid #8b93a1; }   /* W5 | LM 경계 강조 */
 .issue-ref-hl { color: #6b7280; font-weight: 500; font-size: 9.5px; }
 .issue-empty { font-size: 11px; color: var(--text-muted); text-align: center; padding: 8px 0; }
 
@@ -1856,7 +1866,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 </script>
 
 <div class="header">
-  <h1><span style="color:#e30613;">★</span> On-Trade Weekly FCST Dashboard</h1>
+  <h1><span style="color:#e30613;">★</span> Off-Trade Weekly FCST Dashboard</h1>
   <div class="meta" id="header-meta">Loading...</div>
 </div>
 
@@ -1913,7 +1923,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <div class="section-title" id="fcst-table-title">FCST Summary — 채널 ▸ 거래처 (HL)</div>
     <div class="table-wrap"><table id="tbl-fcst"></table></div>
 
-    <div class="section-title" style="margin-top:24px;">SKU 주간 FCST 누적 — W1~W5 (업로드 파일 기준) · vs LM · vs LY (DSR actual MTD 기준, Brand 그룹)</div>
+    <div class="section-title" style="margin-top:24px;">SKU 주간 FCST 누적 — W1~W5 (업로드 파일) · LM·LY 대비 <b>최신 FCST %</b> (Brand 그룹)</div>
     <div id="fcst-sku-vs-lmly"></div>
   </div>
 
@@ -2097,13 +2107,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       <!-- 왼쪽 목록 (Notion-style sidebar) -->
       <div id="minutes-list-panel" style="width:240px;flex-shrink:0;border-right:1px solid rgba(0,0,0,.08);overflow-y:auto;padding:0;background:#f7f7f5;">
+        <!-- 대분류(채널) ▸ 소분류(거래처) 2단 필터 — renderMinutesCatBar()가 채움 -->
         <div id="min-cat-bar" class="min-cat-bar" style="padding-top:14px;">
-          <button class="min-cat-btn active" data-cat="all"   onclick="minutesFilterByCategory('all')">전체</button>
-          <button class="min-cat-btn"        data-cat="cvs"   onclick="minutesFilterByCategory('cvs')">CVS</button>
-          <button class="min-cat-btn"        data-cat="hyper" onclick="minutesFilterByCategory('hyper')">HYPER</button>
-          <button class="min-cat-btn"        data-cat="sm"    onclick="minutesFilterByCategory('sm')">SM</button>
-          <button class="min-cat-btn"        data-cat="cc"    onclick="minutesFilterByCategory('cc')">C&amp;C</button>
-          <button class="min-cat-btn"        data-cat="alsm"  onclick="minutesFilterByCategory('alsm')">ALSM</button>
+          <button class="min-cat-btn active" data-cat="all" onclick="minutesFilterByCategory('all')">전체</button>
         </div>
         <button onclick="minutesNew()" class="min-new-btn">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -2267,12 +2273,12 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       <!-- ② FCST Weekly — 매주 영업담당자 입력 (다중 파일) -->
       <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">② FCST Update — 매주 ⏱ (다중 파일 일괄)</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">② FCST Update — 매주 ⏱ (담당자 각자 업로드)</div>
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.7;">
-          파일: <code>OFF Trade FCST_[월].xlsx</code> — 단일 시트 (B1=월, B2=계정, SKU × 주1-5W).<br>
-          영업담당자 각자 자기 계정 파일 작성 → <b>22개 파일 한 번에 선택해 일괄 업로드</b>.<br>
-          주차(W1-W5) 합 → 월간 FCST (<code>fcst_m</code> 시리즈) 해당 (채널·계정·월) 위치에 갱신.<br>
-          → <b>RoFo·AP·25Y·Actual 모두 보존</b>. FCST만 매주 업데이트.
+          파일: <code>OFF Trade FCST_[월].xlsx</code> — <b>여러 계정 = 여러 시트</b> 한 파일 가능 (시트별 B1=월, 행5+ SKU × 1W~5W).<br>
+          <b>시트 이름 = 계정</b>으로 인식 (담당자가 맡은 계정만 시트로 담아 올리면 됨).<br>
+          주차(W1~W5, HL 환산)가 FCST 표의 주간 칸에 반영.<br>
+          → 올리면 <b>서버 최신본과 자동 병합·저장</b> (내 계정만 갱신, 타인·RoFo·AP·25Y·Actual 모두 보존). 별도 저장 불필요.
         </div>
         <input type="file" id="off-fcst-input" accept=".xlsx" multiple style="font-size:12px;" onchange="offHandleFcstWeeklyUpload(this)">
         <div id="off-fcst-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em;line-height:1.6"></div>
@@ -4841,9 +4847,12 @@ function _offUpdateFcstMonthDropdown(){
   const am = _OFF_ACT_MONTHS;
   const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const opts = [`<option value="ALL">전체 (Jan~${monNames[am-1]})</option>`];
+  // 기본 선택 = 예측월(fcst_m 데이터 있는 마지막 월, 예 7월). 없으면 마지막 실현월.
+  let defIdx = am-1;
+  const tf = (OFF.total && OFF.total.fcst_m) || [];
+  for(let i=11;i>=0;i--){ if((tf[i]||0) > 0){ defIdx = i; break; } }
   for(let i=0;i<12;i++){
-    const isCur = i === am-1;
-    opts.push(`<option value="${i}"${isCur?' selected':''}>${monNames[i]}</option>`);
+    opts.push(`<option value="${i}"${i===defIdx?' selected':''}>${monNames[i]}</option>`);
   }
   sel.innerHTML = opts.join('');
 }
@@ -4944,17 +4953,20 @@ async function _offRofoSaveComments(btn){
 function renderFcstChartC(){
   const { am, monNames } = _offFcstMonthCtx();
   const tt = OFF.total || {};
-  const curIdx = am - 1;   // 당월(=실현월 중 최신) = FCST가 의미 있는 월
+  const curIdx = am - 1;   // 마지막 실현월
+  // FCST월 = fcst_m 데이터가 있는 마지막 월(예측 월, 예: 7월). 없으면 당월.
+  let fcstIdx = curIdx;
+  for(let i=11;i>=0;i--){ if(((tt.fcst_m||[])[i]||0) > 0){ fcstIdx = i; break; } }
   const actDisplay = (tt.act_m  || []).map((v,i) => i < am ? v : null);
-  // FCST는 당월만 단일 빨간 막대로 표시 (다른 월은 null로 비워둠)
-  const fcstCurOnly = Array.from({length:12}, (_, i) => i === curIdx ? ((tt.fcst_m || [])[curIdx] || null) : null);
+  // FCST는 예측월만 단일 빨간 막대로 표시 (다른 월은 null)
+  const fcstCurOnly = Array.from({length:12}, (_, i) => i === fcstIdx ? ((tt.fcst_m || [])[fcstIdx] || null) : null);
   destroyChart('chartFcstC');
   _charts.chartFcstC = new Chart(document.getElementById('chartFcstC'), {
     type: 'bar',
     data: { labels: monNames, datasets: [
       { type:'bar', label:'2026 RoFo',       data: tt.rofo_m || [], backgroundColor:'#20552755', borderColor:'#205527', borderWidth:1, order:3 },
       { type:'bar', label:'2026 Actual',     data: actDisplay,      backgroundColor:'#16a34acc', borderColor:'#14532d', borderWidth:1.5, order:2 },
-      { type:'bar', label:`2026 FCST (${monNames[curIdx]})`, data: fcstCurOnly, backgroundColor:'#e30613cc', borderColor:'#e30613', borderWidth:1.5, order:1 },
+      { type:'bar', label:`2026 FCST (${monNames[fcstIdx]})`, data: fcstCurOnly, backgroundColor:'#e30613cc', borderColor:'#e30613', borderWidth:1.5, order:1 },
       { type:'line', label:'2025 Actual',    data: tt.ly_m   || [], borderColor:'#94a3b8', backgroundColor:'transparent', tension:.3, pointRadius:2, borderDash:[5,4], order:4 },
     ]},
     options: {
@@ -4973,6 +4985,29 @@ function _offChannelAcctOrder(chKey, accounts){
     return [...k7, ...rest];
   }
   return accounts;
+}
+// 선택 월과 겹치는 ISO 달력주(월~일)를 순서대로 최대 5개 → W1~W5 날짜범위 라벨.
+// 규칙: 1일이 포함된 월~일 주 = W1. 겹치는 주가 6개면 6번째를 W5에 합침(5칸 유지), 4개면 W5 빈칸.
+function _offWeekRangesOfMonth(year, mIdx){
+  const first = new Date(year, mIdx, 1);
+  const last  = new Date(year, mIdx + 1, 0);                 // 그 달 마지막 날
+  const dow = first.getDay();                                // 0=일..6=토
+  const offsetToMon = (dow === 0 ? 6 : dow - 1);             // 월요일까지 뒤로
+  const fmt = d => `${d.getMonth()+1}/${d.getDate()}`;
+  const weeks = [];
+  let cur = new Date(year, mIdx, 1 - offsetToMon);           // 1일이 포함된 주의 월요일
+  while(cur <= last){
+    const end = new Date(cur); end.setDate(cur.getDate() + 6);
+    weeks.push({ start: new Date(cur), end });
+    cur = new Date(cur); cur.setDate(cur.getDate() + 7);
+  }
+  const out = [];
+  for(let i = 0; i < Math.min(weeks.length, 5); i++){
+    out.push({ wk: 'W'+(i+1), label: fmt(weeks[i].start)+'~'+fmt(weeks[i].end) });
+  }
+  if(weeks.length > 5) out[4] = { wk:'W5', label: fmt(weeks[4].start)+'~'+fmt(weeks[weeks.length-1].end) };
+  while(out.length < 5) out.push({ wk:'W'+(out.length+1), label:'' });
+  return out;
 }
 function renderFcstTable(){
   const { period, sumArr, moIdx, am } = _offFcstMonthCtx();
@@ -5006,16 +5041,18 @@ function renderFcstTable(){
     if((rf+fc+ac+ly) < 0.01) continue;
     const achFc = fc ? ac/fc : null;
     const achRf = rf ? ac/rf : null;
+    const fcRf  = rf ? fc/rf : null;   // FCST vs RoFo (예측/타깃)
     const yoy   = ly ? ac/ly - 1 : null;
     const chWks = weeklyFcstFor(cc.key, cc.accounts.map(a => a.name));
     parts.push(`<tr class="brand-start">
       <td class="td-brand">${cc.key}</td>
       <td class="td-brand">${_offFmt(rf)}</td>
       ${wCellsTd(chWks)}
+      <td class="td-brand">${_offFmt(fc)}</td>
+      <td class="td-brand"><span class="${_offAchCls(fcRf)}">${_offFmtPct(fcRf)}</span></td>
       <td class="td-brand">${_offFmt(ac)}</td>
       <td class="td-brand"><span class="${_offAchCls(achRf)}">${_offFmtPct(achRf)}</span></td>
       <td class="td-brand">${_offFmt(ly)}</td>
-      <td class="td-brand ${_offGrCls(yoy)}">${_offFmtGr(yoy)}</td>
     </tr>`);
     for(const acc of _offChannelAcctOrder(cc.key, cc.accounts)){
       const arf=sumArr(acc.m && acc.m.rofo_m);
@@ -5024,33 +5061,34 @@ function renderFcstTable(){
       if((arf+afc+aac+aly) < 0.01) continue;
       const aAchFc = afc ? aac/afc : null;
       const aAchRf = arf ? aac/arf : null;
+      const afcRf  = arf ? afc/arf : null;
       const ayoy   = aly ? aac/aly - 1 : null;
       const accWks = weeklyFcstFor(cc.key, [acc.name]);
       parts.push(`<tr>
         <td style="padding-left:24px;color:#555">└ ${acc.name}</td>
         <td>${_offFmt(arf)}</td>
         ${wCells(accWks)}
+        <td>${_offFmt(afc)}</td>
+        <td><span class="${_offAchCls(afcRf)}">${_offFmtPct(afcRf)}</span></td>
         <td>${_offFmt(aac)}</td>
         <td><span class="${_offAchCls(aAchRf)}">${_offFmtPct(aAchRf)}</span></td>
         <td>${_offFmt(aly)}</td>
-        <td class="${_offGrCls(ayoy)}">${_offFmtGr(ayoy)}</td>
       </tr>`);
     }
   }
+  const _wkYear = (window.OFF_SEED && OFF_SEED.meta && OFF_SEED.meta.year) || 2026;
+  const wkRanges = _offWeekRangesOfMonth(_wkYear, wkMonth);
   const head = `<thead><tr>
     <th style="text-align:left">채널 / 거래처</th>
     <th>${period} RoFo</th>
-    <th style="font-size:11px">W1</th>
-    <th style="font-size:11px">W2</th>
-    <th style="font-size:11px">W3</th>
-    <th style="font-size:11px">W4</th>
-    <th style="font-size:11px">W5</th>
+    ${wkRanges.map(w => `<th style="font-size:11px">${w.wk}${w.label ? `<br><span style="font-weight:400;color:#94a3b8;font-size:9px">${w.label}</span>` : ''}</th>`).join('')}
+    <th>${period} FCST</th>
+    <th style="background:rgba(227,6,19,0.06);color:#9e1310">FCST/RoFo</th>
     <th>${period} Actual</th>
     <th style="background:rgba(32,85,39,0.10);color:#205527">🌟 Actual/RoFo</th>
     <th>${period} '25</th>
-    <th>YoY%</th>
   </tr></thead>`;
-  const body = parts.length ? `<tbody>${parts.join('')}</tbody>` : `<tbody><tr><td colspan="11" style="text-align:center;padding:24px;color:#94a3b8">데이터 없음</td></tr></tbody>`;
+  const body = parts.length ? `<tbody>${parts.join('')}</tbody>` : `<tbody><tr><td colspan="12" style="text-align:center;padding:24px;color:#94a3b8">데이터 없음</td></tr></tbody>`;
   const tbl = document.getElementById('tbl-fcst'); if(tbl) tbl.innerHTML = head + body;
   const t = document.getElementById('fcst-table-title');
   const wkMon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][wkMonth] || '';
@@ -5061,9 +5099,12 @@ function renderFcstSkuVsLmLy(){
   const am = _OFF_ACT_MONTHS;
   if(am < 1){ grid.innerHTML = '<div style="color:#94a3b8;padding:14px;">실현 월이 없어 비교 불가</div>'; return; }
   const curIdx = am - 1, prevIdx = am - 2;
+  // FCST월 = fcst_m 데이터가 있는 마지막 월(예: 7월). W1~W5 FCST 표시·share 계산에 사용(actual/LM/LY는 curIdx 유지).
+  let fcstIdx = curIdx;
+  { const _tf = (OFF.total && OFF.total.fcst_m) || []; for(let i=11;i>=0;i--){ if((_tf[i]||0) > 0){ fcstIdx = i; break; } } }
 
   const EPS = 0.1;   // HL 임계치: 0.1 HL 미만은 사실상 0 — % 비교 불가로 처리
-  const fmtHL = v => (v == null || !isFinite(v) || Math.abs(v) < EPS) ? '—' : (Math.round(v*10)/10).toLocaleString('ko-KR');
+  const fmtHL = v => (v == null || !isFinite(v) || Math.abs(v) < EPS) ? '—' : Math.round(v).toLocaleString('ko-KR');
   const fmtPct = v => {
     if(v == null || !isFinite(v)) return '<span style="color:#d1d5db;">—</span>';
     const color = v >= 0 ? '#16a34a' : '#dc2626';
@@ -5119,7 +5160,7 @@ function renderFcstSkuVsLmLy(){
         const inc = (s.act_m?.[curIdx] || 0)
                   + (prevIdx>=0 ? (s.act_m?.[prevIdx] || 0) : 0)
                   + (s.ly_m?.[curIdx] || 0)
-                  + (s.fcst_m?.[curIdx] || 0);
+                  + (s.fcst_m?.[fcstIdx] || 0);
         sg.total += inc; bg.total += inc;
       }
     }
@@ -5144,9 +5185,9 @@ function renderFcstSkuVsLmLy(){
         let g = m.get(name);
         if(!g){ g = { cur:0, prev:0, fc:0, ly:0 }; m.set(name, g); }
         g.cur += (s.act_m?.[curIdx] || 0);
-        if(prevIdx >= 0) g.prev += (s.act_m?.[prevIdx] || 0);
-        g.fc  += (s.fcst_m?.[curIdx] || 0);                  // 당월 FCST
-        g.ly  += (s.ly_m?.[curIdx]  || 0);
+        g.prev += (s.act_m?.[curIdx] || 0);                  // LM = 지난 완료월(6월) actual
+        g.fc  += (s.fcst_m?.[fcstIdx] || 0);                 // 최신 FCST(예측월 7월)
+        g.ly  += (s.ly_m?.[fcstIdx]  || 0);                  // LY = 예측월 전년(7월 '25)
         total += g.cur;
       }
       return { name: acc.name, total, valueMap: m, accountList: [acc.name], wk: weeklyFor(cc.key, [acc.name]) };
@@ -5203,35 +5244,30 @@ function renderFcstSkuVsLmLy(){
         const sum = [0,0,0,0,0];
         let any = false;
         for(const n of cell.accountList){
-          const arr = pat.weekly_fcst[cc.key][n]?.[curIdx] || [];
+          const arr = pat.weekly_fcst[cc.key][n]?.[fcstIdx] || [];
           for(let w=0; w<5; w++){ sum[w] += (arr[w] || 0); if(arr[w]) any = true; }
         }
         if(any) cellFcstW = sum;
       }
 
       let h = `<div class="fcst-acct-card ${klass}"><div class="fcst-acct-title">${cell.name}</div>`;
-      h += `<div style="display:flex;gap:3px;font-size:9px;color:#9ca3af;margin-bottom:2px;padding:0 2px;">
-        <span style="flex:1;"></span>
-        <span style="width:36px;text-align:right;">W1</span>
-        <span style="width:36px;text-align:right;">W2</span>
-        <span style="width:36px;text-align:right;">W3</span>
-        <span style="width:36px;text-align:right;">W4</span>
-        <span style="width:36px;text-align:right;">W5</span>
-        <span style="width:44px;text-align:right;">LM</span>
-        <span style="width:44px;text-align:right;">LY</span>
+      h += `<div class="issue-item" style="border-bottom:1px solid #e5e7eb;padding:0 0 3px;margin-bottom:2px;font-size:9px;color:#9ca3af;font-weight:600;">
+        <span class="issue-sku"></span>
+        <span class="issue-ref-w">W1</span>
+        <span class="issue-ref-w">W2</span>
+        <span class="issue-ref-w">W3</span>
+        <span class="issue-ref-w">W4</span>
+        <span class="issue-ref-w">W5</span>
+        <span class="issue-ref">LM</span>
+        <span class="issue-ref">LY</span>
       </div>`;
 
-      // SKU/Brand 행 — W셀은 FCST 누적값 (업로드 파일 기준, 현재는 데이터 없으면 "—")
-      //   vs LM·LY 비교는 DSR actual MTD 기준 (W셀 표시값과 무관)
+      // SKU/Brand 행 — W셀은 FCST 누적값(업로드 파일 기준). LM·LY의 %는 최신 FCST 대비(FCST÷LM−1, FCST÷LY−1).
       const renderRow = (label, v, klass, indent, isBrand) => {
         const shareCur  = cellCur  > EPS ? v.cur  / cellCur  : 0;
-        const sharePrev = cellPrev > EPS ? v.prev / cellPrev : 0;
         const shareFc   = cellFc   > EPS ? v.fc   / cellFc   : shareCur;   // FCST share, fallback to actual share
-        const skuMTDcur = cellMTDcur * shareCur;
-        const skuMTDlm  = cellMTDlm  * sharePrev;
-        const lmPct = safePct(skuMTDcur, skuMTDlm);
-        const lyProrated = (v.ly || 0) * (realized > 0 ? realized / PRORATE_WEEKS : 0);
-        const lyPct = safePct(skuMTDcur, lyProrated);
+        const lmPct = safePct(v.fc, v.prev);   // 최신 FCST 대비 LM %
+        const lyPct = safePct(v.fc, v.ly);     // 최신 FCST 대비 LY %
 
         // W1~W5: FCST 파일에서 받은 누적값 × SKU FCST share
         // 파일 미업로드 시 cellFcstW = null → 모든 셀 "—"
@@ -6521,7 +6557,10 @@ async function minutesBrowse(catKey) {
     } catch {}
     cards.forEach(c => {
       const cat = c.category || c.tag || '';
-      if (cat === catKey) {
+      // 거래처키 필터: 정확히 일치. 채널키 필터: 소속 거래처 카드 + 레거시 채널값 카드.
+      const _match = cat && (cat === catKey ||
+        (typeof MIN_ACCT_TO_CH !== 'undefined' && MIN_ACCT_TO_CH[cat] === catKey));
+      if (_match) {
         flat.push({
           entryId:  row.id,
           month:    row.week_label || '',
@@ -6574,9 +6613,16 @@ function _minCreateCardEl({ id, subtitle, category, content }) {
   const catSel = document.createElement('select');
   catSel.className = 'min-card-catsel';
   catSel.title = '카드 카테고리';
+  const _attrEsc = s => String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   catSel.innerHTML =
     '<option value="">카테고리 선택…</option>' +
-    MINUTES_CATEGORIES.map(c => `<option value="${c.key}" style="color:${MINUTES_CAT_COLOR[c.key]};font-weight:600;">${c.label}</option>`).join('');
+    ((typeof MIN_OFF_CH !== 'undefined' && Array.isArray(MIN_OFF_CH))
+      ? MIN_OFF_CH.map(ch => {
+          const items = ch.accounts.length ? ch.accounts : [{ key: ch.key, label: ch.label }];
+          const opts = items.map(a => `<option value="${a.key}" style="color:${ch.color};font-weight:600;">${_attrEsc(a.label)}</option>`).join('');
+          return `<optgroup label="${_attrEsc(ch.label)}">${opts}</optgroup>`;
+        }).join('')
+      : MINUTES_CATEGORIES.map(c => `<option value="${c.key}" style="color:${MINUTES_CAT_COLOR[c.key]};font-weight:600;">${c.label}</option>`).join(''));
   catSel.value = category || '';
   const _syncCatColor = () => {
     catSel.style.color = MINUTES_CAT_COLOR[catSel.value] || '#c4c9d4';
@@ -6625,8 +6671,9 @@ function minutesRenderCards(cards) {
 
 function minutesAddCard() {
   const wrap = document.getElementById('min-cards');
-  // 사이드바에 선택된 카테고리가 있으면 프리필
-  const preCat = (_minutesCurrentCategory && _minutesCurrentCategory !== 'all') ? _minutesCurrentCategory : '';
+  // 사이드바에 선택된 거래처(소분류)가 있으면 프리필. 채널(대분류) 필터 상태면 프리필 안 함.
+  let preCat = (_minutesCurrentCategory && _minutesCurrentCategory !== 'all') ? _minutesCurrentCategory : '';
+  if (preCat && typeof MIN_ACCT_TO_CH !== 'undefined' && !MIN_ACCT_TO_CH[preCat]) preCat = '';
   const card = _minCreateCardEl({ id: Date.now(), subtitle: '', category: preCat, content: '' });
   wrap.appendChild(card);
   const subtitle = card.querySelector('.min-card-subtitle');
@@ -7888,6 +7935,7 @@ async function loadFromSupabase() {
     if (error) throw error;
     if (row && row.data && Array.isArray(row.data.rows) && row.data.rows.length) {
       OFF_SEED.rows = row.data.rows;
+      OFF_SEED.pattern = row.data.pattern || {};   // 주간 FCST(weekly_fcst) 포함 — 표 W1~W5 렌더 소스
       // meta(actual_months 등)를 finalize 전에 반영해야 _OFF_ACT_MONTHS가 최신 실현월(6월 등)로 잡힘
       if(row.data.meta){ OFF_SEED.meta = Object.assign(OFF_SEED.meta || {}, row.data.meta); }
       window._OFF_ROFO_CH = row.data.rofo_channel || null;   // 채널 단위 RoFo(P07) 오버라이드
@@ -7934,34 +7982,64 @@ function init() {
 // (off_dashboard_snapshots/off_meeting_minutes/off_calendar_events/off_todos)로 네임스페이스 격리 — 충돌 0.
 console.log('[Off] Supabase 인프라: On 프로젝트 통합 (off_ 접두 테이블 격리)');
 
-// ── Off-Trade 회의록 카테고리 (채널 기반)로 mutate ────────────────
+// ── Off-Trade 회의록 카테고리: 대분류(채널) ▸ 소분류(거래처) 2단 ──────
+// 카드 category 값 = 거래처 키(소분류). 사이드바에서 채널 클릭=채널 전체, 거래처 클릭=해당 거래처.
+// 위클리 Segment/Account 명 기준.
+window.MIN_OFF_CH = [
+  { key:'cvs',   label:'CVS',   color:'#3b6ef5', bg:'#eff6ff', accounts:[
+    {key:'gs25',label:'GS25'},{key:'cu',label:'CU'},{key:'korea7',label:'Korea 7/Ministop'},{key:'emart24',label:'Emart24'} ]},
+  { key:'hyper', label:'HYPER', color:'#dc2626', bg:'#fef2f2', accounts:[
+    {key:'emart',label:'Emart'},{key:'homeplus',label:'Homeplus'},{key:'lottemart',label:'Lottemart'},{key:'kimsclub',label:'Kimsclub'},{key:'megamart',label:'Megamart'} ]},
+  { key:'cc',    label:'C&C',   color:'#d97706', bg:'#fffbeb', accounts:[
+    {key:'costco',label:'Costco'},{key:'traders',label:'Traders'},{key:'max',label:'Max'} ]},
+  { key:'sm',    label:'SM',    color:'#16a34a', bg:'#f0fdf4', accounts:[
+    {key:'gssuper',label:'Gssuper'},{key:'lottesuper',label:'Lottesuper'},{key:'express',label:'Express'},{key:'everyday',label:'Everyday'},{key:'seowon',label:'Seowon'} ]},
+  { key:'union', label:'UNION', color:'#0d9488', bg:'#f0fdfa', accounts:[
+    {key:'hanaro',label:'Hanaro'} ]},
+  { key:'alsm',  label:'ALSM',  color:'#9333ea', bg:'#faf5ff', accounts:[] },  // 단일 채널(하위 거래처 없음)
+];
+// 거래처키 → 채널키 역매핑 (필터/색상용). 채널키는 포함하지 않음(채널 vs 거래처 구분에 사용).
+window.MIN_ACCT_TO_CH = {};
+MIN_OFF_CH.forEach(ch => ch.accounts.forEach(a => { MIN_ACCT_TO_CH[a.key] = ch.key; }));
+
+// 사이드바(대분류▸소분류 2단) 렌더
+function renderMinutesCatBar(){
+  const bar = document.getElementById('min-cat-bar'); if(!bar || typeof MIN_OFF_CH === 'undefined') return;
+  const cur = (typeof _minutesCurrentCategory !== 'undefined') ? _minutesCurrentCategory : 'all';
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let html = `<button class="min-cat-btn${cur==='all'?' active':''}" data-cat="all" onclick="minutesFilterByCategory('all')">전체</button>`;
+  MIN_OFF_CH.forEach(ch => {
+    html += `<div class="min-cat-group">`;
+    html += `<button class="min-cat-btn min-cat-ch${cur===ch.key?' active':''}" data-cat="${ch.key}" style="--ch-color:${ch.color};" onclick="minutesFilterByCategory('${ch.key}')">${esc(ch.label)}</button>`;
+    if(ch.accounts.length){
+      html += `<div class="min-cat-accts">`;
+      ch.accounts.forEach(a => {
+        html += `<button class="min-cat-btn min-sub${cur===a.key?' active':''}" data-cat="${a.key}" onclick="minutesFilterByCategory('${a.key}')">${esc(a.label)}</button>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+  bar.innerHTML = html;
+}
+
 try {
   if(typeof MINUTES_CATEGORIES !== 'undefined' && Array.isArray(MINUTES_CATEGORIES)){
+    // 카드 category select 값 = 거래처(소분류) 목록
     MINUTES_CATEGORIES.length = 0;
-    MINUTES_CATEGORIES.push(
-      { key: 'cvs',   label: 'CVS' },
-      { key: 'hyper', label: 'HYPER' },
-      { key: 'sm',    label: 'SM' },
-      { key: 'cc',    label: 'C&C' },
-      { key: 'alsm',  label: 'ALSM' },
-      { key: 'union', label: 'UNION' }
-    );
-    if(typeof MINUTES_CAT_LABEL === 'object' && MINUTES_CAT_LABEL){
-      Object.keys(MINUTES_CAT_LABEL).forEach(k => delete MINUTES_CAT_LABEL[k]);
-      MINUTES_CATEGORIES.forEach(c => { MINUTES_CAT_LABEL[c.key] = c.label; });
-    }
-    const palette = { cvs:'#3b6ef5', hyper:'#dc2626', sm:'#16a34a', cc:'#d97706', alsm:'#9333ea', union:'#0d9488' };
-    const bgPal   = { cvs:'#eff6ff', hyper:'#fef2f2', sm:'#f0fdf4', cc:'#fffbeb', alsm:'#faf5ff', union:'#f0fdfa' };
-    if(typeof MINUTES_CAT_COLOR === 'object' && MINUTES_CAT_COLOR){
-      Object.keys(MINUTES_CAT_COLOR).forEach(k => delete MINUTES_CAT_COLOR[k]);
-      Object.assign(MINUTES_CAT_COLOR, palette);
-    }
-    if(typeof MINUTES_CAT_BG === 'object' && MINUTES_CAT_BG){
-      Object.keys(MINUTES_CAT_BG).forEach(k => delete MINUTES_CAT_BG[k]);
-      Object.assign(MINUTES_CAT_BG, bgPal);
-    }
-    console.log('[Off] 회의록 카테고리: CVS/HYPER/SM/C&C/ALSM/UNION');
+    MIN_OFF_CH.forEach(ch => ch.accounts.forEach(a => MINUTES_CATEGORIES.push({ key:a.key, label:a.label })));
+    // 라벨/색상 맵: 채널키 + 거래처키 모두 등록(거래처는 채널색 상속) — 브라우즈 제목·카드 색상용
+    const _reg = (map, chVal, acVal) => {
+      if(typeof map !== 'object' || !map) return;
+      Object.keys(map).forEach(k => delete map[k]);
+      MIN_OFF_CH.forEach(ch => { map[ch.key] = chVal(ch); ch.accounts.forEach(a => { map[a.key] = acVal(ch, a); }); });
+    };
+    _reg(MINUTES_CAT_LABEL, ch => ch.label, (ch,a) => a.label);
+    _reg(MINUTES_CAT_COLOR, ch => ch.color, ch => ch.color);
+    _reg(MINUTES_CAT_BG,    ch => ch.bg,    ch => ch.bg);
+    console.log('[Off] 회의록 카테고리 2단: 채널', MIN_OFF_CH.length, '/ 거래처', MINUTES_CATEGORIES.length);
   }
+  if(document.getElementById('min-cat-bar')) renderMinutesCatBar();
 } catch(e){ console.warn('[Off] MINUTES 카테고리 갱신 실패:', e.message); }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -8005,11 +8083,29 @@ function _offUpdateSkuAccountDropdown(){
   else { const cc = OFF.channels.find(c=>c.key===ch); if(cc) accounts = ['ALL', ...cc.accounts.map(a=>a.name)]; }
   accSel.innerHTML = accounts.map(a=>`<option value="${a}">${a==='ALL'?'전체 거래처':a}</option>`).join('');
 }
+// SKU 코드 접두 → 브랜드 (brand 값이 비었을 때 추론). _OFF_BRAND_ORDER와 동일한 표기.
+function _offBrandFromSku(sku){
+  const s = String(sku || '').toUpperCase().trim();
+  if(!s) return '';
+  if(s.startsWith('HE 0.0') || s.startsWith('HE0.0')) return 'Heineken 0.0';
+  if(s.startsWith('HE SLV') || s.startsWith('HE SILVER')) return 'Heineken Silver';
+  if(s.startsWith('HE ')) return 'Heineken';
+  if(s.startsWith('TI RAD')) return 'Tiger Radler';
+  if(s.startsWith('TI ')) return 'Tiger';
+  if(s.startsWith('PA ')) return 'Paulaner';
+  if(s.startsWith('DE ')) return 'Desperados';
+  if(s.startsWith('ED ')) return 'Edelweiss';
+  if(s.startsWith('BI ')) return 'Birra';
+  if(s.startsWith('SU ')) return 'Sulhwa';
+  if(s.startsWith('KR ')) return 'Krombacher';
+  if(s.startsWith('AF ')) return 'Apple Fox';
+  if(s.startsWith('MO ')) return "Monteith's";
+  return '';
+}
 function _offNormalizeBrandName(s){
   const b = (s.brand || '').trim();
-  if(b === 'Paulaner') return 'Paulaner';
-  if(!b && /^pa\b/i.test(s.sku || '')) return 'Paulaner';
-  return b;  // 빈 문자열은 그대로 — 드롭다운에서 제외됨
+  if(b) return b;
+  return _offBrandFromSku(s.sku || '');   // brand 비었으면 SKU 접두로 추론 (미분류 제거)
 }
 // AP 시스템과 DSR/RoFo가 사용하는 Paulaner SKU 코드 불일치 정정 (DSR 기준으로 통일)
 //   PA HEL 500 Can → PA XXX 500 Can
@@ -9257,6 +9353,25 @@ function _resolveOffAccount(name){
   }
   return null;
 }
+// ── 시트 이름 → {ch, acct} 리졸버 (주간 FCST 다중시트 업로드용) ──────────────
+// 시트 이름을 정규화(소문자·영숫자만)해 계정으로 매핑. B2 셀 오타(예: E24 시트 B2='KoreaSeven')를 회피.
+const _offNormKey = s => String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const _OFF_FCST_SHEET_MAP = (() => {
+  const m = {};
+  for(const a of _OFF_FCST_ACCOUNTS){ m[_offNormKey(a.acct)] = { ch:a.ch, acct:a.acct }; }
+  // 파일 시트명 특화 별칭 (정규화 키 → canonical acct)
+  const acctOf = key => { const e = _OFF_FCST_ACCOUNTS.find(x => x.acct === key); return e ? { ch:e.ch, acct:e.acct } : null; };
+  const alias = { kims:'Kimsclub', magmart:'Megamart', lottemax:'Lottemaxx', alsmtotal:'ALSM' };
+  for(const [k,v] of Object.entries(alias)){ const r = acctOf(v); if(r) m[k] = r; }
+  return m;
+})();
+// ALSM 지역 소계 시트는 skip (ALSM Total과 중복 집계 방지)
+const _OFF_FCST_SHEET_SKIP = new Set(['alsmchn','alsmseoul','alsmyn']);
+function _resolveOffAccountBySheet(sheetName){
+  const n = _offNormKey(sheetName);
+  if(!n || _OFF_FCST_SHEET_SKIP.has(n)) return null;
+  return _OFF_FCST_SHEET_MAP[n] || null;
+}
 // 월 이름 → 0-based index
 function _parseMonthName(s){
   if(!s) return -1;
@@ -9299,6 +9414,60 @@ function parseRofoFormWorkbook(wb, fileName){
   return { fileName, monthIdx, ch: resolved.ch, acct: resolved.acct, accountRaw, skus };
 }
 
+// 주간 FCST 워크북 감지 (다중시트 허용): 아무 시트나 A1≈month & A2≈account
+function _detectWeeklyWorkbook(wb){
+  for(const sn of wb.SheetNames){
+    const ws = wb.Sheets[sn]; if(!ws) continue;
+    const a1 = String(ws['A1']?.v||'').trim().toLowerCase();
+    const a2 = String(ws['A2']?.v||'').trim().toLowerCase();
+    if(a1==='month' && a2==='account') return true;
+  }
+  return false;
+}
+// 다중시트 주간 FCST 파서: 시트 이름=계정, 시트별 B1=월, 행5+ Brand(A)/SKU(B)/1W~5W(C~G), H=HL계수.
+// 주별 값을 HL로 변환(= cases × 계수)해 반환. → 표의 W1~W5(HL 기준 RoFo/Actual)와 단위 일치.
+function parseFcstWeeklyWorkbook(wb, fileName){
+  const updates = [], skipped = [];
+  for(const sn of wb.SheetNames){
+    const ws = wb.Sheets[sn]; if(!ws) continue;
+    const a1 = String(ws['A1']?.v||'').trim().toLowerCase();
+    const a2 = String(ws['A2']?.v||'').trim().toLowerCase();
+    if(a1!=='month' || a2!=='account'){ skipped.push({sheet:sn, reason:'양식아님'}); continue; }
+    const resolved = _resolveOffAccountBySheet(sn);
+    if(!resolved){ skipped.push({sheet:sn, reason:'계정매핑없음'}); continue; }
+    const monthIdx = _parseMonthName(ws['B1']?.v);
+    if(monthIdx < 0){ skipped.push({sheet:sn, reason:'월인식실패'}); continue; }
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
+    let curBrand = null; const skus = [];
+    for(let R = 4; R <= range.e.r; R++){                        // 헤더 R4(idx3), 데이터 R5+(idx4+)
+      const bc = ws[XLSX.utils.encode_cell({r:R,c:0})];         // A = brand
+      const sc = ws[XLSX.utils.encode_cell({r:R,c:1})];         // B = sku
+      if(bc && bc.v != null && bc.v !== ''){ curBrand = String(bc.v).trim(); }
+      if(!sc || sc.v == null || sc.v === '') continue;
+      const sku = String(sc.v).trim(); if(!sku) continue;
+      // HL 계수: H(idx7) 우선, 없으면 HL합(J,idx9)/QTY합(I,idx8) 폴백
+      let factor = Number(ws[XLSX.utils.encode_cell({r:R,c:7})]?.v);
+      if(!isFinite(factor) || factor <= 0){
+        const q = Number(ws[XLSX.utils.encode_cell({r:R,c:8})]?.v);
+        const h = Number(ws[XLSX.utils.encode_cell({r:R,c:9})]?.v);
+        factor = (isFinite(q) && q>0 && isFinite(h)) ? h/q : 0;
+      }
+      const weeks = []; let sum = 0, any = false;
+      for(let C = 2; C <= 6; C++){                              // C~G = 1W~5W (cases)
+        const n = Number(ws[XLSX.utils.encode_cell({r:R,c:C})]?.v);
+        const cases = isFinite(n) ? n : 0;
+        const hl = cases * factor;                             // → HL
+        weeks.push(hl); sum += hl; if(cases) any = true;
+      }
+      if(!any) continue;
+      skus.push({ brand: curBrand, sku, weeks, monthly: sum });
+    }
+    if(skus.length) updates.push({ ch:resolved.ch, acct:resolved.acct, monthIdx, sheetName:sn, skus });
+    else skipped.push({sheet:sn, reason:'데이터없음'});
+  }
+  return { fileName, updates, skipped };
+}
+
 // 통합본 적용 (전체 baseline 교체) — 이전 단일파일 로직
 function _applyAccountVolumeRows(newRows){
   const z = () => Array(12).fill(0);
@@ -9335,32 +9504,39 @@ function _applyAccountVolumeRows(newRows){
 }
 
 // ② FCST 주간 폼 적용 (incremental — 해당 (ch, acct, sku, monthIdx) fcst_m만 갱신)
-function _applyFcstWeekly(fcstUpdates){
+// 주간 FCST를 data 객체(rows + pattern.weekly_fcst)에 병합. 업로드된 (ch,acct,sku)만 갱신.
+function _offApplyWeeklyToData(data, fcstUpdates){
+  if(!Array.isArray(data.rows)) data.rows = [];
+  if(!data.pattern || typeof data.pattern !== 'object') data.pattern = {};
+  if(!data.pattern.weekly_fcst || typeof data.pattern.weekly_fcst !== 'object') data.pattern.weekly_fcst = {};
+  const wf = data.pattern.weekly_fcst;
   let updated = 0, added = 0;
   for(const u of fcstUpdates){
+    // weekly_fcst[채널][계정][월] = 계정의 SKU 주차값 합계(5주) — 표는 계정 단위로 W1~W5 표시
+    const acctWeeks = [0,0,0,0,0]; let hasWeeks = false;
     for(const sd of u.skus){
-      let row = OFF_SEED.rows.find(x => x.ch === u.ch && x.acct === u.acct && x.sku === sd.sku);
+      let row = data.rows.find(x => x.ch === u.ch && x.acct === u.acct && x.sku === sd.sku);
       if(!row){
         const z = () => Array(12).fill(0);
-        row = {
-          ch:u.ch, acct:u.acct, brand:sd.brand||'', sku:sd.sku,
-          ap_m:z(), rofo_m:z(), fcst_m:z(),
-          ly_hl_m:z(), ly_q_m:z(), ly_nsv_m:z(),
-          act_hl_m:z(), act_q_m:z(), act_nsv_m:z(),
-          ly_m:z(), act_m:z()
-        };
-        OFF_SEED.rows.push(row);
-        added++;
-      } else if(!row.brand && sd.brand){
-        row.brand = sd.brand;
-      }
+        row = { ch:u.ch, acct:u.acct, brand:sd.brand||'', sku:sd.sku,
+          ap_m:z(), rofo_m:z(), fcst_m:z(), ly_hl_m:z(), ly_q_m:z(), ly_nsv_m:z(),
+          act_hl_m:z(), act_q_m:z(), act_nsv_m:z(), ly_m:z(), act_m:z() };
+        data.rows.push(row); added++;
+      } else if(!row.brand && sd.brand){ row.brand = sd.brand; }
       if(!Array.isArray(row.fcst_m) || row.fcst_m.length !== 12) row.fcst_m = Array(12).fill(0);
       row.fcst_m[u.monthIdx] = sd.monthly;
+      if(Array.isArray(sd.weeks)){ for(let w=0; w<5; w++) acctWeeks[w] += (sd.weeks[w] || 0); hasWeeks = true; }
       updated++;
+    }
+    if(hasWeeks){                                   // 이번 업로드 계정의 월 주차값 세팅(덮어쓰기 = 재업로드 시 최신본)
+      if(!wf[u.ch]) wf[u.ch] = {};
+      if(!wf[u.ch][u.acct]) wf[u.ch][u.acct] = {};
+      wf[u.ch][u.acct][u.monthIdx] = acctWeeks;
     }
   }
   return { updated, added };
 }
+function _applyFcstWeekly(fcstUpdates){ return _offApplyWeeklyToData(OFF_SEED, fcstUpdates); }
 
 // ── ① RoFo 핸들러: 통합본만 (단일 파일, AP·RoFo·25Y 전체 교체) ──────
 async function offHandleRofoUpload(input){
@@ -9370,8 +9546,8 @@ async function offHandleRofoUpload(input){
   try {
     const buf = await f.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
-    if(_detectRofoFormSheet(wb)){
-      el.innerHTML = '<span style="color:#dc2626">⚠ 이 슬롯은 <b>통합본 양식 전용</b>입니다 (Account Volume_*_취합본_*.xlsx). 단주간 FCST 양식은 ②번에 업로드하세요.</span>';
+    if(_detectRofoFormSheet(wb) || _detectWeeklyWorkbook(wb)){
+      el.innerHTML = '<span style="color:#dc2626">⚠ 이 슬롯은 <b>통합본 양식 전용</b>입니다 (Account Volume_*_취합본_*.xlsx). 주간 FCST 양식(월/계정/1W~5W)은 ②번에 업로드하세요.</span>';
       input.value = ''; return;
     }
     const newRows = parseOffFcstWorkbook(wb);
@@ -9384,38 +9560,68 @@ async function offHandleRofoUpload(input){
   } catch(e){ el.innerHTML = '<span style="color:#dc2626">오류: ' + (e.message || e) + '</span>'; console.error(e); }
 }
 
-// ── ② FCST 주간 핸들러: 새 양식 다중 파일 (fcst_m 갱신, RoFo·AP·Actual 보존) ──
+// 주간 FCST를 서버 최신본에 병합·저장 (reload→merge→upsert). 업로드된 계정만 갱신 → 타인 데이터 보존.
+async function _offMergeWeeklyToServer(updates){
+  const { data: row, error } = await _supabase
+    .from('off_dashboard_snapshots').select('data').eq('id', 1).single();
+  if(error) throw error;
+  const data = (row && row.data && typeof row.data === 'object') ? row.data : {};
+  if(!Array.isArray(data.rows)) data.rows = Array.isArray(OFF_SEED.rows) ? OFF_SEED.rows : [];
+  const res = _offApplyWeeklyToData(data, updates);          // rows.fcst_m + pattern.weekly_fcst 병합
+  const payload = { id:1, data, updated_at: new Date().toISOString() };  // 기존 keys(meta·rofo_channel 등) 보존
+  const { error: upErr } = await _supabase.from('off_dashboard_snapshots').upsert(payload);
+  if(upErr) throw upErr;
+  // 로컬 반영 (서버 병합본 기준)
+  OFF_SEED.rows = data.rows;
+  OFF_SEED.pattern = data.pattern || {};
+  if(data.meta) OFF_SEED.meta = Object.assign(OFF_SEED.meta || {}, data.meta);
+  window._OFF_ROFO_CH = data.rofo_channel || window._OFF_ROFO_CH || null;
+  OFF = finalizeOff(OFF_SEED.rows);
+  if(data.revenue) OFF_REV = data.revenue;
+  return res;
+}
+
+// ── ② FCST 주간 핸들러: 다중시트 워크북 지원 (시트=계정) → 서버 자동 병합·저장 ──
 async function offHandleFcstWeeklyUpload(input){
   const files = Array.from(input.files || []);
   if(!files.length) return;
   const el = document.getElementById('off-fcst-status');
-  el.textContent = `파일 ${files.length}개 처리 중…`;
-  const updates = []; const errors = [];
+  el.textContent = `파일 ${files.length}개 읽는 중…`;
+  const allUpdates = []; const allSkipped = []; const errors = [];
   for(const f of files){
     try {
       const buf = await f.arrayBuffer();
       const wb = XLSX.read(buf, { type: 'array' });
-      if(!_detectRofoFormSheet(wb)){
-        errors.push(f.name + ': FCST 양식 아님 (통합본은 ①에 업로드)');
+      if(!_detectWeeklyWorkbook(wb)){
+        errors.push(f.name + ': 주간 FCST 양식 아님 (통합본은 ①에 업로드)');
         continue;
       }
-      const u = parseRofoFormWorkbook(wb, f.name);   // 함수 그대로 재사용 (양식 동일)
-      updates.push(u);
+      const p = parseFcstWeeklyWorkbook(wb, f.name);          // 모든 시트 파싱
+      allUpdates.push(...p.updates);
+      allSkipped.push(...p.skipped);
     } catch(e){
       errors.push(f.name + ': ' + (e.message || e));
     }
   }
   const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  let parts = [];
-  if(updates.length){
-    const r = _applyFcstWeekly(updates);
-    OFF = finalizeOff(OFF_SEED.rows);
-    const detail = updates.map(u => `${monNames[u.monthIdx]}-${u.acct}(${u.skus.length})`).join(', ');
-    parts.push(`<b>FCST ${updates.length}/${files.length}개 적용</b> — ${detail} · ${r.updated} SKU 갱신` + (r.added?` (+${r.added})`:''));
+  const parts = [];
+  if(allUpdates.length){
+    el.textContent = `${allUpdates.length}개 계정 서버 병합·저장 중…`;
+    try {
+      const r = await _offMergeWeeklyToServer(allUpdates);
+      const detail = allUpdates.map(u => `${u.acct}(${u.skus.length})`).join(', ');
+      parts.push(`<b>✓ ${allUpdates.length}개 계정 병합·저장</b> · ${r.updated} SKU` + (r.added?` (+${r.added} 신규)`:''));
+      parts.push(`<span style="color:var(--text-muted)">${detail}</span>`);
+      const offJul = allUpdates.filter(u => u.monthIdx !== 6);
+      if(offJul.length) parts.push(`<span style="color:#d97706">⚠ 7월 아님: ${offJul.map(u=>`${u.acct}=${monNames[u.monthIdx]}`).join(', ')} — 시트 B1(월) 확인</span>`);
+    } catch(e){
+      parts.push(`<span style="color:#dc2626">저장 실패: ${e.message || e}</span>`);
+    }
   }
-  if(errors.length){ parts.push(`<span style="color:#dc2626">오류 ${errors.length}건: ${errors.slice(0,3).join(' / ')}</span>`); }
-  el.innerHTML = parts.length ? '✓ ' + parts.join('<br>') : '⚠ 처리된 파일 없음';
-  if(updates.length){ _offRerenderActive(); _offUpdateDataStatus(); }
+  if(allSkipped.length){ parts.push(`<span style="color:var(--text-muted)">skip ${allSkipped.length}: ${allSkipped.slice(0,6).map(s=>`${s.sheet}(${s.reason})`).join(', ')}${allSkipped.length>6?' …':''}</span>`); }
+  if(errors.length){ parts.push(`<span style="color:#dc2626">오류 ${errors.length}: ${errors.slice(0,3).join(' / ')}</span>`); }
+  el.innerHTML = parts.length ? parts.join('<br>') : '⚠ 처리된 파일 없음';
+  if(allUpdates.length){ _offRerenderActive(); _offUpdateDataStatus(); }
   input.value = '';
 }
 
@@ -9498,7 +9704,7 @@ async function offSaveSnapshot(){
   const el = document.getElementById('off-save-status');
   el.textContent = '저장 중…';
   try {
-    const payload = { id:1, data:{ rows:OFF_SEED.rows, channels:OFF_CHANNELS, meta:OFF_SEED.meta, revenue: OFF_REV }, updated_at:new Date().toISOString() };
+    const payload = { id:1, data:{ rows:OFF_SEED.rows, channels:OFF_CHANNELS, meta:OFF_SEED.meta, revenue: OFF_REV, pattern: OFF_SEED.pattern || {}, rofo_channel: window._OFF_ROFO_CH || null }, updated_at:new Date().toISOString() };
     const { error } = await _supabase.from('off_dashboard_snapshots').upsert(payload);
     if(error) throw error;
     el.textContent = '✓ Supabase 저장 완료 (rows + revenue + meta)';
