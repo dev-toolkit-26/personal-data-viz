@@ -1906,7 +1906,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
   <div id="tab-fcst" class="tab-content active">
     <div class="filter-bar" style="margin-bottom:12px;gap:16px;flex-wrap:wrap;">
       <span><label>월</label>
-        <select id="fcst-month" onchange="renderFcstAll()"></select>
+        <select id="fcst-month" onchange="_offFcstMonthUserSet=true; renderFcstAll()"></select>
       </span>
       <span style="color:var(--text-muted);font-size:12px;align-self:center;">
         ⓘ 현재 월별(`fcst_m`) 단위 표시 — 주간(W1~W5) FCST는 추후 추가 예정
@@ -4842,19 +4842,22 @@ function _offFcstMonthCtx(){
   };
   return { am, monNames, moIdx, period, sumArr };
 }
+var _offFcstMonthUserSet = false;   // 사용자가 월 드롭다운을 직접 바꿨는지 (전역)
 function _offUpdateFcstMonthDropdown(){
-  const sel = document.getElementById('fcst-month'); if(!sel || sel.options.length) return;
+  const sel = document.getElementById('fcst-month'); if(!sel) return;
   const am = _OFF_ACT_MONTHS;
   const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  const opts = [`<option value="ALL">전체 (Jan~${monNames[am-1]})</option>`];
-  // 기본 선택 = 예측월(fcst_m 데이터 있는 마지막 월, 예 7월). 없으면 마지막 실현월.
+  // 예측월 = fcst_m 데이터 있는 마지막 월(예 7월). 없으면 마지막 실현월.
   let defIdx = am-1;
   const tf = (OFF.total && OFF.total.fcst_m) || [];
   for(let i=11;i>=0;i--){ if((tf[i]||0) > 0){ defIdx = i; break; } }
-  for(let i=0;i<12;i++){
-    opts.push(`<option value="${i}"${i===defIdx?' selected':''}>${monNames[i]}</option>`);
+  if(!sel.options.length){
+    const opts = [`<option value="ALL">전체 (Jan~${monNames[am-1]})</option>`];
+    for(let i=0;i<12;i++){ opts.push(`<option value="${i}">${monNames[i]}</option>`); }
+    sel.innerHTML = opts.join('');
   }
-  sel.innerHTML = opts.join('');
+  // 사용자가 직접 고르지 않았으면 매 렌더마다 예측월로 스냅 — 초기 로드 순서(시드→Supabase) 무관하게 7월 반영
+  if(!_offFcstMonthUserSet) sel.value = String(defIdx);
 }
 function renderFcstAll(){
   if(!OFF || !OFF.channels){ console.warn('[Off FCST] OFF 미초기화'); return; }
