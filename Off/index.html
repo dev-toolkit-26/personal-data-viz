@@ -2206,6 +2206,14 @@ td:first-child, td:nth-child(2) { text-align: left; }
               <option value="Nov">Nov</option>
               <option value="Dec">Dec</option>
             </select>
+            <select id="min-week" class="min-month-select" title="주차 선택" style="min-width:auto;">
+              <option value="">주 없음</option>
+              <option value="W1">W1</option>
+              <option value="W2">W2</option>
+              <option value="W3">W3</option>
+              <option value="W4">W4</option>
+              <option value="W5">W5</option>
+            </select>
             <input type="date" id="min-date"
               style="border:none;background:transparent;color:#9ca3af;font-size:13px;font-family:inherit;cursor:pointer;outline:none;padding:0;">
           </div>
@@ -6610,7 +6618,7 @@ async function minutesBrowse(catKey) {
 
   const { data, error } = await _supabase
     .from('off_meeting_minutes')
-    .select('id, week_label, meeting_date, agenda')
+    .select('id, week_label, meeting_date, agenda, attendees')
     .order('meeting_date', { ascending: false })
     .order('id',           { ascending: false });
   if (error) { metaEl.textContent = `로드 실패: ${error.message}`; return; }
@@ -6634,6 +6642,7 @@ async function minutesBrowse(catKey) {
         flat.push({
           entryId:  row.id,
           month:    row.week_label || '',
+          week:     row.attendees || '',
           date:     row.meeting_date || '',
           subtitle: c.subtitle || '',
           content:  c.content || '',
@@ -6648,7 +6657,7 @@ async function minutesBrowse(catKey) {
   wrapEl.innerHTML = flat.map(c => `
     <div class="min-browse-card">
       <div class="min-browse-card-head">
-        <span class="min-browse-card-month">${_esc(c.month) || '(월 미지정)'}</span>
+        <span class="min-browse-card-month">${_esc(c.month) || '(월 미지정)'}${c.week ? ' · '+_esc(c.week) : ''}</span>
         ${c.subtitle ? `<span style="font-weight:700;color:#1f2937;font-size:13px;">${_esc(c.subtitle)}</span>` : ''}
         <span class="min-browse-card-date">${_esc(c.date)}</span>
         <button class="min-browse-card-open" onclick="minutesSelect(${c.entryId})">월 열기 →</button>
@@ -7099,7 +7108,7 @@ async function minutesLoad() {
   listEl.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">불러오는 중...</div>';
   const { data, error } = await _supabase
     .from('off_meeting_minutes')
-    .select('id, week_label, meeting_date')
+    .select('id, week_label, meeting_date, attendees')
     .order('meeting_date', { ascending: false })
     .order('id',           { ascending: false });
   if (error) {
@@ -7117,7 +7126,7 @@ async function minutesLoad() {
   const _esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   listEl.innerHTML = data.map(r => `
     <div class="min-list-item" id="min-item-${r.id}" onclick="minutesSelect(${r.id})">
-      <div class="min-list-title">${_esc(r.week_label) || '(월 미지정)'}</div>
+      <div class="min-list-title">${_esc(r.week_label) || '(월 미지정)'}${r.attendees ? ` · <span style="color:#205527;font-weight:700;">${_esc(r.attendees)}</span>` : ''}</div>
       <div class="min-list-meta">${_esc(r.meeting_date)}</div>
     </div>`).join('');
 }
@@ -7148,6 +7157,7 @@ async function minutesSelect(id) {
   // week_label이 Jan~Dec면 드롭다운에 매칭, 아니면 빈 값
   const _monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   document.getElementById('min-month').value = _monthOpts.includes(data.week_label) ? data.week_label : '';
+  document.getElementById('min-week').value = data.attendees || '';   // 주차(attendees 컬럼 재활용)
   // agenda는 jsonb이라 이미 객체/배열. 구버전 string도 fallback.
   let _cards = [];
   if (data.agenda) {
@@ -7184,6 +7194,7 @@ function minutesNew() {
   const _monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   document.getElementById('min-date').value = `${yyyy}-${mm}-${dd}`;
   document.getElementById('min-month').value = _monthOpts[today.getMonth()];
+  document.getElementById('min-week').value = 'W' + Math.min(5, Math.ceil(today.getDate() / 7));   // 오늘 기준 주차 자동
   minutesRenderCards([]);
   _minutesActions = [];
   minutesRenderActions();
@@ -7205,7 +7216,8 @@ async function minutesSave() {
   const payload = {
     meeting_date,
     week_label:   month,                          // 월(Jan~Dec)이 제목 역할
-    attendees:    '',
+    attendees:    (document.getElementById('min-week')?.value || ''),   // 주차(W1~W5) — attendees 컬럼 재활용
+
     agenda:       _minutesCollectCards(),         // jsonb로 직접 저장
     action_items: _minutesActions,                // jsonb로 직접 저장
   };
