@@ -888,14 +888,14 @@ td:first-child, td:nth-child(2) { text-align: left; }
       try {
         var os = window.opener.sessionStorage;
         if (os && os.getItem('auth') === 'ok') {
-          ['auth','auth_label','auth_admin','auth_token'].forEach(function(k) {
+          ['auth','auth_label','auth_admin','auth_token','auth_scope'].forEach(function(k) {
             var v = os.getItem(k); if (v != null) sessionStorage.setItem(k, v);
           });
           sessionStorage.setItem('channel', 'on'); // 승계된 세션은 On 채널
         }
       } catch (e) {}
     }
-    var authed = sessionStorage.getItem('auth') === 'ok';
+    var authed = sessionStorage.getItem('auth') === 'ok' && _scopeOK(sessionStorage.getItem('auth_scope'));
     // 채널 선택 화면: 새로고침할 때마다 노출 (내부 ?view=dashboard 링크만 건너뜀)
     window._showChooser = !directDashboard;
     if (window._showChooser) {
@@ -924,6 +924,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
     // pw-overlay는 기본 노출 상태이므로 별도 표시 불필요 (미인증 시 로그인 화면 등장)
     startOnTrade();
   }
+  // 로그인 스코프: 토큰 scope('on'/'off'/'both')가 이 대시보드(On)를 허용하는지. scope 없으면 both=하위호환.
+  function _scopeOK(scope){ return !scope || scope === 'both' || scope === 'on'; }
   async function checkPw() {
     var val = document.getElementById('pw-input').value;
     var btn = document.querySelector('#pw-overlay button');
@@ -939,14 +941,20 @@ td:first-child, td:nth-child(2) { text-align: left; }
         body: JSON.stringify({ token: val })
       });
       var data = await res.json();
-      if (data.ok) {
+      if (data.ok && _scopeOK(data.scope)) {
         sessionStorage.setItem('auth', 'ok');
         sessionStorage.setItem('auth_label', data.label || '');
         sessionStorage.setItem('auth_admin', data.is_admin ? 'ok' : '');
+        sessionStorage.setItem('auth_scope', data.scope || 'both');
         sessionStorage.setItem('auth_token', val);
         sessionStorage.setItem('channel', 'on');
         document.getElementById('pw-overlay').style.display = 'none';
         showSummary();
+      } else if (data.ok) {
+        errEl.textContent = 'On-Trade 접근 권한이 없는 계정입니다.';
+        errEl.style.display = 'block';
+        document.getElementById('pw-input').value = '';
+        document.getElementById('pw-input').focus();
       } else {
         errEl.textContent = 'Incorrect password.';
         errEl.style.display = 'block';

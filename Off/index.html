@@ -937,7 +937,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
 <script>
   (function() {
-    if (sessionStorage.getItem('auth') === 'ok') {
+    if (sessionStorage.getItem('auth') === 'ok' && _scopeOK(sessionStorage.getItem('auth_scope'))) {
       document.getElementById('pw-overlay').style.display = 'none';
       window._showSummaryOnLoad = true;
     }
@@ -945,6 +945,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
       if (e.key === 'Enter') checkPw();
     });
   })();
+  // 로그인 스코프: 토큰 scope('on'/'off'/'both')가 이 대시보드(Off)를 허용하는지. scope 없으면 both=하위호환.
+  function _scopeOK(scope){ return !scope || scope === 'both' || scope === 'off'; }
   async function checkPw() {
     var val = document.getElementById('pw-input').value;
     var btn = document.querySelector('#pw-overlay button');
@@ -961,13 +963,19 @@ td:first-child, td:nth-child(2) { text-align: left; }
         body: JSON.stringify({ token: val })
       });
       var data = await res.json();
-      if (data.ok) {
+      if (data.ok && _scopeOK(data.scope)) {
         sessionStorage.setItem('auth', 'ok');
         sessionStorage.setItem('auth_label', data.label || '');
         sessionStorage.setItem('auth_admin', data.is_admin ? 'ok' : '');
+        sessionStorage.setItem('auth_scope', data.scope || 'both');
         sessionStorage.setItem('auth_token', val);
         document.getElementById('pw-overlay').style.display = 'none';
         showSummary();
+      } else if (data.ok) {
+        errEl.textContent = 'Off-Trade 접근 권한이 없는 계정입니다.';
+        errEl.style.display = 'block';
+        document.getElementById('pw-input').value = '';
+        document.getElementById('pw-input').focus();
       } else {
         errEl.textContent = 'Incorrect password.';
         errEl.style.display = 'block';
