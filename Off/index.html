@@ -1131,52 +1131,79 @@ td:first-child, td:nth-child(2) { text-align: left; }
       }).join('');
     }
 
-    // ── Slide 3: Diagnosis — On-Trade 스타일(배너 + 채널 카드 · 상태배지 · 바 · 숫자박스) ──
+    // ── Slide 3: Diagnosis — On-Trade 동일 (RoFo vs MTD / FCST vs MTD, WD 기준선) ──
     var mtdEl=document.getElementById('sum-mtd-diag');
     if(mtdEl){
-      function _diagSt(r){
-        if(r==null) return {label:'—',color:'#9ca3af',bg:'rgba(255,255,255,.06)',border:'rgba(255,255,255,.15)'};
-        if(r>=1.0)  return {label:'On Track',color:'#4ade80',bg:'rgba(74,222,128,.15)',border:'rgba(74,222,128,.35)'};
-        if(r>=0.9)  return {label:'Moderate',color:'#fbbf24',bg:'rgba(251,191,36,.12)',border:'rgba(251,191,36,.35)'};
+      // 영업일(WD) 진행률 — 활성월 기준(주말 제외; 휴일 미반영) → MTD 기대 기준선
+      var _wdY=(window.OFF_SEED&&OFF_SEED.meta&&OFF_SEED.meta.year)||2026;
+      var _wd=(function(y,mi){
+        var last=new Date(y,mi+1,0).getDate(), today=new Date();
+        var isCur=(today.getFullYear()===y && today.getMonth()===mi);
+        var upto=isCur?today.getDate()-1:(new Date(y,mi,1)<today?last:0);
+        var total=0, el=0;
+        for(var d=1;d<=last;d++){ var w=new Date(y,mi,d).getDay(); if(w===0||w===6) continue; total++; if(d<=upto) el++; }
+        return {elapsed:el,total:total,pct:total?el/total:0};
+      })(_wdY, ci);
+      var wdPct=_wd.pct, wdW=Math.min(wdPct*100,100).toFixed(1);
+      function _pp(v){ return v==null?'-':(v>=0?'+':'')+(v*100).toFixed(1)+'pp'; }
+      function _stGap(gap){   // MTD(vs WD) 상태
+        if(gap==null)   return {label:'집계 전',color:'#9ca3af',bg:'rgba(255,255,255,.06)',border:'rgba(255,255,255,.15)'};
+        if(gap>=0.02)   return {label:'On Track',color:'#4ade80',bg:'rgba(74,222,128,.15)',border:'rgba(74,222,128,.35)'};
+        if(gap>=-0.05)  return {label:'Moderate',color:'#fbbf24',bg:'rgba(251,191,36,.12)',border:'rgba(251,191,36,.35)'};
         return {label:'At Risk',color:'#f87171',bg:'rgba(248,113,113,.12)',border:'rgba(248,113,113,.35)'};
       }
-      var _tSt=_diagSt(fcstRofo), _bC=_tSt.color;
+      var _bar=function(lbl,color,pctVal,w){   // WD 기준선 마커 포함
+        return '<div><div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.7);margin-bottom:3px;"><span>'+lbl+'</span><span style="color:'+color+';font-weight:700;">'+fPct(pctVal)+'</span></div>'
+          +'<div style="background:rgba(255,255,255,.08);border-radius:3px;height:7px;position:relative;overflow:visible;">'
+          +'<div class="kn-bar-fill" data-target-w="'+w+'%" style="background:'+color+';height:100%;border-radius:3px;width:0;opacity:.85;"></div>'
+          +'<div style="position:absolute;top:-4px;left:'+wdW+'%;width:2px;height:15px;background:rgba(255,255,255,.55);border-radius:1px;" title="WD Baseline '+fPct(wdPct)+'"></div></div></div>';
+      };
+      var _box=function(lbl,val,color){ return '<div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:5px 9px;"><div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;">'+lbl+'</div><div style="color:'+color+';font-weight:700;font-size:12px;">'+fHL(val)+' <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></div></div>'; };
+      var mtdRofoT=tRofo?tAct/tRofo:null, tGap=(tAct>0&&tRofo)?tAct/tRofo-wdPct:null, tSt=_stGap(tGap), bC=tSt.color;
       var dhtml='';
-      // 배너 (On-Trade와 동일 레이아웃)
-      dhtml+='<div style="background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-left:3px solid '+_bC+';border-radius:8px;padding:11px 18px;margin-bottom:14px;display:grid;grid-template-columns:auto 1fr;gap:4px 20px;font-size:13px;line-height:1.6;">'
-        +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">🎯 기준</span>'
-        +'<span style="color:rgba(255,255,255,.75);"><strong style="color:#fff;">'+curMon+' FCST vs RoFo</strong> — RoFo(목표) 대비 FCST(예측) 커버율. 100% = RoFo 충족'+(tAct?'':' · 실적 집계 전')+'</span>'
-        +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📈 TTL</span>'
-        +'<span style="color:rgba(255,255,255,.75);">FCST <strong style="color:#fff;">'+fHL(tFcst)+'</strong> / RoFo <strong style="color:#fff;">'+fHL(tRofo)+'</strong> HL — FCST/RoFo <strong style="color:'+_bC+';">'+fPct(fcstRofo)+'</strong> ('+_tSt.label+')</span>'
+      // 배너 (On-Trade 동일)
+      dhtml+='<div style="background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-left:3px solid '+bC+';border-radius:8px;padding:11px 18px;margin-bottom:14px;display:grid;grid-template-columns:auto 1fr;gap:4px 20px;font-size:13px;line-height:1.6;">'
+        +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📅 영업일 진행률</span>'
+        +'<span style="color:rgba(255,255,255,.75);"><strong style="color:#fff;">'+_wd.elapsed+'일 / '+_wd.total+'일 ('+fPct(wdPct)+')</strong> 경과 — MTD 기대 기준선</span>'
+        +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📈 TTL MTD</span>'
+        +'<span style="color:rgba(255,255,255,.75);"><strong style="color:'+bC+';">'+fHL(tAct)+' HL</strong> · RoFo 대비 <strong style="color:'+bC+';">'+fPct(mtdRofoT)+'</strong> (vs WD <strong style="color:'+bC+';">'+_pp(tGap)+'</strong>)'+(tAct>0?'':' — 실적 집계 전')+'</span>'
         +'</div>';
       dhtml+='<div style="display:flex;flex-direction:column;gap:8px;">';
       chans.forEach(function(c){
         var cm=c.m||{}; var cRo=mv(cm,'rofo_m'), cFc=mv(cm,'fcst_m'), cAc=mv(cm,'act_m');
-        var fr=cRo?cFc/cRo:null, ar=(cRo&&cAc)?cAc/cRo:null;
-        var st=_diagSt(fr);
-        var frW=Math.min((fr||0)*100,100).toFixed(1), arW=Math.min((ar||0)*100,100).toFixed(1);
-        var bar=function(lbl,pctColor,pctVal,w,fill){
-          return '<div><div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.7);margin-bottom:3px;"><span>'+lbl+'</span><span style="color:'+pctColor+';font-weight:700;">'+fPct(pctVal)+'</span></div>'
-            +'<div style="background:rgba(255,255,255,.08);border-radius:3px;height:7px;position:relative;overflow:visible;">'
-            +'<div class="kn-bar-fill" data-target-w="'+w+'%" style="background:'+fill+';height:100%;border-radius:3px;width:0;opacity:.85;"></div>'
-            +'<div style="position:absolute;top:-4px;left:100%;width:2px;height:15px;background:rgba(255,255,255,.55);border-radius:1px;transform:translateX(-2px);" title="RoFo 100%"></div></div></div>';
-        };
-        var box=function(lbl,val,color){ return '<div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:5px 9px;"><div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;">'+lbl+'</div><div style="color:'+color+';font-weight:700;font-size:12px;">'+fHL(val)+' <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></div></div>'; };
+        var mRo=cRo?cAc/cRo:null, mFc=cFc?cAc/cFc:null;
+        var gap=(cAc>0&&cRo)?cAc/cRo-wdPct:null, st=_stGap(gap);
+        var roW=Math.min((mRo||0)*100,100).toFixed(1), fcW=Math.min((mFc||0)*100,100).toFixed(1);
         dhtml+='<div style="background:rgba(0,0,0,.5);border:1px solid '+st.border+';border-left:3px solid '+st.color+';border-radius:8px;padding:11px 18px;display:flex;flex-direction:column;gap:7px;">'
           +'<div style="display:grid;grid-template-columns:140px 130px 1fr 190px;align-items:center;gap:16px;font-size:13.5px;white-space:nowrap;">'
           +'<span style="font-weight:700;color:#fff;">'+(c.label||c.key)+'</span>'
           +'<span style="color:'+st.color+';font-weight:600;font-size:12px;display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+st.color+';flex-shrink:0;"></span>'+st.label+'</span>'
-          +'<span style="font-size:12px;color:rgba(255,255,255,.6);text-align:right;padding-right:14px;">FCST <strong style="color:#fff;font-weight:700;font-size:13px;margin-left:5px;">'+fHL(cFc)+' HL</strong></span>'
-          +'<span style="color:'+st.color+';font-weight:600;font-size:12px;text-align:right;">FCST/RoFo '+fPct(fr)+'</span>'
+          +'<span style="font-size:12px;color:rgba(255,255,255,.6);text-align:right;padding-right:14px;">MTD <strong style="color:#fff;font-weight:700;font-size:13px;margin-left:5px;">'+fHL(cAc)+' HL</strong></span>'
+          +'<span style="color:'+st.color+';font-weight:600;font-size:12px;text-align:right;">vs WD '+_pp(gap)+'</span>'
           +'</div>'
           +'<div style="display:grid;grid-template-columns:1fr 1fr 1.7fr;gap:18px;align-items:center;">'
-          +bar('Actual/RoFo',achC(ar),ar,arW,'#4ade80')
-          +bar('FCST/RoFo',st.color,fr,frW,st.color)
+          +_bar('RoFo vs MTD',st.color,mRo,roW)
+          +_bar('FCST vs MTD','#60a5fa',mFc,fcW)
           +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'
-          +box('RoFo 목표',cRo,'#fff')+box('Actual',cAc,'#fff')+box('FCST',cFc,st.color)
-          +'</div>'
+          +_box('RoFo 목표',cRo,'#fff')+_box('FCST',cFc,'#fff')+_box('MTD',cAc,st.color)
           +'</div>'
           +'</div>';
+        // 어카운트: FCST vs MTD 단일 바
+        var accs=(c.accounts||[]).map(function(a){ return {name:a.name, ac:mv(a.m,'act_m'), fc:mv(a.m,'fcst_m')}; }).filter(function(a){ return a.fc>0.01; }).sort(function(a,b){ return b.fc-a.fc; });
+        if(accs.length){
+          dhtml+='<div style="margin-top:2px;padding-top:7px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:5px;">'
+            +'<div style="font-size:9.5px;color:rgba(255,255,255,.45);letter-spacing:.3px;">어카운트 · FCST vs MTD</div>';
+          accs.forEach(function(a){
+            var amFc=a.fc?a.ac/a.fc:null, aw=Math.min((amFc||0)*100,100).toFixed(1);
+            dhtml+='<div style="display:grid;grid-template-columns:120px 1fr 52px;gap:10px;align-items:center;font-size:11px;">'
+              +'<span style="color:rgba(255,255,255,.72);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+a.name+'</span>'
+              +'<div style="background:rgba(255,255,255,.06);border-radius:3px;height:6px;position:relative;"><div class="kn-bar-fill" data-target-w="'+aw+'%" style="background:#60a5fa;height:100%;border-radius:3px;width:0;opacity:.85;"></div><div style="position:absolute;top:-3px;left:'+wdW+'%;width:2px;height:12px;background:rgba(255,255,255,.5);"></div></div>'
+              +'<span style="text-align:right;color:'+achC(amFc)+';font-weight:600;">'+fPct(amFc)+'</span>'
+              +'</div>';
+          });
+          dhtml+='</div>';
+        }
+        dhtml+='</div>';   // close channel card
       });
       dhtml+='</div>';
       mtdEl.innerHTML=dhtml;
