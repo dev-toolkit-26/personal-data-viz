@@ -4764,13 +4764,18 @@ function renderFcstVsMtdVariance() {
   const wd = DASHBOARD_DATA.wd_progress || {};
   const wdPct = (wd.pct != null) ? wd.pct : null;
 
+  // 활성월(FCST 월) DSR 미업로드면 MTD/달성률은 무효(전월 잔류값 새는 것 방지) → "—"
+  const _fcstMonIdx0 = _upGetFcstMonth() - 1;
+  const _act26 = (DASHBOARD_DATA.monthly && DASHBOARD_DATA.monthly.act_2026) || [];
+  const _activeHasDsr = !Array.isArray(_act26) || _act26[_fcstMonIdx0] != null;
+
   // 제목 옆에 단위(HL/QTY) + 영업일 경과율 표시
   const unitTxt = (_fcstMtdUnit === 'hl') ? 'HL' : 'QTY';
   const subEl = document.getElementById('fcst-mtd-sub');
   if (subEl) {
     const pctTxt = (wdPct != null) ? Math.round(wdPct * 100) + '%' : '—';
     const dayTxt = (wd.elapsed != null && wd.total != null) ? ` · ${wd.elapsed}/${wd.total}일` : '';
-    subEl.textContent = `(${unitTxt} · 영업일 경과율 ${pctTxt}${dayTxt})`;
+    subEl.textContent = `(${unitTxt} · 영업일 경과율 ${pctTxt}${dayTxt}${_activeHasDsr ? '' : ' · 활성월 실적(DSR) 미반영'})`;
   }
   function fmtAch(v) {
     if (v == null) return '<span style="color:#d1d5db;">—</span>';
@@ -4794,11 +4799,12 @@ function renderFcstVsMtdVariance() {
         if (!fcst) return;
         const factor = (d.hl_factor != null) ? d.hl_factor : 0.0792;
         const fcstHL = fcst * factor;
-        const mtdHL  = (d.mtd != null) ? d.mtd * factor : null;
-        const ach    = (d.fcst_mtd_ach != null) ? d.fcst_mtd_ach : null;
+        const mtdRaw = _activeHasDsr ? d.mtd : null;                 // 활성월 DSR 미업로드면 MTD 무효
+        const mtdHL  = (mtdRaw != null) ? mtdRaw * factor : null;
+        const ach    = (_activeHasDsr && d.fcst_mtd_ach != null) ? d.fcst_mtd_ach : null;
         const type   = getType(sku.sku);
         if (!grouped[type]) grouped[type] = [];
-        grouped[type].push({ name: sku.sku, brand: brand.brand, fcst, mtd: d.mtd, fcstHL, mtdHL, ach,
+        grouped[type].push({ name: sku.sku, brand: brand.brand, fcst, mtd: mtdRaw, fcstHL, mtdHL, ach,
                               globalFcst: globalFcst[sku.sku] ?? 0 });
       });
     });
