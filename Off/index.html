@@ -5112,6 +5112,30 @@ function renderFcstTable(){
     return arr.map(v => `<td class="td-brand" style="text-align:right;font-size:11px;">${_offFmt(v)}</td>`).join('');
   };
   const parts = [];
+  // ── Off TTL (전체 합계) — 맨 상단 고정 행 ──
+  {
+    const trf = sumArr(OFF.total && OFF.total.rofo_m);
+    const tfc = sumArr(OFF.total && OFF.total.fcst_m);
+    const tac = sumArr(OFF.total && OFF.total.act_m);
+    const tly = sumArr(OFF.total && OFF.total.ly_m);
+    const tWks = [0,0,0,0,0]; let tAny = false;
+    for(const cc of OFF.channels){
+      const w = weeklyFcstFor(cc.key, cc.accounts.map(a => a.name));
+      if(w){ for(let i=0;i<5;i++){ tWks[i] += (w[i]||0); if(w[i]) tAny = true; } }
+    }
+    const tfcRf = trf ? tfc/trf : null;
+    const tacRf = trf ? tac/trf : null;
+    parts.push(`<tr class="brand-start" style="background:#eef2f7;font-weight:700;">
+      <td class="td-brand" style="font-weight:800;">Off TTL</td>
+      <td class="td-brand">${_offFmt(trf)}</td>
+      ${wCellsTd(tAny ? tWks : null)}
+      <td class="td-brand">${_offFmt(tfc)}</td>
+      <td class="td-brand"><span class="${_offAchCls(tfcRf)}">${_offFmtPct(tfcRf)}</span></td>
+      <td class="td-brand">${_offFmt(tac)}</td>
+      <td class="td-brand"><span class="${_offAchCls(tacRf)}">${_offFmtPct(tacRf)}</span></td>
+      <td class="td-brand">${_offFmt(tly)}</td>
+    </tr>`);
+  }
   for(const cc of OFF.channels){
     const rf = sumArr(cc.m && cc.m.rofo_m);
     const fc = sumArr(cc.m && cc.m.fcst_m), ac = sumArr(cc.m && cc.m.act_m);
