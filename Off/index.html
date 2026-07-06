@@ -5125,7 +5125,7 @@ function renderFcstTable(){
     }
     const tfcRf = trf ? tfc/trf : null;
     const tacRf = trf ? tac/trf : null;
-    const tYoy  = tly ? tac/tly - 1 : null;
+    const tYoy  = tly ? tfc/tly - 1 : null;   // 최신 FCST vs 전년(YoY)
     parts.push(`<tr class="brand-start" style="background:#eef2f7;font-weight:700;">
       <td class="td-brand" style="font-weight:800;">Off TTL</td>
       <td class="td-brand">${_offFmt(trf)}</td>
@@ -5146,7 +5146,7 @@ function renderFcstTable(){
     const achFc = fc ? ac/fc : null;
     const achRf = rf ? ac/rf : null;
     const fcRf  = rf ? fc/rf : null;   // FCST vs RoFo (예측/타깃)
-    const yoy   = ly ? ac/ly - 1 : null;
+    const yoy   = ly ? fc/ly - 1 : null;   // 최신 FCST vs 전년(YoY)
     const chWks = weeklyFcstFor(cc.key, cc.accounts.map(a => a.name));
     parts.push(`<tr class="brand-start">
       <td class="td-brand">${cc.key}</td>
@@ -5167,7 +5167,7 @@ function renderFcstTable(){
       const aAchFc = afc ? aac/afc : null;
       const aAchRf = arf ? aac/arf : null;
       const afcRf  = arf ? afc/arf : null;
-      const ayoy   = aly ? aac/aly - 1 : null;
+      const ayoy   = aly ? afc/aly - 1 : null;   // 최신 FCST vs 전년(YoY)
       const accWks = weeklyFcstFor(cc.key, [acc.name]);
       parts.push(`<tr>
         <td style="padding-left:24px;color:#555">└ ${acc.name}</td>
@@ -5195,7 +5195,7 @@ function renderFcstTable(){
     <th>${period} Actual</th>
     <th style="background:rgba(32,85,39,0.10);color:#205527">🌟 Actual/RoFo</th>
     <th>${period} '25</th>
-    <th>YoY</th>
+    <th>YoY(FCST)</th>
   </tr></thead>`;
   const body = parts.length ? `<tbody>${parts.join('')}</tbody>` : `<tbody><tr><td colspan="13" style="text-align:center;padding:24px;color:#94a3b8">데이터 없음</td></tr></tbody>`;
   const tbl = document.getElementById('tbl-fcst'); if(tbl) tbl.innerHTML = head + body;
