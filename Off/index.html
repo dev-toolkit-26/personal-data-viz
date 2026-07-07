@@ -886,6 +886,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
             <div id="sum-chartD-comment" style="color:rgba(255,255,255,.82);font-size:12.5px;line-height:1.85;font-weight:300;"></div>
           </div>
         </div>
+        <div class="kn-card" style="padding:20px 24px;margin-top:18px;">
+          <div class="kn-section-label" style="margin-bottom:14px;color:#4ade80;letter-spacing:1.5px;">채널별 Monthly Trend (RoFo / Actual / FCST / 2025)</div>
+          <div id="sum-chartD-channel-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;"></div>
+        </div>
       </div>
     </section>
 
@@ -1041,7 +1045,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     var tAct = mv(T,'act_m'), tFcst = mv(T,'fcst_m'), tRofo = mv(T,'rofo_m'), tLy = mv(T,'ly_m');
     var fcstRofo = tRofo ? tFcst/tRofo : null;           // FCST vs RoFo (주 지표)
     var achRofo = (tRofo && tAct) ? tAct/tRofo : null;   // Actual vs RoFo (실적 없으면 —)
-    var yoy = (tLy && tAct) ? tAct/tLy - 1 : null;
+    var yoy = (tLy && tFcst) ? tFcst/tLy - 1 : null;   // 최신 FCST vs 전년(YoY)
     var status = (fcstRofo==null)?'—':fcstRofo>=1?'RoFo 이상':fcstRofo>=0.95?'RoFo 근접':'RoFo 미달';
     var heroEl = document.getElementById('sum-hero-headline');
     if(heroEl) heroEl.textContent = curMon+' RoFo '+fHL(tRofo)+' HL · FCST '+fHL(tFcst)+' HL ('+status+')';
@@ -1049,7 +1053,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
       { label:curMon+' RoFo Target', value:fHL(tRofo)+' HL', sub:'Off Total', v:null, icon:'🎯' },
       { label:'FCST vs RoFo ('+curMon+')', value:fPct(fcstRofo), sub:'FCST '+fHL(tFcst)+' HL', v:fcstRofo, icon:'📊' },
       { label:'Actual vs RoFo ('+curMon+')', value:fPct(achRofo), sub:'Act '+fHL(tAct)+' HL', v:achRofo, icon:'📈' },
-      { label:'전년 대비 ('+curMon+')', value:fDelta(yoy), sub:'LY '+fHL(tLy)+' HL', v:(yoy==null)?null:(yoy>=0?1:0), icon:(yoy==null)?'➖':(yoy>=0?'⬆':'⬇') },
+      { label:'전년 대비 (최신 FCST, '+curMon+')', value:fDelta(yoy), sub:'FCST '+fHL(tFcst)+' vs LY '+fHL(tLy)+' HL', v:(yoy==null)?null:(yoy>=0?1:0), icon:(yoy==null)?'➖':(yoy>=0?'⬆':'⬇') },
     ];
     var kg = document.getElementById('sum-kpi-grid');
     if(kg) kg.innerHTML = kpis.map(function(k){
@@ -1067,10 +1071,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
       var hi=function(v,c){return '<strong style="color:'+c+';">'+v+'</strong>';};
       var fcC=achC(fcstRofo), grC=(yoy!=null&&yoy>=0)?'#4ade80':'#f87171';
       cmt.innerHTML = '🎯 '+curMon+' RoFo '+hi(fHL(tRofo)+' HL','#fff')+' · FCST '+hi(fHL(tFcst)+' HL',fcC)+' ('+hi(fPct(fcstRofo),fcC)+' vs RoFo). '
-        + 'Actual '+hi(fHL(tAct)+' HL',achC(achRofo))+' ('+hi(fPct(achRofo),achC(achRofo))+' vs RoFo), 전년 대비 '+hi(fDelta(yoy),grC)+'. '
+        + 'Actual '+hi(fHL(tAct)+' HL',achC(achRofo))+' ('+hi(fPct(achRofo),achC(achRofo))+' vs RoFo), 최신 FCST 전년 대비 '+hi(fDelta(yoy),grC)+'. '
         + (achRofo==null ? 'ℹ️ '+curMon+' 실적 집계 전 — 예측 기준.' : (fcstRofo!=null&&fcstRofo>=1 ? '✅ FCST가 RoFo 이상.' : '⚠️ FCST가 RoFo 미달.'));
     }
-    var nar = document.getElementById('sum-overview-narrative'); if(nar) nar.innerHTML = '';
+    // (하단 월간 요약 내러티브는 아래 Slide 4 이후에서 렌더 — WD/채널 데이터 계산 후)
 
     // ── Slide 1: Trend chart ──
     var ctx = document.getElementById('sum-chartD');
@@ -1088,11 +1092,50 @@ td:first-child, td:nth-child(2) { text-align: left; }
           {type:'line', label:'2025 Actual', data:T.ly_m||[], borderColor:'#94a3b8', backgroundColor:'transparent', borderWidth:1.5, tension:.35, pointRadius:2, spanGaps:true, order:4},
         ]},
         options:{ responsive:true, maintainAspectRatio:false,
-          plugins:{ legend:{position:'top',labels:{boxWidth:12,font:{size:11}}},
+          plugins:{ legend:{position:'top',labels:{color:'#e5e7eb',boxWidth:12,font:{size:11}}},
             tooltip:{ callbacks:{ label:function(c){ return ' '+c.dataset.label+': '+(c.raw==null?'—':Number(c.raw).toLocaleString('ko-KR',{maximumFractionDigits:1})+' HL'); } } } },
-          scales:{ y:{ beginAtZero:true, ticks:{ callback:function(v){ return Number(v).toLocaleString('ko-KR',{maximumFractionDigits:0}); } } } } }
+          scales:{ x:{ ticks:{color:'#cbd5e1'}, grid:{color:'rgba(255,255,255,.06)'} },
+                   y:{ beginAtZero:true, ticks:{color:'#cbd5e1', callback:function(v){ return Number(v).toLocaleString('ko-KR',{maximumFractionDigits:0}); } }, grid:{color:'rgba(255,255,255,.08)'} } } }
       });
     }
+
+    // ── Slide 1 하단: 채널별 Monthly Trend (Off는 AP가 없어 채널별 추이로 대체 표시) ──
+    var chGrid = document.getElementById('sum-chartD-channel-grid');
+    if (chGrid) {
+      if (window._sumChartDChanOff) { window._sumChartDChanOff.forEach(function(inst){ try{ inst.destroy(); }catch(e){} }); }
+      window._sumChartDChanOff = [];
+      var _sum12 = function(a){ var s=0; for(var i=0;i<12;i++) s+=(a&&a[i])||0; return s; };
+      var _cid = function(k){ return 'sum-chartD-ch-'+String(k).replace(/[^a-zA-Z0-9]/g,'_'); };  // C&C 등 특수문자 → 안전한 id
+      var trendChans = (OFF.channels||[]).filter(function(c){ return c.m && (_sum12(c.m.rofo_m)>0.01 || _sum12(c.m.act_m)>0.01 || _sum12(c.m.fcst_m)>0.01 || _sum12(c.m.ly_m)>0.01); });
+      chGrid.innerHTML = trendChans.map(function(c){
+        return '<div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px 16px;">'
+          + '<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:8px;">'+(c.label||c.key)+'</div>'
+          + '<div style="position:relative;height:200px;"><canvas id="'+_cid(c.key)+'"></canvas></div>'
+          + '</div>';
+      }).join('');
+      trendChans.forEach(function(c){
+        var cv = document.getElementById(_cid(c.key)); if(!cv) return;
+        var m = c.m||{};
+        var actDispCh = (m.act_m||[]).map(function(v,i){ return i<am?v:null; });
+        var fcstCurCh = Array.from({length:12}, function(_,i){ return i===ci?((m.fcst_m||[])[ci]||null):null; });
+        var inst = new Chart(cv, {
+          type:'line',
+          data:{ labels:MON, datasets:[
+            {type:'line', label:'RoFo',   data:m.rofo_m||[], borderColor:'#f59e0b', backgroundColor:'transparent', borderWidth:1.8, tension:.35, pointRadius:0, spanGaps:true, order:3},
+            {type:'line', label:'Actual', data:actDispCh,    borderColor:'#16a34a', backgroundColor:'transparent', borderWidth:2.2, tension:.35, pointRadius:2, spanGaps:true, order:2},
+            {type:'line', label:'FCST',   data:fcstCurCh,    borderColor:'#e30613', backgroundColor:'transparent', borderWidth:2, pointRadius:4, pointStyle:'rectRot', spanGaps:false, order:1},
+            {type:'line', label:'2025',   data:m.ly_m||[],   borderColor:'#94a3b8', backgroundColor:'transparent', borderWidth:1.3, tension:.35, pointRadius:0, spanGaps:true, order:4},
+          ]},
+          options:{ responsive:true, maintainAspectRatio:false,
+            plugins:{ legend:{position:'top',labels:{color:'#e5e7eb',boxWidth:10,font:{size:10}}},
+              tooltip:{ callbacks:{ label:function(cx){ return ' '+cx.dataset.label+': '+(cx.raw==null?'—':Number(cx.raw).toLocaleString('ko-KR',{maximumFractionDigits:1})+' HL'); } } } },
+            scales:{ x:{ ticks:{color:'#cbd5e1',font:{size:9}}, grid:{color:'rgba(255,255,255,.06)'} },
+                     y:{ beginAtZero:true, ticks:{color:'#cbd5e1',font:{size:9}, callback:function(v){ return Number(v).toLocaleString('ko-KR',{maximumFractionDigits:0}); } }, grid:{color:'rgba(255,255,255,.08)'} } } }
+        });
+        window._sumChartDChanOff.push(inst);
+      });
+    }
+
     var cdc=document.getElementById('sum-chartD-comment');
     if(cdc) cdc.innerHTML = '월별 2026 Actual(당월 '+curMon+'까지)·RoFo·FCST('+curMon+') 및 2025 Actual 추이. '+curMon+' FCST '+fHL(tFcst)+' HL / Actual '+fHL(tAct)+' HL.';
 
@@ -1235,6 +1278,59 @@ td:first-child, td:nth-child(2) { text-align: left; }
               +'<div style="height:8px;background:rgba(255,255,255,.06);border-radius:4px;"><div style="height:100%;width:'+w+'%;background:#4ade80;border-radius:4px;"></div></div></div>';
           }).join('');
       } else skuEl.innerHTML = '<div style="color:rgba(255,255,255,.6);font-size:13px;">브랜드 데이터 없음</div>';
+    }
+
+    // ── Slide 0 하단: 월간 요약 내러티브 (On-Trade Overview 스타일) ──
+    var narEl = document.getElementById('sum-overview-narrative');
+    if (narEl) {
+      var _hi = function(v,c){ return '<strong style="color:'+c+';">'+v+'</strong>'; };
+      var _P  = function(t){ return '<p style="margin:0 0 12px 0;">'+t+'</p>'; };
+      var _ppN = function(v){ return v==null?'-':(v>=0?'+':'')+(v*100).toFixed(1)+'pp'; };
+      var grC2 = (yoy!=null && yoy>=0) ? '#4ade80' : '#f87171';
+      var fcC2 = achC(fcstRofo), acC2 = achC(achRofo);
+      // Slide 3에서 계산된 함수 스코프 var 재사용(방어적 접근)
+      var _wdEl = (typeof _wd  !== 'undefined') ? _wd : null;
+      var _wdP  = (typeof wdPct !== 'undefined') ? wdPct : null;
+      var _tGap = (typeof tGap  !== 'undefined') ? tGap : null;
+      var _mtdR = (typeof mtdRofoT !== 'undefined') ? mtdRofoT : (tRofo ? tAct/tRofo : null);
+
+      var html = '<div class="kn-section-label" style="color:#4ade80;letter-spacing:1.5px;margin-bottom:14px;">월간 요약</div>';
+
+      // 1) 개요 — 최신 FCST 기준
+      var statusTxt = (fcstRofo==null) ? '집계 전' : (fcstRofo>=1 ? 'RoFo 이상' : (fcstRofo>=0.95 ? 'RoFo 근접' : 'RoFo 미달'));
+      html += _P('📊 ' + _hi(curMon,'#fff') + ' Off-Trade는 RoFo ' + _hi(fHL(tRofo)+' HL','#fff')
+        + ' 대비 최신 FCST ' + _hi(fHL(tFcst)+' HL',fcC2) + ' (' + _hi(fPct(fcstRofo),fcC2) + ' vs RoFo)로 ' + _hi(statusTxt,fcC2) + '. '
+        + '최신 FCST 기준 전년 동월(' + _hi(fHL(tLy)+' HL','rgba(255,255,255,.75)') + ') 대비 ' + _hi(fDelta(yoy),grC2)
+        + ((yoy==null) ? '.' : (yoy>=0 ? ' 성장.' : ' 감소.')));
+
+      // 2) MTD 페이스
+      if (tAct>0 && _wdEl) {
+        var paceTxt, paceC;
+        if (_tGap==null)        { paceTxt='집계 전'; paceC='#9ca3af'; }
+        else if (_tGap>=0.02)   { paceTxt='기준선 대비 앞서 순항 중'; paceC='#4ade80'; }
+        else if (_tGap>=-0.05)  { paceTxt='기준선과 유사 — 월말 집중 관리 필요'; paceC='#fbbf24'; }
+        else                    { paceTxt='기준선 대비 뒤처져 회복 액션 필요'; paceC='#f87171'; }
+        html += _P('📈 영업일 ' + _hi(_wdEl.elapsed+'/'+_wdEl.total+'일 ('+fPct(_wdP)+')','#fff') + ' 경과 시점, MTD Actual '
+          + _hi(fHL(tAct)+' HL',acC2) + '로 RoFo 대비 ' + _hi(fPct(_mtdR),acC2) + ' (기준선 대비 ' + _hi(_ppN(_tGap),paceC) + ') — ' + _hi(paceTxt,paceC) + '.');
+      } else {
+        html += _P('📈 ' + _hi(curMon,'#fff') + ' 실적 집계 전 — 예측(FCST) 기준 진단.');
+      }
+
+      // 3) 채널별 상세 (On-Trade Regional Breakdown 대응)
+      var _chList = (typeof chans !== 'undefined') ? chans : [];
+      if (_chList.length) {
+        var chSent = _chList.map(function(c){
+          var m=c.m||{}; var cf=mv(m,'fcst_m'), cr=mv(m,'rofo_m'), cAc=mv(m,'act_m');
+          var ach=cr?cf/cr:null, cC=achC(ach);
+          var s = _hi((c.label||c.key),'#fff') + ' — FCST ' + _hi(fHL(cf)+' HL',cC) + ' (' + _hi(fPct(ach),cC) + ' vs RoFo)';
+          if (cAc>0) s += ', MTD ' + fHL(cAc) + ' HL';
+          return '<li style="margin-bottom:6px;">' + s + '.</li>';
+        }).join('');
+        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">채널별 상세</div>'
+          + '<ul style="margin:0;padding-left:18px;list-style:disc;color:rgba(255,255,255,.85);">' + chSent + '</ul>';
+      }
+
+      narEl.innerHTML = html;
     }
   }
 
