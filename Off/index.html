@@ -1252,14 +1252,20 @@ td:first-child, td:nth-child(2) { text-align: left; }
         // 어카운트: FCST vs MTD 단일 바
         var accs=(c.accounts||[]).map(function(a){ return {name:a.name, ac:mv(a.m,'act_m'), fc:mv(a.m,'fcst_m')}; }).filter(function(a){ return a.fc>0.01; }).sort(function(a,b){ return b.fc-a.fc; });
         if(accs.length){
+          var _accGrid='grid-template-columns:104px 1fr 44px 82px 104px;gap:9px;';
           dhtml+='<div style="margin-top:2px;padding-top:7px;border-top:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:5px;">'
-            +'<div style="font-size:9.5px;color:rgba(255,255,255,.45);letter-spacing:.3px;">어카운트 · FCST vs MTD</div>';
+            +'<div style="display:grid;'+_accGrid+'align-items:center;font-size:8.5px;color:rgba(255,255,255,.42);letter-spacing:.3px;text-transform:uppercase;">'
+              +'<span>어카운트</span><span>FCST vs MTD</span><span style="text-align:right;">달성</span><span style="text-align:right;">FCST</span><span style="text-align:right;">WD 기대치</span>'
+            +'</div>';
           accs.forEach(function(a){
             var amFc=a.fc?a.ac/a.fc:null, aw=Math.min((amFc||0)*100,100).toFixed(1);
-            dhtml+='<div style="display:grid;grid-template-columns:120px 1fr 52px;gap:10px;align-items:center;font-size:11px;">'
+            var aExp=(a.fc!=null)?a.fc*wdPct:null, aGap=(a.ac>0&&aExp!=null)?a.ac-aExp:null, aGapC=(aGap!=null&&aGap>=0)?'#4ade80':'#f87171';  // FCST 기준 WD 기대 MTD & 갭
+            dhtml+='<div style="display:grid;'+_accGrid+'align-items:center;font-size:11px;">'
               +'<span style="color:rgba(255,255,255,.72);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+a.name+'</span>'
               +'<div style="background:rgba(255,255,255,.06);border-radius:3px;height:6px;position:relative;"><div class="kn-bar-fill" data-target-w="'+aw+'%" style="background:#60a5fa;height:100%;border-radius:3px;width:0;opacity:.85;"></div><div style="position:absolute;top:-3px;left:'+wdW+'%;width:2px;height:12px;background:rgba(255,255,255,.5);"></div></div>'
               +'<span style="text-align:right;color:'+achC(amFc)+';font-weight:600;">'+fPct(amFc)+'</span>'
+              +'<span style="text-align:right;color:rgba(255,255,255,.78);white-space:nowrap;">'+fHL(a.fc)+'</span>'
+              +'<span style="text-align:right;color:rgba(255,255,255,.6);white-space:nowrap;">'+fHL(aExp)+(aGap!=null?' <span style="color:'+aGapC+';font-weight:600;">'+(aGap>=0?'+':'')+aGap.toFixed(0)+'</span>':'')+'</span>'
               +'</div>';
           });
           dhtml+='</div>';
@@ -1322,7 +1328,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
           }).join('');
           return '<div style="margin-bottom:6px;"><div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,.78);letter-spacing:1px;margin:8px 0 3px;text-transform:uppercase;">── '+g.brand+' ──</div>'+rows+'</div>';
         }).join('');
-        skuEl.innerHTML='<div style="max-height:64vh;overflow-y:auto;">'+head+body+'</div>';
+        skuEl.innerHTML=head+body;   // 스크롤 없이 전체 SKU 한번에 표시 (슬라이드 자체 스크롤에 위임)
       } else skuEl.innerHTML='<div style="color:rgba(255,255,255,.6);font-size:13px;">SKU 데이터 없음</div>';
     }
 
