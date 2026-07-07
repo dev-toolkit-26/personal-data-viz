@@ -2529,20 +2529,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
         </div>
       </div>
 
-      <!-- Supabase 저장/불러오기 -->
-      <div style="margin-bottom:18px;">
-        <div style="font-weight:700;font-size:14px;margin-bottom:10px;">Supabase 저장 / 불러오기</div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-          <button class="upload-apply-btn" onclick="offSaveSnapshot()">현재 데이터를 Supabase에 저장</button>
-          <button style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;" onclick="offReloadSnapshot()">서버에서 다시 불러오기</button>
-          <span id="off-save-status" style="font-size:12px;color:var(--primary);"></span>
-        </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.6;">
-          테이블: <code>off_dashboard_snapshots</code> (id=1). 마이그레이션 미실행 시 저장 실패하므로 먼저
-          <code>migrations/off_dashboard_snapshots.sql</code> 실행 필요.
-        </div>
-      </div>
-
       <!-- 현재 상태 -->
       <div style="margin-top:20px;padding:12px 14px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--text-muted);line-height:1.7;">
         <div style="font-weight:700;color:var(--primary);margin-bottom:4px;">현재 데이터 상태</div>
@@ -9716,15 +9702,15 @@ function parseFcstWeeklyWorkbook(wb, fileName){
         const h = Number(ws[XLSX.utils.encode_cell({r:R,c:9})]?.v);
         factor = (isFinite(q) && q>0 && isFinite(h)) ? h/q : 0;
       }
-      const weeks = []; let sum = 0, any = false;
+      const weeks = [], weeksCases = []; let sum = 0, any = false;
       for(let C = 2; C <= 6; C++){                              // C~G = 1W~5W (cases)
         const n = Number(ws[XLSX.utils.encode_cell({r:R,c:C})]?.v);
         const cases = isFinite(n) ? n : 0;
         const hl = cases * factor;                             // → HL
-        weeks.push(hl); sum += hl; if(cases) any = true;
+        weeks.push(hl); weeksCases.push(cases); sum += hl; if(cases) any = true;
       }
       if(!any) continue;
-      skus.push({ brand: curBrand, sku, weeks, monthly: sum });
+      skus.push({ brand: curBrand, sku, weeks, weeksCases, factor, monthly: sum });
     }
     if(skus.length) updates.push({ ch:resolved.ch, acct:resolved.acct, monthIdx, sheetName:sn, skus });
     else skipped.push({sheet:sn, reason:'데이터없음'});
@@ -9773,11 +9759,14 @@ function _offApplyWeeklyToData(data, fcstUpdates){
   if(!Array.isArray(data.rows)) data.rows = [];
   if(!data.pattern || typeof data.pattern !== 'object') data.pattern = {};
   if(!data.pattern.weekly_fcst || typeof data.pattern.weekly_fcst !== 'object') data.pattern.weekly_fcst = {};
+  if(!data.pattern.weekly_fcst_sku || typeof data.pattern.weekly_fcst_sku !== 'object') data.pattern.weekly_fcst_sku = {};
   const wf = data.pattern.weekly_fcst;
+  const wfs = data.pattern.weekly_fcst_sku;   // [ch][acct][월][sku] = 원본 주차 cases(5주) — 마더데이터 원본 복원용
   let updated = 0, added = 0;
   for(const u of fcstUpdates){
     // weekly_fcst[채널][계정][월] = 계정의 SKU 주차값 합계(5주) — 표는 계정 단위로 W1~W5 표시
     const acctWeeks = [0,0,0,0,0]; let hasWeeks = false;
+    const skuWeekMap = {};
     for(const sd of u.skus){
       let row = data.rows.find(x => x.ch === u.ch && x.acct === u.acct && x.sku === sd.sku);
       if(!row){
@@ -9790,12 +9779,16 @@ function _offApplyWeeklyToData(data, fcstUpdates){
       if(!Array.isArray(row.fcst_m) || row.fcst_m.length !== 12) row.fcst_m = Array(12).fill(0);
       row.fcst_m[u.monthIdx] = sd.monthly;
       if(Array.isArray(sd.weeks)){ for(let w=0; w<5; w++) acctWeeks[w] += (sd.weeks[w] || 0); hasWeeks = true; }
+      if(Array.isArray(sd.weeksCases)) skuWeekMap[sd.sku] = sd.weeksCases.slice(0,5);
       updated++;
     }
     if(hasWeeks){                                   // 이번 업로드 계정의 월 주차값 세팅(덮어쓰기 = 재업로드 시 최신본)
       if(!wf[u.ch]) wf[u.ch] = {};
       if(!wf[u.ch][u.acct]) wf[u.ch][u.acct] = {};
       wf[u.ch][u.acct][u.monthIdx] = acctWeeks;
+      if(!wfs[u.ch]) wfs[u.ch] = {};
+      if(!wfs[u.ch][u.acct]) wfs[u.ch][u.acct] = {};
+      wfs[u.ch][u.acct][u.monthIdx] = skuWeekMap;   // 원본 SKU×주차 cases 보존
     }
   }
   return { updated, added };
@@ -9910,13 +9903,35 @@ function offDownloadFcstMother(){
       if(!(q>0)){ h=sum(s.act_hl_m||s.act_m); q=sum(s.act_q_m); }
       return (q>0 && h>0) ? Number((h/q).toFixed(6)) : 0.0792;
     };
+    const pat = (OFF_SEED && OFF_SEED.pattern) || {};
+    const wfsAll = pat.weekly_fcst_sku || {};   // [ch][acct][월][sku] = 원본 cases(5주)
+    const wfAll  = pat.weekly_fcst || {};        // [ch][acct][월] = 계정 주차 합(HL, 5주)
     const wb = XLSX.utils.book_new();
     let sheets = 0;
     (OFF.channels||[]).forEach(function(ch){ (ch.accounts||[]).forEach(function(acc){
       const skus = (acc.skus||[]).slice().sort(function(a,b){ return (a.brand||'').localeCompare(b.brand||'') || (a.sku||'').localeCompare(b.sku||''); });
       if(!skus.length) return;
+      const skuWk = (wfsAll[ch.key] && wfsAll[ch.key][acc.name] && wfsAll[ch.key][acc.name][mi]) || null;   // 원본 SKU×주차
+      const acctWk = (wfAll[ch.key] && wfAll[ch.key][acc.name] && wfAll[ch.key][acc.name][mi]) || null;      // 계정 주차(HL)
+      const acctTot = Array.isArray(acctWk) ? acctWk.reduce(function(a,b){ return a+(b||0); }, 0) : 0;
       const aoa = [['Month', monName], ['Account', acc.name], [], ['Brand','SKU','1W','2W','3W','4W','5W','HL계수']];
-      skus.forEach(function(s){ aoa.push([s.brand||'', s.sku||'', '', '', '', '', '', factorOf(s)]); });
+      skus.forEach(function(s){
+        const skuMon = (Array.isArray(s.fcst_m) && s.fcst_m[mi]) || 0;
+        let wc = (skuWk && Array.isArray(skuWk[s.sku])) ? skuWk[s.sku].slice(0,5) : null;   // ① 원본 cases 우선
+        let factor;
+        if(wc){
+          const cs = wc.reduce(function(a,b){ return a+(b||0); }, 0);
+          factor = (cs > 0 && skuMon > 0) ? Number((skuMon/cs).toFixed(6)) : factorOf(s);   // 원본 factor 복원(월합÷cases합) → 정확 round-trip
+        } else {
+          factor = factorOf(s);
+          // ② 원본 미보존(과거 업로드): 계정 주차 비율 × SKU 월합 → cases 복원 (W1만 있으면 정확)
+          if(skuMon > 0 && acctTot > 0 && factor > 0){
+            wc = acctWk.map(function(w){ return Number(((skuMon * (w/acctTot)) / factor).toFixed(2)); });
+          }
+        }
+        wc = wc || ['','','','',''];
+        aoa.push([s.brand||'', s.sku||'', wc[0]||0, wc[1]||0, wc[2]||0, wc[3]||0, wc[4]||0, factor]);
+      });
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       let sn = String(acc.name).replace(/[\\\/?*\[\]:]/g,'').slice(0,31) || ('acct'+sheets);
       try { XLSX.utils.book_append_sheet(wb, ws, sn); sheets++; } catch(e){ /* 시트명 중복 등 skip */ }
