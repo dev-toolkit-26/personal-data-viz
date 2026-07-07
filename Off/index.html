@@ -2512,13 +2512,11 @@ td:first-child, td:nth-child(2) { text-align: left; }
       <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border);">
         <div style="font-weight:700;font-size:14px;margin-bottom:4px;">FCST Update — 매주 ⏱ (담당자 각자 업로드)</div>
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.7;">
-          파일: <code>OFF Trade FCST_[월].xlsx</code> — <b>여러 계정 = 여러 시트</b> 한 파일 가능 (시트별 B1=월, 행5+ SKU × 1W~5W).<br>
-          <b>시트 이름 = 계정</b>으로 인식 (담당자가 맡은 계정만 시트로 담아 올리면 됨).<br>
-          → 올리면 <b>서버 최신본과 자동 병합·저장</b> (내 계정만 갱신, 타 계정·RoFo·AP·25Y·Actual 모두 보존).
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-          <button type="button" onclick="offDownloadFcstMother()" style="padding:7px 14px;font-size:12px;border:1px solid var(--primary);border-radius:4px;background:#fff;color:var(--primary);cursor:pointer;font-weight:700;">⬇ 마더데이터 다운로드</button>
-          <span style="font-size:11px;color:var(--text-muted);">① 마더데이터 다운로드 → ② 내 계정 시트만 수치 입력 → ③ 업로드</span>
+          파일: <code>OFF Trade FCST_[월].xlsx</code> — <b>여러 계정 = 여러 시트</b> 한 파일 가능. 담당자가 <b>본인 현재 파일을 그대로</b> 올리면 됩니다.<br>
+          시트별: <b>A1/B1 = Month / 월(예: Jul)</b>, <b>A2/B2 = Account / 계정명</b>, 5행부터 <code>A=Brand · B=SKU · C~G=W1~W5</code>.<br>
+          <b>주차 값은 HL 단위로 직접 입력</b> (cases·계수 변환 없음). <b>시트 이름 = 계정</b>으로 인식.<br>
+          → 올리면 <b>서버 최신본과 자동 병합·저장</b> (내 계정만 갱신, 타 계정·RoFo·AP·25Y·Actual 모두 보존).<br>
+          📌 <b>월이 바뀌면</b> 각 시트의 <b>B1(월)만 새 달로 변경</b>해 올리세요 — 예측월이 자동으로 새 달로 전환되고, 아래 업로드 현황도 새 달 기준으로 리셋됩니다.
         </div>
         <input type="file" id="off-fcst-input" accept=".xlsx" multiple style="font-size:12px;" onchange="offHandleFcstWeeklyUpload(this)">
         <div id="off-fcst-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em;line-height:1.6"></div>
@@ -9674,8 +9672,8 @@ function _detectWeeklyWorkbook(wb){
   }
   return false;
 }
-// 다중시트 주간 FCST 파서: 시트 이름=계정, 시트별 B1=월, 행5+ Brand(A)/SKU(B)/1W~5W(C~G), H=HL계수.
-// 주별 값을 HL로 변환(= cases × 계수)해 반환. → 표의 W1~W5(HL 기준 RoFo/Actual)와 단위 일치.
+// 다중시트 주간 FCST 파서: 시트 이름=계정, 시트별 B1=월, 행5+ Brand(A)/SKU(B)/1W~5W(C~G).
+// 주차 값은 HL 단위로 직접 입력 (계수 변환 없음). → 표의 W1~W5(HL 기준)와 단위 일치.
 function parseFcstWeeklyWorkbook(wb, fileName){
   const updates = [], skipped = [];
   for(const sn of wb.SheetNames){
@@ -9695,22 +9693,14 @@ function parseFcstWeeklyWorkbook(wb, fileName){
       if(bc && bc.v != null && bc.v !== ''){ curBrand = String(bc.v).trim(); }
       if(!sc || sc.v == null || sc.v === '') continue;
       const sku = String(sc.v).trim(); if(!sku) continue;
-      // HL 계수: H(idx7) 우선, 없으면 HL합(J,idx9)/QTY합(I,idx8) 폴백
-      let factor = Number(ws[XLSX.utils.encode_cell({r:R,c:7})]?.v);
-      if(!isFinite(factor) || factor <= 0){
-        const q = Number(ws[XLSX.utils.encode_cell({r:R,c:8})]?.v);
-        const h = Number(ws[XLSX.utils.encode_cell({r:R,c:9})]?.v);
-        factor = (isFinite(q) && q>0 && isFinite(h)) ? h/q : 0;
-      }
-      const weeks = [], weeksCases = []; let sum = 0, any = false;
-      for(let C = 2; C <= 6; C++){                              // C~G = 1W~5W (cases)
+      const weeks = []; let sum = 0, any = false;
+      for(let C = 2; C <= 6; C++){                              // C~G = 1W~5W (HL 직접 입력)
         const n = Number(ws[XLSX.utils.encode_cell({r:R,c:C})]?.v);
-        const cases = isFinite(n) ? n : 0;
-        const hl = cases * factor;                             // → HL
-        weeks.push(hl); weeksCases.push(cases); sum += hl; if(cases) any = true;
+        const hl = isFinite(n) ? n : 0;                        // 셀 값 = HL (계수 변환 없음)
+        weeks.push(hl); sum += hl; if(hl) any = true;
       }
       if(!any) continue;
-      skus.push({ brand: curBrand, sku, weeks, weeksCases, factor, monthly: sum });
+      skus.push({ brand: curBrand, sku, weeks, monthly: sum });
     }
     if(skus.length) updates.push({ ch:resolved.ch, acct:resolved.acct, monthIdx, sheetName:sn, skus });
     else skipped.push({sheet:sn, reason:'데이터없음'});
@@ -9759,14 +9749,11 @@ function _offApplyWeeklyToData(data, fcstUpdates){
   if(!Array.isArray(data.rows)) data.rows = [];
   if(!data.pattern || typeof data.pattern !== 'object') data.pattern = {};
   if(!data.pattern.weekly_fcst || typeof data.pattern.weekly_fcst !== 'object') data.pattern.weekly_fcst = {};
-  if(!data.pattern.weekly_fcst_sku || typeof data.pattern.weekly_fcst_sku !== 'object') data.pattern.weekly_fcst_sku = {};
   const wf = data.pattern.weekly_fcst;
-  const wfs = data.pattern.weekly_fcst_sku;   // [ch][acct][월][sku] = 원본 주차 cases(5주) — 마더데이터 원본 복원용
   let updated = 0, added = 0;
   for(const u of fcstUpdates){
-    // weekly_fcst[채널][계정][월] = 계정의 SKU 주차값 합계(5주) — 표는 계정 단위로 W1~W5 표시
+    // weekly_fcst[채널][계정][월] = 계정의 SKU 주차값 합계(5주, HL) — 표는 계정 단위로 W1~W5 표시
     const acctWeeks = [0,0,0,0,0]; let hasWeeks = false;
-    const skuWeekMap = {};
     for(const sd of u.skus){
       let row = data.rows.find(x => x.ch === u.ch && x.acct === u.acct && x.sku === sd.sku);
       if(!row){
@@ -9779,16 +9766,12 @@ function _offApplyWeeklyToData(data, fcstUpdates){
       if(!Array.isArray(row.fcst_m) || row.fcst_m.length !== 12) row.fcst_m = Array(12).fill(0);
       row.fcst_m[u.monthIdx] = sd.monthly;
       if(Array.isArray(sd.weeks)){ for(let w=0; w<5; w++) acctWeeks[w] += (sd.weeks[w] || 0); hasWeeks = true; }
-      if(Array.isArray(sd.weeksCases)) skuWeekMap[sd.sku] = sd.weeksCases.slice(0,5);
       updated++;
     }
     if(hasWeeks){                                   // 이번 업로드 계정의 월 주차값 세팅(덮어쓰기 = 재업로드 시 최신본)
       if(!wf[u.ch]) wf[u.ch] = {};
       if(!wf[u.ch][u.acct]) wf[u.ch][u.acct] = {};
       wf[u.ch][u.acct][u.monthIdx] = acctWeeks;
-      if(!wfs[u.ch]) wfs[u.ch] = {};
-      if(!wfs[u.ch][u.acct]) wfs[u.ch][u.acct] = {};
-      wfs[u.ch][u.acct][u.monthIdx] = skuWeekMap;   // 원본 SKU×주차 cases 보존
     }
   }
   return { updated, added };
@@ -9869,8 +9852,9 @@ async function offHandleFcstWeeklyUpload(input){
       const detail = allUpdates.map(u => `${u.acct}(${u.skus.length})`).join(', ');
       parts.push(`<b>✓ ${allUpdates.length}개 계정 병합·저장</b> · ${r.updated} SKU` + (r.added?` (+${r.added} 신규)`:''));
       parts.push(`<span style="color:var(--text-muted)">${detail}</span>`);
-      const offJul = allUpdates.filter(u => u.monthIdx !== 6);
-      if(offJul.length) parts.push(`<span style="color:#d97706">⚠ 7월 아님: ${offJul.map(u=>`${u.acct}=${monNames[u.monthIdx]}`).join(', ')} — 시트 B1(월) 확인</span>`);
+      const monthsInBatch = [...new Set(allUpdates.map(u => u.monthIdx))].sort((a,b)=>a-b);
+      parts.push(`<span style="color:var(--text-muted)">적용 월: <b>${monthsInBatch.map(m=>monNames[m]).join(', ')}</b></span>`);
+      if(monthsInBatch.length > 1) parts.push(`<span style="color:#d97706">⚠ 한 번에 여러 월이 섞여 있습니다 (${monthsInBatch.map(m=>monNames[m]).join('/')}) — 각 시트 B1(월) 확인</span>`);
     } catch(e){
       parts.push(`<span style="color:#dc2626">저장 실패: ${e.message || e}</span>`);
     }
@@ -9888,57 +9872,6 @@ function _offFcstMonthIdx(){
   const tf = (OFF.total && OFF.total.fcst_m) || [];
   for(let i=11;i>=0;i--){ if((tf[i]||0) > 0) return i; }
   return (_OFF_ACT_MONTHS || 6);
-}
-
-// 마더데이터 다운로드: 계정별 시트(=계정) SKU 목록 + HL계수. 담당자가 시트에 W1~W5 입력 후 재업로드.
-function offDownloadFcstMother(){
-  try {
-    if(typeof XLSX === 'undefined'){ alert('XLSX 라이브러리 로드 안됨'); return; }
-    const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const mi = _offFcstMonthIdx();
-    const monName = monNames[mi] || 'Jul';
-    const sum = a => Array.isArray(a) ? a.reduce((x,y)=>x+(y||0),0) : 0;
-    const factorOf = s => {
-      let h=sum(s.ly_hl_m||s.ly_m), q=sum(s.ly_q_m);
-      if(!(q>0)){ h=sum(s.act_hl_m||s.act_m); q=sum(s.act_q_m); }
-      return (q>0 && h>0) ? Number((h/q).toFixed(6)) : 0.0792;
-    };
-    const pat = (OFF_SEED && OFF_SEED.pattern) || {};
-    const wfsAll = pat.weekly_fcst_sku || {};   // [ch][acct][월][sku] = 원본 cases(5주)
-    const wfAll  = pat.weekly_fcst || {};        // [ch][acct][월] = 계정 주차 합(HL, 5주)
-    const wb = XLSX.utils.book_new();
-    let sheets = 0;
-    (OFF.channels||[]).forEach(function(ch){ (ch.accounts||[]).forEach(function(acc){
-      const skus = (acc.skus||[]).slice().sort(function(a,b){ return (a.brand||'').localeCompare(b.brand||'') || (a.sku||'').localeCompare(b.sku||''); });
-      if(!skus.length) return;
-      const skuWk = (wfsAll[ch.key] && wfsAll[ch.key][acc.name] && wfsAll[ch.key][acc.name][mi]) || null;   // 원본 SKU×주차
-      const acctWk = (wfAll[ch.key] && wfAll[ch.key][acc.name] && wfAll[ch.key][acc.name][mi]) || null;      // 계정 주차(HL)
-      const acctTot = Array.isArray(acctWk) ? acctWk.reduce(function(a,b){ return a+(b||0); }, 0) : 0;
-      const aoa = [['Month', monName], ['Account', acc.name], [], ['Brand','SKU','1W','2W','3W','4W','5W','HL계수']];
-      skus.forEach(function(s){
-        const skuMon = (Array.isArray(s.fcst_m) && s.fcst_m[mi]) || 0;
-        let wc = (skuWk && Array.isArray(skuWk[s.sku])) ? skuWk[s.sku].slice(0,5) : null;   // ① 원본 cases 우선
-        let factor;
-        if(wc){
-          const cs = wc.reduce(function(a,b){ return a+(b||0); }, 0);
-          factor = (cs > 0 && skuMon > 0) ? Number((skuMon/cs).toFixed(6)) : factorOf(s);   // 원본 factor 복원(월합÷cases합) → 정확 round-trip
-        } else {
-          factor = factorOf(s);
-          // ② 원본 미보존(과거 업로드): 계정 주차 비율 × SKU 월합 → cases 복원 (W1만 있으면 정확)
-          if(skuMon > 0 && acctTot > 0 && factor > 0){
-            wc = acctWk.map(function(w){ return Number(((skuMon * (w/acctTot)) / factor).toFixed(2)); });
-          }
-        }
-        wc = wc || ['','','','',''];
-        aoa.push([s.brand||'', s.sku||'', wc[0]||0, wc[1]||0, wc[2]||0, wc[3]||0, wc[4]||0, factor]);
-      });
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      let sn = String(acc.name).replace(/[\\\/?*\[\]:]/g,'').slice(0,31) || ('acct'+sheets);
-      try { XLSX.utils.book_append_sheet(wb, ws, sn); sheets++; } catch(e){ /* 시트명 중복 등 skip */ }
-    }); });
-    if(!sheets){ alert('다운로드할 계정 데이터가 없습니다.'); return; }
-    XLSX.writeFile(wb, 'OFF Trade FCST_마더데이터_' + monName + '.xlsx');
-  } catch(e){ alert('마더데이터 생성 실패: ' + (e.message || e)); }
 }
 
 // 올리는 어카운트 확인: 계정별로 예측월 FCST 존재 여부를 칩으로 표시 (✓ 업로드됨 / ○ 미업로드)
