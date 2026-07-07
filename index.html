@@ -3500,7 +3500,7 @@ async function handleCombinedDsrUpload(input) {
     const all = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
     const H = (all[0] || []).map(h => h != null ? String(h).trim() : '');
     const ix = n => H.indexOf(n);
-    const iTeam = ix('Team'), iGrp = ix('Group'), iDate = ix('Date'), iSku = ix('NEW SKU'),
+    const iTeam = ix('Team'), iGrp = ix('Group'), iSeg = ix('Segment'), iDate = ix('Date'), iSku = ix('NEW SKU'),
           iVol = ix('Vol'), iHl = ix('HL'), iQty = ix('Qty');
     if (iTeam < 0 || iGrp < 0 || iSku < 0 || iHl < 0 || iDate < 0)
       throw new Error('통합 파일 컬럼 누락 (Team/Group/Date/NEW SKU/HL 확인)');
@@ -3514,9 +3514,13 @@ async function handleCombinedDsrUpload(input) {
       const r = all[i]; if (!r) continue;
       const team = r[iTeam] != null ? String(r[iTeam]).trim() : '';
       if (team !== 'On') continue;
+      const grp = r[iGrp] != null ? String(r[iGrp]).trim() : '';
+      const seg = iSeg >= 0 && r[iSeg] != null ? String(r[iSeg]).trim() : '';
+      // ALSM은 DSR Raw에서 7월부터 팀이 'On'으로 표기되지만 Off 대시보드 전용 채널 →
+      // On 피드에서 제외(Off 피드는 Group/Segment 매핑으로 Team 무관하게 별도 집계함)
+      if (/^ALSM/i.test(grp) || seg.toUpperCase() === 'ALSM') continue;
       const d = r[iDate]; if (!(d instanceof Date) || isNaN(d)) continue;
       if (d.getFullYear() !== 2026) continue;   // On 대시보드는 2026 기준 — 2025 행 제외(현재월 이중합산 방지)
-      const grp = r[iGrp] != null ? String(r[iGrp]).trim() : '';
       const cg = REG[grp] || grp;
       const wk = Math.ceil(d.getDate() / 7);
       onRows.push([d.getMonth() + 1, d, wk, cg, r[iSku], r[iVol], r[iHl], r[iQty], d.getDate()]);
