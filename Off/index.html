@@ -1211,13 +1211,14 @@ td:first-child, td:nth-child(2) { text-align: left; }
       };
       var _box=function(lbl,val,color){ return '<div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:5px 9px;"><div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;">'+lbl+'</div><div style="color:'+color+';font-weight:700;font-size:12px;">'+fHL(val)+' <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></div></div>'; };
       var mtdRofoT=tRofo?tAct/tRofo:null, tGap=(tAct>0&&tRofo)?tAct/tRofo-wdPct:null, tSt=_stGap(tGap), bC=tSt.color;
+      var expTtl=(tRofo!=null)?tRofo*wdPct:null, gapHLttl=(tAct>0&&expTtl!=null)?tAct-expTtl:null, gapCttl=(gapHLttl!=null&&gapHLttl>=0)?'#4ade80':'#f87171';  // WD 기대 MTD(HL) & 갭
       var dhtml='';
       // 배너 (On-Trade 동일)
       dhtml+='<div style="background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-left:3px solid '+bC+';border-radius:8px;padding:11px 18px;margin-bottom:14px;display:grid;grid-template-columns:auto 1fr;gap:4px 20px;font-size:13px;line-height:1.6;">'
         +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📅 영업일 진행률</span>'
         +'<span style="color:rgba(255,255,255,.75);"><strong style="color:#fff;">'+_wd.elapsed+'일 / '+_wd.total+'일 ('+fPct(wdPct)+')</strong> 경과 — MTD 기대 기준선</span>'
         +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📈 TTL MTD</span>'
-        +'<span style="color:rgba(255,255,255,.75);"><strong style="color:'+bC+';">'+fHL(tAct)+' HL</strong> · RoFo 대비 <strong style="color:'+bC+';">'+fPct(mtdRofoT)+'</strong> (vs WD <strong style="color:'+bC+';">'+_pp(tGap)+'</strong>)'+(tAct>0?'':' — 실적 집계 전')+'</span>'
+        +'<span style="color:rgba(255,255,255,.75);"><strong style="color:'+bC+';">'+fHL(tAct)+' HL</strong> · RoFo 대비 <strong style="color:'+bC+';">'+fPct(mtdRofoT)+'</strong> (vs WD Baseline <strong style="color:'+bC+';">'+_pp(tGap)+'</strong>) · WD 기대 <strong style="color:#fff;">'+fHL(expTtl)+' HL</strong>'+(gapHLttl!=null?' (<span style="color:'+gapCttl+';font-weight:700;">'+(gapHLttl>=0?'+':'')+gapHLttl.toFixed(0)+' HL</span>)':'')+(tAct>0?'':' — 실적 집계 전')+'</span>'
         +'</div>';
       dhtml+='<div style="display:flex;flex-direction:column;gap:8px;">';
       chans.forEach(function(c){
@@ -1225,18 +1226,27 @@ td:first-child, td:nth-child(2) { text-align: left; }
         var mRo=cRo?cAc/cRo:null, mFc=cFc?cAc/cFc:null;
         var gap=(cAc>0&&cRo)?cAc/cRo-wdPct:null, st=_stGap(gap);
         var roW=Math.min((mRo||0)*100,100).toFixed(1), fcW=Math.min((mFc||0)*100,100).toFixed(1);
+        var cExp=(cRo!=null)?cRo*wdPct:null, cGapHL=(cAc>0&&cExp!=null)?cAc-cExp:null, cGapC=(cGapHL!=null&&cGapHL>=0)?'#4ade80':'#f87171';  // 채널 WD 기대 MTD & 갭
         dhtml+='<div style="background:rgba(0,0,0,.5);border:1px solid '+st.border+';border-left:3px solid '+st.color+';border-radius:8px;padding:11px 18px;display:flex;flex-direction:column;gap:7px;">'
           +'<div style="display:grid;grid-template-columns:140px 130px 1fr 190px;align-items:center;gap:16px;font-size:13.5px;white-space:nowrap;">'
           +'<span style="font-weight:700;color:#fff;">'+(c.label||c.key)+'</span>'
           +'<span style="color:'+st.color+';font-weight:600;font-size:12px;display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+st.color+';flex-shrink:0;"></span>'+st.label+'</span>'
           +'<span style="font-size:12px;color:rgba(255,255,255,.6);text-align:right;padding-right:14px;">MTD <strong style="color:#fff;font-weight:700;font-size:13px;margin-left:5px;">'+fHL(cAc)+' HL</strong></span>'
-          +'<span style="color:'+st.color+';font-weight:600;font-size:12px;text-align:right;">vs WD '+_pp(gap)+'</span>'
+          +'<span style="color:'+st.color+';font-weight:600;font-size:12px;text-align:right;">vs WD Baseline '+_pp(gap)+'</span>'
           +'</div>'
           +'<div style="display:grid;grid-template-columns:1fr 1fr 1.7fr;gap:18px;align-items:center;">'
           +_bar('RoFo vs MTD',st.color,mRo,roW)
           +_bar('FCST vs MTD','#60a5fa',mFc,fcW)
-          +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">'
-          +_box('RoFo 목표',cRo,'#fff')+_box('FCST',cFc,'#fff')+_box('MTD',cAc,st.color)
+          +'<div style="display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:8px;">'
+          +_box('RoFo 목표',cRo,'#fff')
+          +'<div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:5px 9px;">'
+            +'<div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;">WD 기대치</div>'
+            +'<div style="display:flex;align-items:baseline;gap:5px;">'
+              +'<span style="color:#fff;font-weight:700;font-size:12px;">'+fHL(cExp)+' <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></span>'
+              +(cGapHL!=null?'<span style="color:'+cGapC+';font-size:9.5px;font-weight:600;">'+(cGapHL>=0?'+':'')+cGapHL.toFixed(0)+' HL</span>':'')
+            +'</div>'
+          +'</div>'
+          +_box('FCST',cFc,'#fff')
           +'</div>'
           +'</div>';
         // 어카운트: FCST vs MTD 단일 바
@@ -1260,24 +1270,60 @@ td:first-child, td:nth-child(2) { text-align: left; }
       mtdEl.innerHTML=dhtml;
     }
 
-    // ── Slide 4: 브랜드별 당월 Actual ──
+    // ── Slide 4: SKU 특이사항 — SKU Detail 데이터를 브랜드별 그룹으로 (On-Trade 스타일) ──
+    // Off는 AP가 없어 AP 대신 RoFo. 컬럼: SKU | RoFo | FCST | MTD | vs LM | vs LY
+    // (Off SKU 월배열은 이미 HL 단위 — On-Trade 같은 factor 변환 불필요)
     var skuEl=document.getElementById('sum-sku-card');
     if(skuEl){
-      var brandMap={};
+      var _cmpC  = function(v){ return v==null?'#6b7280':(v>=1?'#4ade80':'#f87171'); };
+      var _cmpBg = function(v){ return v==null?'rgba(255,255,255,.08)':(v>=1?'rgba(74,222,128,.15)':'rgba(248,113,113,.15)'); };
+      var _pill  = function(v,cF,bF){ return v==null?'':'<span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;background:'+bF(v)+';color:'+cF(v)+';">'+fPct(v)+'</span>'; };
+      var _hlD   = function(v){ return (v!=null && v>0.001)?fHL(v)+' HL':'—'; };
+      var _lm = ci-1;   // 전월(vs LM)
+      // (brand|sku) 기준으로 전 채널·어카운트 합산
+      var agg={};
       (OFF.channels||[]).forEach(function(c){ (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
-        var b=s.brand||'(기타)'; var arr=s.act_m||s.act_hl_m||[]; var cur=arr[ci]||0;
-        brandMap[b]=(brandMap[b]||0)+cur;
+        var actA=s.act_m||s.act_hl_m||[], lyA=s.ly_m||s.ly_hl_m||[], rofoA=s.rofo_m||[], fcstA=s.fcst_m||[];
+        var key=(s.brand||'(기타)')+'|'+(s.sku||'');
+        if(!agg[key]) agg[key]={brand:s.brand||'(기타)', sku:s.sku||'', rofo:0, fcst:0, mtd:0, lm:0, ly:0};
+        var o=agg[key];
+        o.rofo += rofoA[ci]||0; o.fcst += fcstA[ci]||0; o.mtd += actA[ci]||0;
+        o.lm   += (_lm>=0 ? (actA[_lm]||0) : 0); o.ly += lyA[ci]||0;
       }); }); });
-      var brands=Object.keys(brandMap).map(function(b){return {b:b,v:brandMap[b]};}).filter(function(x){return x.v>0.01;}).sort(function(a,b){return b.v-a.v;});
-      if(brands.length){
-        var totalYtd=brands.reduce(function(s,x){return s+x.v;},0)||1;
-        skuEl.innerHTML = '<div style="font-size:13px;color:rgba(255,255,255,.85);margin-bottom:12px;">'+curMon+' 브랜드별 Actual (HL)</div>'
-          + brands.slice(0,10).map(function(x){
-            var w=Math.round(x.v/brands[0].v*100);
-            return '<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:12px;color:#fff;margin-bottom:3px;"><span>'+x.b+'</span><span style="color:rgba(255,255,255,.7);">'+fHL(x.v)+' HL ('+Math.round(x.v/totalYtd*100)+'%)</span></div>'
-              +'<div style="height:8px;background:rgba(255,255,255,.06);border-radius:4px;"><div style="height:100%;width:'+w+'%;background:#4ade80;border-radius:4px;"></div></div></div>';
+      // 브랜드별 그룹핑 (FCST 있는 SKU만, FCST 없으면 MTD 있는 것)
+      var byBrand={};
+      Object.keys(agg).forEach(function(k){ var o=agg[k]; if(o.fcst<=0.001 && o.mtd<=0.001) return;
+        (byBrand[o.brand]=byBrand[o.brand]||[]).push(o); });
+      var brandGroups=Object.keys(byBrand).map(function(b){
+        var items=byBrand[b].sort(function(x,y){ return y.fcst-x.fcst || y.mtd-x.mtd; });
+        var tf=items.reduce(function(s,x){ return s+x.fcst; },0);
+        return {brand:b, items:items, tf:tf};
+      }).sort(function(a,b){ return b.tf-a.tf; });
+
+      if(brandGroups.length){
+        var GC=(window.innerWidth<=1440)?'150px repeat(5,1fr)':'190px repeat(5,1fr)';
+        var head='<div style="display:grid;grid-template-columns:'+GC+';gap:10px;font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:10px 0 10px 14px;border-bottom:1px solid rgba(255,255,255,.22);position:sticky;top:0;z-index:5;background:rgba(8,10,14,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);">'
+          +'<span>SKU</span><span style="justify-self:center;">RoFo</span><span style="justify-self:center;">FCST</span><span style="justify-self:center;">MTD</span><span style="justify-self:center;">vs LM</span><span style="justify-self:center;">vs LY</span></div>';
+        var body=brandGroups.map(function(g){
+          var rows=g.items.map(function(o){
+            var fcstRo=(o.rofo>0.001)?o.fcst/o.rofo:null;   // FCST vs RoFo
+            var mtdFc =(o.fcst>0.001)?o.mtd/o.fcst:null;     // MTD vs FCST
+            var lmAch =(o.lm>0.001)?o.fcst/o.lm:null;        // FCST vs 전월
+            var lyAch =(o.ly>0.001)?o.fcst/o.ly:null;        // FCST vs 전년
+            var cs='display:flex;justify-content:center;align-items:baseline;', ns='color:#fff;white-space:nowrap;';
+            return '<div style="display:grid;grid-template-columns:'+GC+';gap:10px;align-items:baseline;font-size:12px;line-height:1.75;padding:2px 0 2px 14px;">'
+              +'<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+o.sku+'</span>'
+              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.rofo)+'</span></span>'
+              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.fcst)+'</span>'+_pill(fcstRo,achC,achBg)+'</span>'
+              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.mtd)+'</span>'+_pill(mtdFc,achC,achBg)+'</span>'
+              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.lm)+'</span>'+_pill(lmAch,_cmpC,_cmpBg)+'</span>'
+              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.ly)+'</span>'+_pill(lyAch,_cmpC,_cmpBg)+'</span>'
+              +'</div>';
           }).join('');
-      } else skuEl.innerHTML = '<div style="color:rgba(255,255,255,.6);font-size:13px;">브랜드 데이터 없음</div>';
+          return '<div style="margin-bottom:6px;"><div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,.78);letter-spacing:1px;margin:8px 0 3px;text-transform:uppercase;">── '+g.brand+' ──</div>'+rows+'</div>';
+        }).join('');
+        skuEl.innerHTML='<div style="max-height:64vh;overflow-y:auto;">'+head+body+'</div>';
+      } else skuEl.innerHTML='<div style="color:rgba(255,255,255,.6);font-size:13px;">SKU 데이터 없음</div>';
     }
 
     // ── Slide 0 하단: 월간 요약 내러티브 (On-Trade Overview 스타일) ──
@@ -1316,18 +1362,43 @@ td:first-child, td:nth-child(2) { text-align: left; }
         html += _P('📈 ' + _hi(curMon,'#fff') + ' 실적 집계 전 — 예측(FCST) 기준 진단.');
       }
 
-      // 3) 채널별 상세 (On-Trade Regional Breakdown 대응)
-      var _chList = (typeof chans !== 'undefined') ? chans : [];
-      if (_chList.length) {
-        var chSent = _chList.map(function(c){
-          var m=c.m||{}; var cf=mv(m,'fcst_m'), cr=mv(m,'rofo_m'), cAc=mv(m,'act_m');
-          var ach=cr?cf/cr:null, cC=achC(ach);
-          var s = _hi((c.label||c.key),'#fff') + ' — FCST ' + _hi(fHL(cf)+' HL',cC) + ' (' + _hi(fPct(ach),cC) + ' vs RoFo)';
-          if (cAc>0) s += ', MTD ' + fHL(cAc) + ' HL';
-          return '<li style="margin-bottom:6px;">' + s + '.</li>';
-        }).join('');
-        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">채널별 상세</div>'
-          + '<ul style="margin:0;padding-left:18px;list-style:disc;color:rgba(255,255,255,.85);">' + chSent + '</ul>';
+      // 3) SKU별 상세 — MTD vs FCST 진행율 & Working-Day pace (영어, On-Trade Overview 스타일)
+      var _pctWordN = function(v){ return v==null ? '-' : (v*100).toFixed(1) + ' percent'; };
+      var _paceClause = function(gpPP){   // gpPP: WD 기준선 대비 percentage-point gap
+        if (gpPP==null) return '';
+        if (Math.abs(gpPP) < 1.5) return 'in line with the working-day pace';
+        return (gpPP>=0 ? 'ahead of the working-day pace by ' : 'behind the working-day pace by ') + Math.abs(gpPP).toFixed(1) + ' points';
+      };
+      var skuMap = {};
+      (OFF.channels||[]).forEach(function(c){ (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
+        var arr = s.act_m || s.act_hl_m || [], fArr = s.fcst_m || [];
+        var mtdHL = arr[ci]||0, fcstHL = fArr[ci]||0;
+        if (mtdHL<=0.001 && fcstHL<=0.001) return;
+        var key = (s.brand||'') + '|' + (s.sku||'');
+        if (!skuMap[key]) skuMap[key] = { name:(s.sku||'(SKU)'), brand:(s.brand||''), mtd:0, fcst:0 };
+        skuMap[key].mtd += mtdHL; skuMap[key].fcst += fcstHL;
+      }); }); });
+      var skuArr = Object.keys(skuMap).map(function(k){ var o=skuMap[k]; o.ratio = o.fcst>0 ? o.mtd/o.fcst : null; return o; });
+      var hasMtd = skuArr.some(function(o){ return o.mtd>0.001; });
+      var skuSent = '';
+      if (hasMtd) {
+        skuArr.filter(function(o){ return o.mtd>0.001; }).sort(function(a,b){ return b.mtd - a.mtd; }).slice(0,6).forEach(function(o){
+          var gpPP = (o.ratio!=null && _wdP!=null) ? (o.ratio - _wdP)*100 : null;
+          var rC = achC(o.ratio);
+          var s = _hi(o.name,'#fff') + ' is at ' + _hi(_pctWordN(o.ratio),rC) + ' of forecast';
+          var pc = _paceClause(gpPP);
+          if (pc) s += ', ' + _hi(pc, (gpPP!=null && gpPP>=-1.5) ? '#4ade80' : '#f87171');
+          s += ' <span style="color:rgba(255,255,255,.55);">(MTD ' + fHL(o.mtd) + ' HL / FCST ' + fHL(o.fcst) + ' HL)</span>.';
+          skuSent += _P(s);
+        });
+      } else {
+        // 실적 집계 전 — FCST 상위 SKU만 표시
+        skuArr.sort(function(a,b){ return b.fcst - a.fcst; }).slice(0,6).forEach(function(o){
+          skuSent += _P(_hi(o.name,'#fff') + ' is forecast at ' + _hi(fHL(o.fcst)+' HL','#60a5fa') + ' for ' + curMon + '.');
+        });
+      }
+      if (skuSent) {
+        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">SKU Breakdown — MTD vs FCST &amp; Working-Day Pace</div>' + skuSent;
       }
 
       narEl.innerHTML = html;
