@@ -2504,63 +2504,34 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <div class="chart-card" style="max-width:680px; width:100%;">
       <div class="chart-title" style="font-size:16px;margin-bottom:8px;">Off-Trade Data Update</div>
       <p style="font-size:12px;color:var(--text-muted);margin-bottom:24px;line-height:1.7;">
-        🌟 <b>메인 KPI: Actual vs RoFo</b>. 매달 RoFo와 DSR(Actual)만 갱신하면 됩니다.<br>
-        FCST 취합본 = AP/RoFo/25Y 보정용 (월간 변경 시) · DSR = 2026 Actual 갱신 (매달)
+        🌟 <b>메인 KPI: Actual vs RoFo</b>. RoFo·DSR(Actual)·Revenue 등 베이스라인은 <b>On-Trade 통합 일괄 업데이트</b>에서 함께 반영됩니다.<br>
+        이 화면에서는 <b>매주 FCST</b>만 담당자별로 업로드합니다.
       </p>
 
-      <!-- ① RoFo Update — 통합본 양식 (월·분기 갱신) -->
+      <!-- FCST Weekly — 매주 담당자 각자 업로드 (다중 파일) -->
       <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">① RoFo Update — 통합본 (월·분기 갱신) 🔄</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.7;">
-          파일: <code>Account Volume_*_취합본_*.xlsx</code> — 22 계정 시트 (GS25/CU/K7/...) × AP·RoFo·25Y 4 series<br>
-          → AP·RoFo·25Y 전체 baseline 갱신. <b>Actual(DSR), FCST(매주)는 보존.</b>
-        </div>
-        <input type="file" id="off-rofo-input" accept=".xlsx" style="font-size:12px;" onchange="offHandleRofoUpload(this)">
-        <div id="off-rofo-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em;line-height:1.6"></div>
-      </div>
-
-      <!-- ② FCST Weekly — 매주 영업담당자 입력 (다중 파일) -->
-      <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">② FCST Update — 매주 ⏱ (담당자 각자 업로드)</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">FCST Update — 매주 ⏱ (담당자 각자 업로드)</div>
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.7;">
           파일: <code>OFF Trade FCST_[월].xlsx</code> — <b>여러 계정 = 여러 시트</b> 한 파일 가능 (시트별 B1=월, 행5+ SKU × 1W~5W).<br>
           <b>시트 이름 = 계정</b>으로 인식 (담당자가 맡은 계정만 시트로 담아 올리면 됨).<br>
-          주차(W1~W5, HL 환산)가 FCST 표의 주간 칸에 반영.<br>
-          → 올리면 <b>서버 최신본과 자동 병합·저장</b> (내 계정만 갱신, 타인·RoFo·AP·25Y·Actual 모두 보존). 별도 저장 불필요.
+          → 올리면 <b>서버 최신본과 자동 병합·저장</b> (내 계정만 갱신, 타 계정·RoFo·AP·25Y·Actual 모두 보존).
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+          <button type="button" onclick="offDownloadFcstMother()" style="padding:7px 14px;font-size:12px;border:1px solid var(--primary);border-radius:4px;background:#fff;color:var(--primary);cursor:pointer;font-weight:700;">⬇ 마더데이터 다운로드</button>
+          <span style="font-size:11px;color:var(--text-muted);">① 마더데이터 다운로드 → ② 내 계정 시트만 수치 입력 → ③ 업로드</span>
         </div>
         <input type="file" id="off-fcst-input" accept=".xlsx" multiple style="font-size:12px;" onchange="offHandleFcstWeeklyUpload(this)">
         <div id="off-fcst-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em;line-height:1.6"></div>
-      </div>
-
-      <!-- DSR (Actual — 25Y/26Y 모두 지원) -->
-      <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">③ DSR — Actual 라인아이템 🌟 (25Y/26Y 자동 감지)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">
-          파일명 예: <code>26Y Off.xlsx</code> 또는 <code>OFF DSR Raw 2025.xlsx</code> · 위치: <code>Off/DSR/</code><br>
-          파일명에서 연도 자동 감지 (25/2025 → ly_*, 26/2026 → act_*) · 헤더 기반 컬럼 매핑 (Segment·Group·SKU·HL·Qty·NSV·Date 위치 무관)<br>
-          → 채널/계정/SKU/월별로 <b>HL + Qty + NSV</b> 모두 집계 → 해당 연도 시리즈 갱신, 다른 연도는 보존
+        <!-- 올리는 어카운트 확인 -->
+        <div style="margin-top:16px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">📋 계정별 FCST 업로드 현황 <span style="font-weight:400;color:var(--text-muted);font-size:11px;">(예측월에 FCST 값이 있으면 업로드됨 ✓)</span></div>
+          <div id="off-fcst-accounts" style="font-size:11px;"></div>
         </div>
-        <input type="file" id="off-act-input" accept=".xlsx" style="font-size:12px;" onchange="offHandleActUpload(this)">
-        <div id="off-act-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em"></div>
-      </div>
-
-      <!-- Revenue Excel (Sales Budget Actual by Segment) — On-Trade와 동일 양식 -->
-      <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">④ Revenue Excel — Sales Budget Actual by Segment 💰</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;line-height:1.7;">
-          파일명 예: <code>Sales Budget Actual by Segment_[월].xlsx</code> · <b>On-Trade와 동일 양식</b><br>
-          • Row 1 = 헤더, <b>Row 2 = OFF Total</b>, Row 4~ = 채널별 (Col C = CVS/HYPER/UNION/C&amp;C/SM/ALSM)<br>
-          • Col D = Sales Volume (HL), F = Gross Revenue, G = Range DC, H = PtC, I = Discount, M = Excise Tax, <b>N = Net Revenue (KRW)</b><br>
-          • 월 감지: 시트 셀의 "MONTH NAME Apr" 또는 파일명 "_4월" / "_Apr"<br>
-          → 해당 월 actual 갱신 (P&amp;L 7개 항목 모두 자동 반영, KPI/차트/표 자동 재렌더)
-        </div>
-        <input type="file" id="off-rev-input" accept=".xlsx" style="font-size:12px;" onchange="offHandleRevenueUpload(this)">
-        <div id="off-rev-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em"></div>
       </div>
 
       <!-- Supabase 저장/불러오기 -->
       <div style="margin-bottom:18px;">
-        <div style="font-weight:700;font-size:14px;margin-bottom:10px;">⑤ Supabase 저장</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:10px;">Supabase 저장 / 불러오기</div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <button class="upload-apply-btn" onclick="offSaveSnapshot()">현재 데이터를 Supabase에 저장</button>
           <button style="padding:6px 12px;font-size:12px;border:1px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;" onclick="offReloadSnapshot()">서버에서 다시 불러오기</button>
@@ -7491,6 +7462,7 @@ function _doSwitchToUpdate() {
   document.getElementById('tab-update').classList.add('active');
   document.getElementById('tab-btn-update').classList.add('active');
   _tabInitialized['update'] = true;
+  _offRenderFcstAccountCheck();
 }
 
 // ── Calendar Widget ─────────────────────────────────────────────────────────
@@ -9914,7 +9886,66 @@ async function offHandleFcstWeeklyUpload(input){
   if(errors.length){ parts.push(`<span style="color:#dc2626">오류 ${errors.length}: ${errors.slice(0,3).join(' / ')}</span>`); }
   el.innerHTML = parts.length ? parts.join('<br>') : '⚠ 처리된 파일 없음';
   if(allUpdates.length){ _offRerenderActive(); _offUpdateDataStatus(); }
+  _offRenderFcstAccountCheck();
   input.value = '';
+}
+
+// 예측월(fcst_m 데이터가 있는 마지막 월) 인덱스
+function _offFcstMonthIdx(){
+  const tf = (OFF.total && OFF.total.fcst_m) || [];
+  for(let i=11;i>=0;i--){ if((tf[i]||0) > 0) return i; }
+  return (_OFF_ACT_MONTHS || 6);
+}
+
+// 마더데이터 다운로드: 계정별 시트(=계정) SKU 목록 + HL계수. 담당자가 시트에 W1~W5 입력 후 재업로드.
+function offDownloadFcstMother(){
+  try {
+    if(typeof XLSX === 'undefined'){ alert('XLSX 라이브러리 로드 안됨'); return; }
+    const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const mi = _offFcstMonthIdx();
+    const monName = monNames[mi] || 'Jul';
+    const sum = a => Array.isArray(a) ? a.reduce((x,y)=>x+(y||0),0) : 0;
+    const factorOf = s => {
+      let h=sum(s.ly_hl_m||s.ly_m), q=sum(s.ly_q_m);
+      if(!(q>0)){ h=sum(s.act_hl_m||s.act_m); q=sum(s.act_q_m); }
+      return (q>0 && h>0) ? Number((h/q).toFixed(6)) : 0.0792;
+    };
+    const wb = XLSX.utils.book_new();
+    let sheets = 0;
+    (OFF.channels||[]).forEach(function(ch){ (ch.accounts||[]).forEach(function(acc){
+      const skus = (acc.skus||[]).slice().sort(function(a,b){ return (a.brand||'').localeCompare(b.brand||'') || (a.sku||'').localeCompare(b.sku||''); });
+      if(!skus.length) return;
+      const aoa = [['Month', monName], ['Account', acc.name], [], ['Brand','SKU','1W','2W','3W','4W','5W','HL계수']];
+      skus.forEach(function(s){ aoa.push([s.brand||'', s.sku||'', '', '', '', '', '', factorOf(s)]); });
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      let sn = String(acc.name).replace(/[\\\/?*\[\]:]/g,'').slice(0,31) || ('acct'+sheets);
+      try { XLSX.utils.book_append_sheet(wb, ws, sn); sheets++; } catch(e){ /* 시트명 중복 등 skip */ }
+    }); });
+    if(!sheets){ alert('다운로드할 계정 데이터가 없습니다.'); return; }
+    XLSX.writeFile(wb, 'OFF Trade FCST_마더데이터_' + monName + '.xlsx');
+  } catch(e){ alert('마더데이터 생성 실패: ' + (e.message || e)); }
+}
+
+// 올리는 어카운트 확인: 계정별로 예측월 FCST 존재 여부를 칩으로 표시 (✓ 업로드됨 / ○ 미업로드)
+function _offRenderFcstAccountCheck(){
+  const el = document.getElementById('off-fcst-accounts'); if(!el) return;
+  const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const mi = _offFcstMonthIdx();
+  let done=0, total=0, html='';
+  (OFF.channels||[]).forEach(function(ch){
+    const accs = (ch.accounts||[]).filter(function(a){ return (a.skus||[]).length; });
+    if(!accs.length) return;
+    const chips = accs.map(function(a){
+      total++;
+      const fc = (a.m && a.m.fcst_m && a.m.fcst_m[mi]) || 0;
+      const ok = fc > 0.001; if(ok) done++;
+      const c = ok ? '#16a34a' : '#9ca3af', bg = ok ? 'rgba(22,163,74,.1)' : 'rgba(0,0,0,.04)';
+      return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;border:1px solid '+c+';background:'+bg+';color:'+c+';font-weight:600;margin:2px;">'
+        + (ok?'✓':'○') + ' ' + a.name + (ok?' <span style="font-weight:400;opacity:.75;">'+Math.round(fc)+' HL</span>':'') + '</span>';
+    }).join('');
+    html += '<div style="margin-bottom:8px;"><div style="font-size:10.5px;color:var(--text-muted);font-weight:700;margin-bottom:3px;">'+(ch.label||ch.key)+'</div><div style="display:flex;flex-wrap:wrap;">'+chips+'</div></div>';
+  });
+  el.innerHTML = '<div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);">'+(monNames[mi]||'')+' 예측월 · <b style="color:var(--primary);">'+done+'/'+total+'</b> 계정 업로드됨</div>' + (html || '<span style="color:var(--text-muted);">계정 데이터 없음</span>');
 }
 
 // DSR 업로드: 연도 자동 감지 (Date 컬럼) → 26Y는 act_*, 25Y는 ly_* 갱신
