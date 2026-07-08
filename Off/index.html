@@ -1166,18 +1166,32 @@ td:first-child, td:nth-child(2) { text-align: left; }
     if(caC){
       var over=chans.filter(function(c){var r=mv(c.m,'rofo_m'),f=mv(c.m,'fcst_m');return r && (f/r)>=1;}).map(function(c){return c.label||c.key;});
       var under=chans.filter(function(c){var r=mv(c.m,'rofo_m'),f=mv(c.m,'fcst_m');return r && (f/r)<0.95;}).map(function(c){return c.label||c.key;});
-      caC.innerHTML = (over.length?'<strong style="color:#4ade80;">FCST ≥ RoFo 채널('+curMon+'):</strong> '+over.join(', ')+'<br>':'')
-        + (under.length?'<strong style="color:#f87171;">FCST &lt; RoFo 채널('+curMon+'):</strong> '+under.join(', '):'');
+      // vs LYM (전년 동월) — 채널별 YoY = 최신 FCST ÷ 전년 동월
+      var chYoy=chans.map(function(c){ var f=mv(c.m,'fcst_m'), l=mv(c.m,'ly_m'); return { name:(c.label||c.key), g:(l&&f)?f/l-1:null }; }).filter(function(x){ return x.g!=null; });
+      var down=chYoy.filter(function(x){ return x.g < -0.1; }).sort(function(a,b){ return a.g-b.g; });
+      var up  =chYoy.filter(function(x){ return x.g >= 0.1; }).sort(function(a,b){ return b.g-a.g; });
+      var grcT=(yoy!=null&&yoy>=0)?'#4ade80':'#f87171';
+      var caH = (over.length?'<strong style="color:#4ade80;">FCST ≥ RoFo 채널('+curMon+'):</strong> '+over.join(', ')+'<br>':'')
+        + (under.length?'<strong style="color:#f87171;">FCST &lt; RoFo 채널('+curMon+'):</strong> '+under.join(', ')+'<br>':'');
+      caH += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1);">'
+        + '<strong style="color:#fff;">vs LYM (전년 동월):</strong> Off TTL 최신 FCST <strong style="color:'+grcT+';">'+fDelta(yoy)+'</strong> (LY '+fHL(tLy)+' HL). ';
+      if(down.length) caH += '특히 '+down.map(function(x){ return '<strong style="color:#f87171;">'+x.name+' ('+fDelta(x.g)+')</strong>'; }).join(', ')+' 채널은 YoY 큰 폭 감소세로 면밀한 모니터링 필요. ';
+      if(up.length)   caH += (down.length?'반면 ':'')+up.map(function(x){ return '<strong style="color:#4ade80;">'+x.name+' ('+fDelta(x.g)+')</strong>'; }).join(', ')+' 채널은 YoY 성장세.';
+      if(!down.length && !up.length) caH += '채널별 YoY 변동은 크지 않음(±10% 이내).';
+      caH += '</div>';
+      caC.innerHTML = caH;
     }
     var badgeEl=document.getElementById('sum-region-badges');
     if(badgeEl){
       badgeEl.innerHTML = chans.map(function(c){
-        var m=c.m||{}; var cf=mv(m,'fcst_m'), cr=mv(m,'rofo_m'); var ach=cr?cf/cr:null; var ac=achC(ach), ab=achBg(ach);
+        var m=c.m||{}; var cf=mv(m,'fcst_m'), cr=mv(m,'rofo_m'), cl=mv(m,'ly_m'); var ach=cr?cf/cr:null; var ac=achC(ach), ab=achBg(ach);
+        var g=(cl&&cf)?cf/cl-1:null; var gc=(g==null)?'#9ca3af':(g>=0?'#4ade80':'#f87171');
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);border-left:2px solid '+ac+';border-radius:8px;padding:9px 14px;">'
           +'<span style="color:#fff;font-size:12px;font-weight:600;">'+(c.label||c.key)+'</span>'
-          +'<div style="display:flex;gap:10px;align-items:center;">'
+          +'<div style="display:flex;gap:8px;align-items:center;">'
           +'<span style="font-size:11px;font-weight:600;"><span style="color:rgba(255,255,255,.5);">FCST</span> '+fHL(cf)+' HL</span>'
-          +'<span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:'+ab+';color:'+ac+';">'+fPct(ach)+'</span>'
+          +'<span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:'+ab+';color:'+ac+';" title="FCST vs RoFo">'+fPct(ach)+'</span>'
+          +'<span style="padding:2px 9px;border-radius:12px;font-size:10.5px;font-weight:700;background:rgba(255,255,255,.06);color:'+gc+';" title="vs LYM (전년 동월)">YoY '+fDelta(g)+'</span>'
           +'</div></div>';
       }).join('');
     }
