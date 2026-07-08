@@ -45,12 +45,12 @@ tr:last-child td{border-bottom:none}
 .by{background:rgba(217,119,6,.12);color:var(--yellow)}
 .br{background:rgba(220,38,38,.12);color:var(--red)}
 .tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap}
-.tag-서울{background:rgba(59,110,245,.12);color:#3b6ef5}
-.tag-부산{background:rgba(234,88,12,.12);color:#ea580c}
-.tag-대구{background:rgba(168,85,247,.12);color:#9333ea}
-.tag-제주{background:rgba(20,184,166,.12);color:#0d9488}
-.tag-대전{background:rgba(217,119,6,.12);color:#d97706}
-.tag-광주{background:rgba(220,38,38,.12);color:#dc2626}
+.tag-Seoul{background:rgba(59,110,245,.12);color:#3b6ef5}
+.tag-Busan{background:rgba(234,88,12,.12);color:#ea580c}
+.tag-Daegu{background:rgba(168,85,247,.12);color:#9333ea}
+.tag-Jeju{background:rgba(20,184,166,.12);color:#0d9488}
+.tag-daejeon{background:rgba(217,119,6,.12);color:#d97706}
+.tag-Gwangju{background:rgba(220,38,38,.12);color:#dc2626}
 .tag-Seoul{background:rgba(59,110,245,.12);color:#3b6ef5}
 .tag-Busan{background:rgba(234,88,12,.12);color:#ea580c}
 .tag-Daegu{background:rgba(168,85,247,.12);color:#9333ea}
@@ -70,7 +70,7 @@ td.sr-cell{white-space:nowrap}
 .r{text-align:right;font-weight:600}
 .mu{color:var(--muted)}
 .bo{font-weight:700}
-/* 업데이트 탭 */
+/* Update tab */
 .upload-zone{border:2px dashed var(--border);border-radius:12px;padding:32px 20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface)}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(59,110,245,.04)}
 .upload-zone input[type=file]{display:none}
@@ -114,74 +114,74 @@ td.sr-cell{white-space:nowrap}
 
 <header>
   <h1>KPI <span>Dashboard</span> 2026</h1>
-  <div class="date-badge">기준일: 2026.03.23</div>
+  <div class="date-badge">BasisDay: 2026.03.23</div>
 </header>
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('bottle',this)">33cl Bottle SR KPI</div>
-  <div class="tab" onclick="switchTab('snow',this)">SNOW 50cl 신규 아울렛</div>
-  <div class="tab" onclick="switchTab('update',this)">데이터 업데이트</div>
+  <div class="tab" onclick="switchTab('snow',this)">SNOW 50cl new outlet</div>
+  <div class="tab" onclick="switchTab('update',this)">Data update</div>
 </div>
 
 <!-- BOTTLE -->
 <div class="page active" id="page-bottle">
   <div class="cards">
     <div class="card">
-      <div class="card-label">1월 전체 달성률</div>
+      <div class="card-label">1Month All Attainment</div>
       <div class="card-value" style="color:var(--yellow)">90%</div>
-      <div class="card-sub">목표 312 / 실적 281</div>
+      <div class="card-sub">Target 312 / Actual 281</div>
     </div>
     <div class="card">
-      <div class="card-label">2월 전체 달성률</div>
+      <div class="card-label">2Month All Attainment</div>
       <div class="card-value" style="color:var(--green)">104%</div>
-      <div class="card-sub">목표 268 / 실적 278</div>
+      <div class="card-sub">Target 268 / Actual 278</div>
     </div>
     <div class="card">
-      <div class="card-label">3월 전체 달성률</div>
+      <div class="card-label">3Month All Attainment</div>
       <div class="card-value" style="color:var(--red)">49%</div>
-      <div class="card-sub">목표 354 / 실적 174</div>
+      <div class="card-sub">Target 354 / Actual 174</div>
     </div>
     <div class="card">
-      <div class="card-label">총 SR 수</div>
+      <div class="card-label">Total SR Count</div>
       <div class="card-value" style="color:var(--accent)">22</div>
-      <div class="card-sub">서울 11 · 부산 4 · 기타 7</div>
+      <div class="card-sub">Seoul 11 · Busan 4 · Other 7</div>
     </div>
   </div>
 
   <div class="grid2">
-    <div class="box"><h3>월별 전체 목표 vs 실적</h3><canvas id="bOverall"></canvas></div>
-    <div class="box"><h3>지역별 달성률 비교</h3><canvas id="bRegion"></canvas></div>
+    <div class="box"><h3>By month All Target vs Actual</h3><canvas id="bOverall"></canvas></div>
+    <div class="box"><h3>Attainment comparison by Region</h3><canvas id="bRegion"></canvas></div>
   </div>
 
   <div class="box">
-    <h3>SR 상세 실적 테이블</h3>
+    <h3>SR detail Actual table</h3>
     <div class="tw"><table id="srTable"></table></div>
   </div>
 
   <div class="box">
-    <h3>아울렛별 월별 판매 현황</h3>
+    <h3>Sales status by month per outlet</h3>
     <div class="frow">
-      <label>지점</label>
-      <button class="fb on" onclick="bf('region','전체',this)">전체</button>
-      <button class="fb" onclick="bf('region','서울',this)">서울</button>
-      <button class="fb" onclick="bf('region','부산',this)">부산</button>
-      <button class="fb" onclick="bf('region','대구',this)">대구</button>
-      <button class="fb" onclick="bf('region','대전',this)">대전</button>
-      <button class="fb" onclick="bf('region','광주',this)">광주</button>
-      <button class="fb" onclick="bf('region','제주',this)">제주</button>
+      <label>Branch</label>
+      <button class="fb on" onclick="bf('region','All',this)">All</button>
+      <button class="fb" onclick="bf('region','Seoul',this)">Seoul</button>
+      <button class="fb" onclick="bf('region','Busan',this)">Busan</button>
+      <button class="fb" onclick="bf('region','Daegu',this)">Daegu</button>
+      <button class="fb" onclick="bf('region','Daejeon',this)">Daejeon</button>
+      <button class="fb" onclick="bf('region','Gwangju',this)">Gwangju</button>
+      <button class="fb" onclick="bf('region','Jeju',this)">Jeju</button>
     </div>
     <div class="frow">
       <label>SR</label>
-      <select class="fsel" id="bSrSel" onchange="renderBottle()"><option value="">전체</option></select>
-      <label>검색</label>
-      <input class="fi" id="bSearch" placeholder="아울렛명 검색..." oninput="renderBottle()">
+      <select class="fsel" id="bSrSel" onchange="renderBottle()"><option value="">All</option></select>
+      <label>Search</label>
+      <input class="fi" id="bSearch" placeholder="Search outlet name..." oninput="renderBottle()">
       <span class="fc" id="bCount"></span>
     </div>
     <div class="ow">
       <table>
         <thead><tr>
-          <th>지점</th><th>SR</th><th>아울렛명</th>
-          <th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">합계</th>
+          <th>Branch</th><th>SR</th><th>Outlet name</th>
+          <th class="r">1Month</th><th class="r">2Month</th><th class="r">3Month</th><th class="r">Total</th>
         </tr></thead>
         <tbody id="bBody"></tbody>
       </table>
@@ -193,97 +193,97 @@ td.sr-cell{white-space:nowrap}
 <div class="page" id="page-snow">
   <div class="cards">
     <div class="card">
-      <div class="card-label">1월 신규 입점</div>
+      <div class="card-label">1Month New listing</div>
       <div class="card-value" style="color:var(--accent)">19</div>
-      <div class="card-sub">서울 2 · 부산 2 · 대구 2 · 대전 4 · 광주 9</div>
+      <div class="card-sub">Seoul 2 · Busan 2 · Daegu 2 · Daejeon 4 · Gwangju 9</div>
     </div>
     <div class="card">
-      <div class="card-label">2월 신규 입점</div>
+      <div class="card-label">2Month New listing</div>
       <div class="card-value" style="color:var(--accent)">23</div>
-      <div class="card-sub">서울 7 · 부산 8 · 대구 1 · 제주 1 · 광주 6</div>
+      <div class="card-sub">Seoul 7 · Busan 8 · Daegu 1 · Jeju 1 · Gwangju 6</div>
     </div>
     <div class="card">
-      <div class="card-label">3월 신규 입점</div>
+      <div class="card-label">3Month New listing</div>
       <div class="card-value" style="color:var(--accent)">12</div>
-      <div class="card-sub">서울 2 · 부산 7 · 대전 3</div>
+      <div class="card-sub">Seoul 2 · Busan 7 · Daejeon 3</div>
     </div>
     <div class="card">
-      <div class="card-label">누적 신규 입점</div>
+      <div class="card-label">Cumulative New listing</div>
       <div class="card-value" style="color:var(--green)">54</div>
-      <div class="card-sub">25년 미입점 → 26년 신규 개척</div>
+      <div class="card-sub">25Year not listed → 26Year new items</div>
     </div>
   </div>
 
   <div class="grid2">
-    <div class="box"><h3>월별 신규 입점 추이 (지점별)</h3><canvas id="sMonthly"></canvas></div>
-    <div class="box"><h3>지점별 누적 신규 입점</h3><canvas id="sRegion"></canvas></div>
+    <div class="box"><h3>New listings by month (by branch)</h3><canvas id="sMonthly"></canvas></div>
+    <div class="box"><h3>By branch Cumulative New listing</h3><canvas id="sRegion"></canvas></div>
   </div>
 
   <div class="box">
-    <h3>신규 입점 아울렛 목록</h3>
+    <h3>New listing Outlet registration</h3>
     <div class="frow">
-      <label>지점</label>
-      <button class="fb on" onclick="sf('region','전체',this)">전체</button>
-      <button class="fb" onclick="sf('region','서울',this)">서울</button>
-      <button class="fb" onclick="sf('region','부산',this)">부산</button>
-      <button class="fb" onclick="sf('region','대구',this)">대구</button>
-      <button class="fb" onclick="sf('region','제주',this)">제주</button>
-      <button class="fb" onclick="sf('region','대전',this)">대전</button>
-      <button class="fb" onclick="sf('region','광주',this)">광주</button>
+      <label>Branch</label>
+      <button class="fb on" onclick="sf('region','All',this)">All</button>
+      <button class="fb" onclick="sf('region','Seoul',this)">Seoul</button>
+      <button class="fb" onclick="sf('region','Busan',this)">Busan</button>
+      <button class="fb" onclick="sf('region','Daegu',this)">Daegu</button>
+      <button class="fb" onclick="sf('region','Jeju',this)">Jeju</button>
+      <button class="fb" onclick="sf('region','Daejeon',this)">Daejeon</button>
+      <button class="fb" onclick="sf('region','Gwangju',this)">Gwangju</button>
     </div>
     <div class="frow">
-      <label>입점월</label>
-      <button class="fb on" onclick="sf('month','전체',this)">전체</button>
-      <button class="fb" onclick="sf('month','1월',this)">1월</button>
-      <button class="fb" onclick="sf('month','2월',this)">2월</button>
-      <button class="fb" onclick="sf('month','3월',this)">3월</button>
+      <label>Listing Month</label>
+      <button class="fb on" onclick="sf('month','All',this)">All</button>
+      <button class="fb" onclick="sf('month','1Month',this)">1Month</button>
+      <button class="fb" onclick="sf('month','2Month',this)">2Month</button>
+      <button class="fb" onclick="sf('month','3Month',this)">3Month</button>
       <label>SR</label>
-      <select class="fsel" id="sSrSel" onchange="renderSnow()"><option value="">전체</option></select>
-      <label>검색</label>
-      <input class="fi" id="sSearch" placeholder="아울렛명 검색..." oninput="renderSnow()">
+      <select class="fsel" id="sSrSel" onchange="renderSnow()"><option value="">All</option></select>
+      <label>Search</label>
+      <input class="fi" id="sSearch" placeholder="Search outlet name..." oninput="renderSnow()">
       <span class="fc" id="sCount"></span>
     </div>
     <div class="ow">
       <table>
         <thead><tr>
-          <th>지점</th><th>입점월</th><th>SR</th><th>아울렛명</th><th>지역(구)</th>
+          <th>Branch</th><th>Listing Month</th><th>SR</th><th>Outlet name</th><th>Region(District)</th>
         </tr></thead>
         <tbody id="sBody"></tbody>
       </table>
     </div>
   </div>
 
-  <!-- 전체 아울렛 리스트 -->
+  <!-- All Outlet list -->
   <div class="box">
-    <h3>전체 아울렛 리스트</h3>
+    <h3>All Outlet list</h3>
     <div class="frow">
-      <label>지점</label>
-      <button class="fb on" onclick="af('region','전체',this)">전체</button>
-      <button class="fb" onclick="af('region','서울',this)">서울</button>
-      <button class="fb" onclick="af('region','부산',this)">부산</button>
-      <button class="fb" onclick="af('region','대구',this)">대구</button>
-      <button class="fb" onclick="af('region','제주',this)">제주</button>
-      <button class="fb" onclick="af('region','대전',this)">대전</button>
-      <button class="fb" onclick="af('region','광주',this)">광주</button>
+      <label>Branch</label>
+      <button class="fb on" onclick="af('region','All',this)">All</button>
+      <button class="fb" onclick="af('region','Seoul',this)">Seoul</button>
+      <button class="fb" onclick="af('region','Busan',this)">Busan</button>
+      <button class="fb" onclick="af('region','Daegu',this)">Daegu</button>
+      <button class="fb" onclick="af('region','Jeju',this)">Jeju</button>
+      <button class="fb" onclick="af('region','Daejeon',this)">Daejeon</button>
+      <button class="fb" onclick="af('region','Gwangju',this)">Gwangju</button>
     </div>
     <div class="frow">
-      <label>매출</label>
-      <button class="fb on" onclick="af('sales','전체',this)">전체</button>
-      <button class="fb" onclick="af('sales','있음',this)">매출 있음</button>
-      <button class="fb" onclick="af('sales','없음',this)">매출 없음</button>
+      <label>Revenue</label>
+      <button class="fb on" onclick="af('sales','All',this)">All</button>
+      <button class="fb" onclick="af('sales','yes',this)">Has Revenue</button>
+      <button class="fb" onclick="af('sales','None',this)">No revenue</button>
       <label>SR</label>
-      <select class="fsel" id="aSrSel" onchange="renderAll()"><option value="">전체</option></select>
-      <label>검색</label>
-      <input class="fi" id="aSearch" placeholder="아울렛명 / 도매상 검색..." oninput="renderAll()" style="width:220px">
+      <select class="fsel" id="aSrSel" onchange="renderAll()"><option value="">All</option></select>
+      <label>Search</label>
+      <input class="fi" id="aSearch" placeholder="Search outlet name / wholesaler..." oninput="renderAll()" style="width:220px">
       <span class="fc" id="aCount"></span>
     </div>
     <div class="ow">
       <table>
         <thead><tr>
-          <th>지점</th><th>SR</th><th>아울렛명</th>
-          <th>도매담당</th><th>도매상명</th>
-          <th>주소</th>
-          <th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">합계</th>
+          <th>Branch</th><th>SR</th><th>Outlet name</th>
+          <th>Wholesale owner</th><th>wholesaler name</th>
+          <th>Address</th>
+          <th class="r">1Month</th><th class="r">2Month</th><th class="r">3Month</th><th class="r">Total</th>
         </tr></thead>
         <tbody id="aBody"></tbody>
       </table>
@@ -291,28 +291,28 @@ td.sr-cell{white-space:nowrap}
   </div>
 </div>
 
-<!-- ===== 데이터 업데이트 ===== -->
+<!-- ===== Data update ===== -->
 <div class="page" id="page-update">
 
   <!-- Bottle -->
   <div class="box" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <h3 style="margin:0">33cl Bottle 업데이트</h3>
-      <button class="dl-btn" onclick="downloadCurrent('bottle')">⬇ 현황 다운로드</button>
+      <h3 style="margin:0">33cl Bottle update</h3>
+      <button class="dl-btn" onclick="downloadCurrent('bottle')">⬇ Status download</button>
     </div>
     <div class="branch-grid" id="bgBottle"></div>
     <input type="file" id="fBottle" accept=".xlsx,.xls" style="display:none" onchange="readExcel(this,'bottle')">
     <div class="preview-box" id="pvBottle">
       <div class="prev-head">
-        <span class="prev-title">미리보기</span>
+        <span class="prev-title">Preview</span>
         <span class="prev-count" id="pcBottle"></span>
         <div>
-          <button class="confirm-btn" onclick="confirmUpload('bottle')">대시보드 반영</button>
-          <button class="cancel-btn" onclick="cancelPreview('bottle')">취소</button>
+          <button class="confirm-btn" onclick="confirmUpload('bottle')">apply to dashboard</button>
+          <button class="cancel-btn" onclick="cancelPreview('bottle')">Cancel</button>
         </div>
       </div>
       <div class="ow" style="max-height:300px">
-        <table class="utable"><thead><tr><th>지점</th><th>월</th><th>SR</th><th>아울렛명</th><th class="r">수량</th></tr></thead>
+        <table class="utable"><thead><tr><th>Branch</th><th>Month</th><th>SR</th><th>Outlet name</th><th class="r">Quantity</th></tr></thead>
         <tbody id="pbBottle"></tbody></table>
       </div>
     </div>
@@ -321,22 +321,22 @@ td.sr-cell{white-space:nowrap}
   <!-- Snow -->
   <div class="box">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <h3 style="margin:0">Snow 신규 입점 업데이트</h3>
-      <button class="dl-btn" onclick="downloadCurrent('snow')">⬇ 현황 다운로드</button>
+      <h3 style="margin:0">Snow new listing update</h3>
+      <button class="dl-btn" onclick="downloadCurrent('snow')">⬇ Status download</button>
     </div>
     <div class="branch-grid" id="bgSnow"></div>
     <input type="file" id="fSnow" accept=".xlsx,.xls" style="display:none" onchange="readExcel(this,'snow')">
     <div class="preview-box" id="pvSnow">
       <div class="prev-head">
-        <span class="prev-title">미리보기</span>
+        <span class="prev-title">Preview</span>
         <span class="prev-count" id="pcSnow"></span>
         <div>
-          <button class="confirm-btn" onclick="confirmUpload('snow')">대시보드 반영</button>
-          <button class="cancel-btn" onclick="cancelPreview('snow')">취소</button>
+          <button class="confirm-btn" onclick="confirmUpload('snow')">apply to dashboard</button>
+          <button class="cancel-btn" onclick="cancelPreview('snow')">Cancel</button>
         </div>
       </div>
       <div class="ow" style="max-height:300px">
-        <table class="utable"><thead><tr><th>지점</th><th>SR</th><th>아울렛명</th><th>도매담당</th><th>도매상명</th><th>구</th><th class="r">2025합계</th><th class="r">2026합계</th><th>신규입점</th></tr></thead>
+        <table class="utable"><thead><tr><th>Branch</th><th>SR</th><th>Outlet name</th><th>Wholesale owner</th><th>wholesaler name</th><th>District</th><th class="r">2025Total</th><th class="r">2026Total</th><th>New listing</th></tr></thead>
         <tbody id="pbSnow"></tbody></table>
       </div>
     </div>
@@ -345,53 +345,53 @@ td.sr-cell{white-space:nowrap}
 </div>
 
 <script>
-// 공통
+// Common
 const CD={plugins:{legend:{labels:{color:'#6b7280',font:{size:11}}}},scales:{x:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}},y:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}}}};
 function pct(a,t){return t?Math.round(a/t*100):null}
 function badge(p){if(p===null)return '<span class="mu">–</span>';const c=p>=100?'bg':p>=80?'by':'br';return `<span class="badge ${c}">${p}%</span>`;}
 function switchTab(n,el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById('page-'+n).classList.add('active');el.classList.add('active');}
 function rtag(r){return `<span class="tag tag-${r}">${r}</span>`;}
 
-// localStorage (최상단 선언 - 하위 함수에서 참조하므로)
+// localStorage (declared at top - referenced by functions below)
 const UK='kpi_updates_2026';
-const MK={'1월':'m1','2월':'m2','3월':'m3','4월':'m4','5월':'m5','6월':'m6','7월':'m7','8월':'m8','9월':'m9','10월':'m10','11월':'m11','12월':'m12'};
+const MK={'1Month':'m1','2Month':'m2','3Month':'m3','4Month':'m4','5Month':'m5','6Month':'m6','7Month':'m7','8Month':'m8','9Month':'m9','10Month':'m10','11Month':'m11','12Month':'m12'};
 function getUD(){return JSON.parse(localStorage.getItem(UK)||'{"bottle":{},"snow":{}}')}
 function setUD(d){localStorage.setItem(UK,JSON.stringify(d))}
 
-// BOTTLE 차트
-const bD={months:['1월','2월','3월'],overall:{target:[312,268,354],actual:[281,278,174]},regions:{'서울':{target:[155,136,170],actual:[144,140,111]},'부산':{target:[64,56,80],actual:[44,43,15]},'대전':{target:[20,17,23],actual:[20,27,3]},'광주':{target:[36,25,35],actual:[33,21,10]},'대구/제주':{target:[37,34,46],actual:[40,47,35]}},srs:[{name:'Minkyu Lee',region:'서울',jan:[12,15],feb:[8,14],mar:[20,20]},{name:'Hyunjin Lee',region:'서울',jan:[8,15],feb:[9,13],mar:[13,20]},{name:'Joosuk Lee',region:'서울',jan:[24,20],feb:[19,18],mar:[0,25]},{name:'Eunhee Lee',region:'서울',jan:[27,25],feb:[27,23],mar:[24,30]},{name:'Sanghun Um',region:'서울',jan:[4,10],feb:[10,8],mar:[0,null]},{name:'Sangtae Kang',region:'서울',jan:[8,10],feb:[10,8],mar:[13,15]},{name:'Hangjoe Yoo',region:'서울',jan:[11,15],feb:[12,13],mar:[0,null]},{name:'Hongjun Park',region:'서울',jan:[20,15],feb:[20,13],mar:[14,20]},{name:'Pilsung Kim',region:'서울',jan:[10,10],feb:[9,8],mar:[12,15]},{name:'Gunseok Hong',region:'서울',jan:[20,20],feb:[6,18],mar:[8,25]},{name:'Hanju Kim',region:'서울',jan:[0,null],feb:[10,null],mar:[7,null]},{name:'Yeongmin Kang',region:'부산',jan:[9,16],feb:[16,14],mar:[4,20]},{name:'Sunghun Jung',region:'부산',jan:[11,16],feb:[14,14],mar:[4,20]},{name:'Jinhyun Byun',region:'부산',jan:[16,16],feb:[13,14],mar:[7,20]},{name:'Gyeongho Kim',region:'부산',jan:[8,16],feb:[0,14],mar:[0,20]},{name:'Jeongkyu Kim',region:'대전',jan:[0,null],feb:[10,null],mar:[3,null]},{name:'Gyuntae Kim',region:'대전',jan:[20,20],feb:[17,17],mar:[0,23]},{name:'Taewan Kim',region:'대구/제주',jan:[23,21],feb:[24,20],mar:[14,23]},{name:'Sunho Shon',region:'대구/제주',jan:[9,9],feb:[14,8],mar:[14,13]},{name:'Jaeyoung Jung',region:'대구/제주',jan:[8,7],feb:[9,6],mar:[7,10]},{name:'Hyoseong Kim',region:'광주',jan:[11,16],feb:[0,null],mar:[0,null]},{name:'Gyeongjun Kwak',region:'광주',jan:[22,20],feb:[21,25],mar:[10,35]}]};
+// BOTTLE chart
+const bD={months:['1Month','2Month','3Month'],overall:{target:[312,268,354],actual:[281,278,174]},regions:{'Seoul':{target:[155,136,170],actual:[144,140,111]},'Busan':{target:[64,56,80],actual:[44,43,15]},'Daejeon':{target:[20,17,23],actual:[20,27,3]},'Gwangju':{target:[36,25,35],actual:[33,21,10]},'Daegu/Jeju':{target:[37,34,46],actual:[40,47,35]}},srs:[{name:'Minkyu Lee',region:'Seoul',jan:[12,15],feb:[8,14],mar:[20,20]},{name:'Hyunjin Lee',region:'Seoul',jan:[8,15],feb:[9,13],mar:[13,20]},{name:'Joosuk Lee',region:'Seoul',jan:[24,20],feb:[19,18],mar:[0,25]},{name:'Eunhee Lee',region:'Seoul',jan:[27,25],feb:[27,23],mar:[24,30]},{name:'Sanghun Um',region:'Seoul',jan:[4,10],feb:[10,8],mar:[0,null]},{name:'Sangtae Kang',region:'Seoul',jan:[8,10],feb:[10,8],mar:[13,15]},{name:'Hangjoe Yoo',region:'Seoul',jan:[11,15],feb:[12,13],mar:[0,null]},{name:'Hongjun Park',region:'Seoul',jan:[20,15],feb:[20,13],mar:[14,20]},{name:'Pilsung Kim',region:'Seoul',jan:[10,10],feb:[9,8],mar:[12,15]},{name:'Gunseok Hong',region:'Seoul',jan:[20,20],feb:[6,18],mar:[8,25]},{name:'Hanju Kim',region:'Seoul',jan:[0,null],feb:[10,null],mar:[7,null]},{name:'Yeongmin Kang',region:'Busan',jan:[9,16],feb:[16,14],mar:[4,20]},{name:'Sunghun Jung',region:'Busan',jan:[11,16],feb:[14,14],mar:[4,20]},{name:'Jinhyun Byun',region:'Busan',jan:[16,16],feb:[13,14],mar:[7,20]},{name:'Gyeongho Kim',region:'Busan',jan:[8,16],feb:[0,14],mar:[0,20]},{name:'Jeongkyu Kim',region:'Daejeon',jan:[0,null],feb:[10,null],mar:[3,null]},{name:'Gyuntae Kim',region:'Daejeon',jan:[20,20],feb:[17,17],mar:[0,23]},{name:'Taewan Kim',region:'Daegu/Jeju',jan:[23,21],feb:[24,20],mar:[14,23]},{name:'Sunho Shon',region:'Daegu/Jeju',jan:[9,9],feb:[14,8],mar:[14,13]},{name:'Jaeyoung Jung',region:'Daegu/Jeju',jan:[8,7],feb:[9,6],mar:[7,10]},{name:'Hyoseong Kim',region:'Gwangju',jan:[11,16],feb:[0,null],mar:[0,null]},{name:'Gyeongjun Kwak',region:'Gwangju',jan:[22,20],feb:[21,25],mar:[10,35]}]};
 
-new Chart(document.getElementById('bOverall'),{type:'bar',data:{labels:bD.months,datasets:[{label:'목표',data:bD.overall.target,backgroundColor:'rgba(139,143,168,.3)',borderRadius:4},{label:'실적',data:bD.overall.actual,backgroundColor:'rgba(59,110,245,.75)',borderRadius:4}]},options:{...CD,responsive:true}});
+new Chart(document.getElementById('bOverall'),{type:'bar',data:{labels:bD.months,datasets:[{label:'Target',data:bD.overall.target,backgroundColor:'rgba(139,143,168,.3)',borderRadius:4},{label:'Actual',data:bD.overall.actual,backgroundColor:'rgba(59,110,245,.75)',borderRadius:4}]},options:{...CD,responsive:true}});
 
 const rL=Object.keys(bD.regions);
 new Chart(document.getElementById('bRegion'),{type:'bar',data:{labels:rL,datasets:bD.months.map((m,i)=>({label:m,data:rL.map(r=>pct(bD.regions[r].actual[i],bD.regions[r].target[i])),backgroundColor:['rgba(59,110,245,.75)','rgba(34,197,94,.75)','rgba(239,68,68,.75)'][i],borderRadius:4}))},options:{...CD,responsive:true,plugins:{...CD.plugins,tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.raw}%`}}}}});
 
 (function(){
   const t=document.getElementById('srTable');
-  t.innerHTML='<tr><th>SR</th><th>지역</th><th>1월 목표</th><th>1월 실적</th><th>1월 달성률</th><th>2월 목표</th><th>2월 실적</th><th>2월 달성률</th><th>3월 목표</th><th>3월 실적</th><th>3월 달성률</th></tr>';
+  t.innerHTML='<tr><th>SR</th><th>Region</th><th>1Month Target</th><th>1Month Actual</th><th>1Month Attainment</th><th>2Month Target</th><th>2Month Actual</th><th>2Month Attainment</th><th>3Month Target</th><th>3Month Actual</th><th>3Month Attainment</th></tr>';
   [...new Set(bD.srs.map(s=>s.region))].forEach(region=>{
     const rd=bD.regions[region];
-    if(rd){const r=document.createElement('tr');r.className='rrow';r.innerHTML=`<td colspan="2">${region} 합계</td><td>${rd.target[0]}</td><td>${rd.actual[0]}</td><td>${badge(pct(rd.actual[0],rd.target[0]))}</td><td>${rd.target[1]}</td><td>${rd.actual[1]}</td><td>${badge(pct(rd.actual[1],rd.target[1]))}</td><td>${rd.target[2]}</td><td>${rd.actual[2]}</td><td>${badge(pct(rd.actual[2],rd.target[2]))}</td>`;t.appendChild(r);}
+    if(rd){const r=document.createElement('tr');r.className='rrow';r.innerHTML=`<td colspan="2">${region} Total</td><td>${rd.target[0]}</td><td>${rd.actual[0]}</td><td>${badge(pct(rd.actual[0],rd.target[0]))}</td><td>${rd.target[1]}</td><td>${rd.actual[1]}</td><td>${badge(pct(rd.actual[1],rd.target[1]))}</td><td>${rd.target[2]}</td><td>${rd.actual[2]}</td><td>${badge(pct(rd.actual[2],rd.target[2]))}</td>`;t.appendChild(r);}
     bD.srs.filter(s=>s.region===region).forEach(sr=>{const r=document.createElement('tr');r.innerHTML=`<td class="sr-cell">${sr.name}</td><td>${rtag(sr.region)}</td><td>${sr.jan[1]??'–'}</td><td>${sr.jan[0]??'–'}</td><td>${badge(pct(sr.jan[0],sr.jan[1]))}</td><td>${sr.feb[1]??'–'}</td><td>${sr.feb[0]??'–'}</td><td>${badge(pct(sr.feb[0],sr.feb[1]))}</td><td>${sr.mar[1]??'–'}</td><td>${sr.mar[0]??'–'}</td><td>${badge(pct(sr.mar[0],sr.mar[1]))}</td>`;t.appendChild(r);});
   });
 })();
 
-const bF={region:'전체'};
+const bF={region:'All'};
 function bf(key,val,btn){bF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderBottle();}
 function qc(v){return v?`<td class="r" style="color:var(--accent)">${v}</td>`:`<td class="r mu">–</td>`;}
 function renderBottle(data){
   data=data||getMergedBottleOutlets();
   const r=bF.region,sr=document.getElementById('bSrSel').value,q=document.getElementById('bSearch').value.trim().toLowerCase();
-  const rows=data.filter(d=>(r==='전체'||d.team===r)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>(b.m1+b.m2+b.m3)-(a.m1+a.m2+a.m3));
-  document.getElementById('bCount').textContent=`총 ${rows.length}개`;
+  const rows=data.filter(d=>(r==='All'||d.team===r)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>(b.m1+b.m2+b.m3)-(a.m1+a.m2+a.m3));
+  document.getElementById('bCount').textContent=`Total ${rows.length}items`;
   document.getElementById('bBody').innerHTML=rows.map(d=>{const tot=d.m1+d.m2+d.m3;return `<tr><td>${rtag(d.team)}</td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td>${qc(d.m1)}${qc(d.m2)}${qc(d.m3)}<td class="r bo">${tot||'–'}</td></tr>`;}).join('');
 }
 (function(){const srs=[...new Set(BOTTLE_OUTLETS.map(d=>d.sr))].filter(Boolean).sort();const sel=document.getElementById('bSrSel');srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});renderBottle();})();
 
-// SNOW 차트
-const sReg=['서울','부산','대구','제주','대전','광주'];
+// SNOW chart
+const sReg=['Seoul','Busan','Daegu','Jeju','Daejeon','Gwangju'];
 const sCl=['rgba(59,110,245,.8)','rgba(34,197,94,.8)','rgba(245,158,11,.8)','rgba(168,85,247,.8)','rgba(239,68,68,.8)','rgba(20,184,166,.8)'];
-const ALL_MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const ALL_MONTHS=['1Month','2Month','3Month','4Month','5Month','6Month','7Month','8Month','9Month','10Month','11Month','12Month'];
 
 function buildSnowCounts(data){
   const c={};sReg.forEach(r=>{c[r]={};ALL_MONTHS.forEach(m=>{c[r][m]=0;});});
@@ -406,8 +406,8 @@ let snowCnt=buildSnowCounts(SNOW_NEW_OUTLETS);
 let snowMo=getActiveMonths(snowCnt);
 let snowMTot=snowMo.map(m=>sReg.reduce((s,r)=>s+(snowCnt[r][m]||0),0));
 
-const chartSMonthly=new Chart(document.getElementById('sMonthly'),{type:'bar',data:{labels:snowMo,datasets:sReg.map((r,i)=>({label:r,data:snowMo.map(m=>snowCnt[r][m]||0),backgroundColor:sCl[i],borderRadius:4,stack:'s'}))},options:{...CD,responsive:true,plugins:{...CD.plugins,tooltip:{callbacks:{afterTitle:items=>`월 합계: ${snowMTot[items[0].dataIndex]} Outlet`}}},scales:{...CD.scales,x:{...CD.scales.x,ticks:{color:'#6b7280',callback:(val,i)=>[snowMo[i],snowMTot[i]+' Outlet']}}}}});
-const chartSRegion=new Chart(document.getElementById('sRegion'),{type:'bar',data:{labels:sReg,datasets:[{label:'신규 입점',data:sReg.map(r=>snowMo.reduce((s,m)=>s+(snowCnt[r][m]||0),0)),backgroundColor:sCl,borderRadius:4}]},options:{...CD,responsive:true,indexAxis:'y',plugins:{...CD.plugins,legend:{display:false}}}});
+const chartSMonthly=new Chart(document.getElementById('sMonthly'),{type:'bar',data:{labels:snowMo,datasets:sReg.map((r,i)=>({label:r,data:snowMo.map(m=>snowCnt[r][m]||0),backgroundColor:sCl[i],borderRadius:4,stack:'s'}))},options:{...CD,responsive:true,plugins:{...CD.plugins,tooltip:{callbacks:{afterTitle:items=>`Month Total: ${snowMTot[items[0].dataIndex]} Outlet`}}},scales:{...CD.scales,x:{...CD.scales.x,ticks:{color:'#6b7280',callback:(val,i)=>[snowMo[i],snowMTot[i]+' Outlet']}}}}});
+const chartSRegion=new Chart(document.getElementById('sRegion'),{type:'bar',data:{labels:sReg,datasets:[{label:'New listing',data:sReg.map(r=>snowMo.reduce((s,m)=>s+(snowCnt[r][m]||0),0)),backgroundColor:sCl,borderRadius:4}]},options:{...CD,responsive:true,indexAxis:'y',plugins:{...CD.plugins,legend:{display:false}}}});
 
 function refreshSnowCharts(merged){
   snowCnt=buildSnowCounts(merged);
@@ -421,33 +421,33 @@ function refreshSnowCharts(merged){
   chartSRegion.update();
 }
 
-const sF={region:'전체',month:'전체'};
-const mOrd={'1월':1,'2월':2,'3월':3,'4월':4,'5월':5,'6월':6,'7월':7,'8월':8,'9월':9,'10월':10,'11월':11,'12월':12};
-const mCol={'1월':'#3b6ef5','2월':'#16a34a','3월':'#d97706','4월':'#9333ea','5월':'#dc2626','6월':'#0d9488','7월':'#3b6ef5','8월':'#ea580c','9월':'#16a34a','10월':'#d97706','11월':'#9333ea','12월':'#dc2626'};
+const sF={region:'All',month:'All'};
+const mOrd={'1Month':1,'2Month':2,'3Month':3,'4Month':4,'5Month':5,'6Month':6,'7Month':7,'8Month':8,'9Month':9,'10Month':10,'11Month':11,'12Month':12};
+const mCol={'1Month':'#3b6ef5','2Month':'#16a34a','3Month':'#d97706','4Month':'#9333ea','5Month':'#dc2626','6Month':'#0d9488','7Month':'#3b6ef5','8Month':'#ea580c','9Month':'#16a34a','10Month':'#d97706','11Month':'#9333ea','12Month':'#dc2626'};
 function sf(key,val,btn){sF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderSnow();}
 function renderSnow(data){
   data=data||getMergedSnowNew();
   const sr=document.getElementById('sSrSel').value,q=document.getElementById('sSearch').value.trim().toLowerCase();
-  const rows=data.filter(d=>(sF.region==='전체'||d.region===sF.region)&&(sF.month==='전체'||d.first_month===sF.month)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>(mOrd[a.first_month]||9)-(mOrd[b.first_month]||9)||a.region.localeCompare(b.region));
-  document.getElementById('sCount').textContent=`총 ${rows.length}개`;
+  const rows=data.filter(d=>(sF.region==='All'||d.region===sF.region)&&(sF.month==='All'||d.first_month===sF.month)&&(!sr||d.sr===sr)&&(!q||d.outlet.toLowerCase().includes(q))).sort((a,b)=>(mOrd[a.first_month]||9)-(mOrd[b.first_month]||9)||a.region.localeCompare(b.region));
+  document.getElementById('sCount').textContent=`Total ${rows.length}items`;
   document.getElementById('sBody').innerHTML=rows.map(d=>`<tr><td>${rtag(d.region)}</td><td><span class="badge" style="background:${(mCol[d.first_month]||'#888')}22;color:${mCol[d.first_month]||'#888'}">${d.first_month}</span></td><td class="mu sr-cell">${d.sr}</td><td>${d.outlet}</td><td class="mu" style="font-size:12px">${d.area2}</td></tr>`).join('');
 }
 (function(){const srs=[...new Set(SNOW_NEW_OUTLETS.map(d=>d.sr))].filter(Boolean).sort();const sel=document.getElementById('sSrSel');srs.forEach(sr=>{const o=document.createElement('option');o.value=sr;o.textContent=sr;sel.appendChild(o);});renderSnow();})();
 
-// 전체 아울렛
-const aF={region:'전체',sales:'전체'};
+// All Outlet
+const aF={region:'All',sales:'All'};
 function af(key,val,btn){aF[key]=val;btn.closest('.frow').querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));btn.classList.add('on');renderAll();}
 function renderAll(){
   const sr=document.getElementById('aSrSel').value, q=document.getElementById('aSearch').value.trim().toLowerCase();
   const rows=SNOW_ALL.filter(d=>{
-    if(aF.region!=='전체'&&d.region!==aF.region)return false;
-    if(aF.sales==='있음'&&d.total===0)return false;
-    if(aF.sales==='없음'&&d.total>0)return false;
+    if(aF.region!=='All'&&d.region!==aF.region)return false;
+    if(aF.sales==='yes'&&d.total===0)return false;
+    if(aF.sales==='None'&&d.total>0)return false;
     if(sr&&d.sr!==sr)return false;
     if(q&&!d.outlet.toLowerCase().includes(q)&&!d.customer.toLowerCase().includes(q)&&!d.dde.toLowerCase().includes(q))return false;
     return true;
   }).sort((a,b)=>b.total-a.total||a.region.localeCompare(b.region));
-  document.getElementById('aCount').textContent=`총 ${rows.length}개`;
+  document.getElementById('aCount').textContent=`Total ${rows.length}items`;
   const addr=d=>[d.area1,d.area2,d.area3].filter(Boolean).join(' ');
   document.getElementById('aBody').innerHTML=rows.map(d=>`<tr>
     <td>${rtag(d.region)}</td>
@@ -469,15 +469,15 @@ function renderAll(){
   renderAll();
 })();
 
-// ===== 데이터 업데이트 로직 =====
+// ===== Data update logic =====
 
-// 머지 함수
+// Merge function
 function getMergedBottleOutlets(){
   const d=getUD();
   const uploaded=new Set(Object.keys(d.bottle));
-  // 업로드 안 된 지점은 기본 데이터 사용
+  // For branches not uploaded, use default data
   const result=BOTTLE_OUTLETS.filter(o=>!uploaded.has(o.team)).map(o=>({...o}));
-  // 업로드된 지점은 rows에서 outlet별 월별 합산
+  // For uploaded branches, sum by month per outlet from rows
   Object.entries(d.bottle).forEach(([region,batch])=>{
     const map={};
     (batch.rows||[]).forEach(r=>{
@@ -493,8 +493,8 @@ function getMergedBottleOutlets(){
 function getMergedSnowNew(){
   const d=getUD();
   const uploaded=new Set(Object.keys(d.snow));
-  // '대구/제주' 업로드 시 기본 데이터의 '대구'·'제주' 모두 교체
-  const covers=r=>uploaded.has(r)||(uploaded.has('대구/제주')&&(r==='대구'||r==='제주'));
+  // 'Daegu/Jeju' Default data on upload 'Daegu'·'Jeju' Replace all
+  const covers=r=>uploaded.has(r)||(uploaded.has('Daegu/Jeju')&&(r==='Daegu'||r==='Jeju'));
   const base=SNOW_NEW_OUTLETS.filter(o=>!covers(o.region));
   const added=[];
   Object.entries(d.snow).forEach(([,batch])=>{
@@ -514,12 +514,12 @@ function applyAllUpdates(){
   renderAll();
 }
 
-// ===== Excel 업로드 =====
+// ===== Excel upload =====
 let parsedBottle=[], parsedSnow=[];
 const curRegion={bottle:null,snow:null};
-// Bottle: 대구/제주 한 지점, Snow: 대구·제주 별도
-const REGIONS_BOTTLE=['서울','부산','대구/제주','대전','광주'];
-const REGIONS_SNOW=['서울','부산','대구/제주','대전','광주'];
+// Bottle: Daegu/Jeju as one Branch, Snow: Daegu and Jeju separate
+const REGIONS_BOTTLE=['Seoul','Busan','Daegu/Jeju','Daejeon','Gwangju'];
+const REGIONS_SNOW=['Seoul','Busan','Daegu/Jeju','Daejeon','Gwangju'];
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 
 function renderBranchCards(type){
@@ -532,10 +532,10 @@ function renderBranchCards(type){
     const count=uploaded?(type==='bottle'?(batch.rows||[]).length:(batch.entries||[]).length):0;
     return `<div class="branch-card${uploaded?' uploaded':''}">
       <div class="bc-top">${rtag(region)}<span class="bc-date">${uploaded?batch.date:''}</span></div>
-      ${uploaded?`<div class="bc-count">${count}건</div>`:`<div class="bc-none">미업데이트</div>`}
+      ${uploaded?`<div class="bc-count">${count}case</div>`:`<div class="bc-none">Not updated</div>`}
       <div class="bc-btns">
-        <button class="up-btn" onclick="triggerUpload('${type}','${region}')">📁 업로드</button>
-        ${uploaded?`<button class="del-btn" onclick="uDel('${type}','${region}')">삭제</button>`:''}
+        <button class="up-btn" onclick="triggerUpload('${type}','${region}')">📁 Upload</button>
+        ${uploaded?`<button class="del-btn" onclick="uDel('${type}','${region}')">Delete</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -555,7 +555,7 @@ function readExcel(input,type){
   const file=input.files[0];
   if(file)processFile(file,type);
 }
-const SNOW_MO_NAMES=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const SNOW_MO_NAMES=['1Month','2Month','3Month','4Month','5Month','6Month','7Month','8Month','9Month','10Month','11Month','12Month'];
 function parseSnowRows(rows){
   // Row 0 = year group header (2025Y / 2026Y), Row 1 = column headers → data starts at row 2
   const skip=rows.length>1&&String(rows[0][10]||'').includes('2025')?2:1;
@@ -568,7 +568,7 @@ function processFile(file,type){
   reader.onload=function(ev){
     try{
       const wb=XLSX.read(ev.target.result,{type:'array'});
-      const ws=wb.Sheets['입력']||wb.Sheets[wb.SheetNames[0]];
+      const ws=wb.Sheets['Input']||wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       let data;
       if(type==='bottle'){
@@ -579,7 +579,7 @@ function processFile(file,type){
         parsedSnow=data;
       }
       showPreview(type,data);
-    }catch(err){alert('파일을 읽을 수 없습니다: '+err.message);}
+    }catch(err){alert('Unable to read file: '+err.message);}
   };
   reader.readAsArrayBuffer(file);
 }
@@ -588,7 +588,7 @@ function showPreview(type,data){
   const pb=document.getElementById('pb'+C);
   const pv=document.getElementById('pv'+C);
   if(type==='bottle'){
-    document.getElementById('pc'+C).textContent=`총 ${data.length}건`;
+    document.getElementById('pc'+C).textContent=`Total ${data.length}case`;
     pb.innerHTML=data.map(r=>`<tr><td>${r[0]||''}</td><td>${r[1]||''}</td><td class="sr-cell">${r[2]||''}</td><td>${r[3]||''}</td><td class="r">${r[4]||''}</td></tr>`).join('');
   }else{
     // Snow original format: B=Team(1), D=DDE(3), E=Customer(4), F=Outlet(5), G=SR(6), I=Area2(8)
@@ -598,7 +598,7 @@ function showPreview(type,data){
       const t26=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[23+i])||0),0);
       return t25===0&&t26>0;
     }).length;
-    document.getElementById('pc'+C).textContent=`총 ${data.length}건 (신규입점 ${newCount}건)`;
+    document.getElementById('pc'+C).textContent=`Total ${data.length}case (New listing ${newCount}case)`;
     pb.innerHTML=data.map(r=>{
       const t25=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[10+i])||0),0);
       const t26=SNOW_MO_NAMES.reduce((s,m,i)=>s+(Number(r[23+i])||0),0);
@@ -607,7 +607,7 @@ function showPreview(type,data){
         <td>${r[1]||''}</td><td class="sr-cell mu">${r[6]||''}</td><td>${r[5]||''}</td>
         <td class="mu">${r[3]||''}</td><td class="mu">${r[4]||''}</td><td class="mu">${r[8]||''}</td>
         <td class="r mu">${t25||'–'}</td><td class="r" style="color:var(--accent)">${t26||'–'}</td>
-        <td>${isNew?'<span class="badge bg">신규</span>':''}</td>
+        <td>${isNew?'<span class="badge bg">New</span>':''}</td>
       </tr>`;
     }).join('');
   }
@@ -615,9 +615,9 @@ function showPreview(type,data){
 }
 function confirmUpload(type){
   const data=type==='bottle'?parsedBottle:parsedSnow;
-  if(!data.length){alert('업로드된 데이터가 없습니다.');return;}
+  if(!data.length){alert('No uploaded data.');return;}
   const region=curRegion[type];
-  if(!region){alert('지점을 선택 후 업로드해주세요.');return;}
+  if(!region){alert('Please select a Branch before uploading.');return;}
   const d=getUD();
   const now=new Date().toISOString().slice(0,10);
   if(type==='bottle'){
@@ -629,7 +629,7 @@ function confirmUpload(type){
       rows.push({sr,outlet,month,qty});
     });
     d.bottle[region]={date:now,rows};
-    alert(`저장 완료: ${region} ${rows.length}건 반영`);
+    alert(`Save Done: ${region} ${rows.length}Apply case`);
   }else{
     const entries=[];
     data.forEach(r=>{
@@ -643,7 +643,7 @@ function confirmUpload(type){
       }
     });
     d.snow[region]={date:now,entries};
-    alert(`저장 완료: ${region} 신규입점 ${entries.length}건 반영`);
+    alert(`Save Done: ${region} New listing ${entries.length}Apply case`);
   }
   setUD(d);
   cancelPreview(type);
@@ -659,7 +659,7 @@ function cancelPreview(type){
   else parsedSnow=[];
 }
 
-// ===== 현황 다운로드 =====
+// ===== Status download =====
 function triggerXlsxDownload(wb, filename){
   const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
   const a=document.createElement('a');
@@ -673,16 +673,16 @@ function downloadCurrent(type){
   const today=new Date().toISOString().slice(0,10);
   if(type==='bottle'){
     const data=getMergedBottleOutlets().sort((a,b)=>a.team.localeCompare(b.team)||a.sr.localeCompare(b.sr)||a.outlet.localeCompare(b.outlet));
-    const hdr=['지점','SR','아울렛명','1월','2월','3월','합계'];
+    const hdr=['Branch','SR','Outlet name','1Month','2Month','3Month','Total'];
     const rows=data.map(d=>{const t=(d.m1||0)+(d.m2||0)+(d.m3||0);return[(d.team||''),(d.sr||''),(d.outlet||''),(d.m1||''),(d.m2||''),(d.m3||''),(t||'')];});
     const ws=XLSX.utils.aoa_to_sheet([hdr,...rows]);
     ws['!cols']=[{wch:10},{wch:18},{wch:32},{wch:7},{wch:7},{wch:7},{wch:8}];
-    XLSX.utils.book_append_sheet(wb,ws,'Bottle 현황');
-    triggerXlsxDownload(wb,'Bottle_현황_'+today+'.xlsx');
+    XLSX.utils.book_append_sheet(wb,ws,'Bottle status');
+    triggerXlsxDownload(wb,'Bottle_Status_'+today+'.xlsx');
   }else{
     const data=SNOW_ALL.slice().sort((a,b)=>a.region.localeCompare(b.region)||a.outlet.localeCompare(b.outlet));
     const h1=Array(35).fill('');h1[10]='2025Y';h1[23]='2026Y';
-    const h2=['','Team','Code','DDE','Customer','Outlet Name','Outlet SR','Area1 (시, 도)','Area2 (구, 시)','Area3 (상세주소)',...SNOW_MO_NAMES,'',...SNOW_MO_NAMES];
+    const h2=['','Team','Code','DDE','Customer','Outlet Name','Outlet SR','Area1 (City, Province)','Area2 (District, City)','Area3 (detailed Address)',...SNOW_MO_NAMES,'',...SNOW_MO_NAMES];
     const rows=data.map(d=>{
       const row=Array(35).fill('');
       row[1]=d.region;row[2]=d.code||'';row[3]=d.dde||'';row[4]=d.customer||'';
@@ -694,22 +694,22 @@ function downloadCurrent(type){
     const ws=XLSX.utils.aoa_to_sheet([h1,h2,...rows]);
     ws['!merges']=[{s:{r:0,c:10},e:{r:0,c:21}},{s:{r:0,c:23},e:{r:0,c:34}}];
     ws['!cols']=[{wch:2},{wch:10},{wch:8},{wch:14},{wch:22},{wch:30},{wch:14},{wch:14},{wch:12},{wch:24},...Array(12).fill({wch:6}),{wch:3},...Array(12).fill({wch:6})];
-    XLSX.utils.book_append_sheet(wb,ws,'전체현황');
-    triggerXlsxDownload(wb,'Snow_전체현황_'+today+'.xlsx');
+    XLSX.utils.book_append_sheet(wb,ws,'All Status');
+    triggerXlsxDownload(wb,'Snow_All Status_'+today+'.xlsx');
   }
 }
 
-// 이력 렌더
+// Render input
 function uHistRender(){
   renderBranchCards('bottle');
   renderBranchCards('snow');
 }
 function uDel(type,region){
-  if(!confirm(`${region} 업데이트를 삭제하시겠습니까?`))return;
+  if(!confirm(`${region} Delete this update??`))return;
   const d=getUD();delete d[type][region];setUD(d);renderBranchCards(type);applyAllUpdates();
 }
 
-// 초기화
+// Reset
 uHistRender();
 applyAllUpdates();
 </script>
