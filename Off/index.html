@@ -2120,7 +2120,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <button class="tab-btn" onclick="switchTab('rofo')" id="tab-btn-rofo">Rofo</button>
     <button class="tab-btn" onclick="switchTab('ytd')" id="tab-btn-ytd">YTD</button>
     <button class="tab-btn" onclick="switchTab('minutes')" id="tab-btn-minutes">Minutes</button>
-    <button class="tab-btn" onclick="switchTab('revenue')">Revenue</button>
     <button class="tab-btn" onclick="switchTab('sku')">SKU Detail</button>
     <button class="tab-btn" onclick="switchTab('sku-hist')">SKU History</button>
     <button class="tab-btn" onclick="switchTab('order')">Order Pattern</button>
@@ -2199,49 +2198,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </div>
     <div class="section-title" id="ytd-section-title">Off-Trade YTD — 채널 ▸ 거래처 (HL)</div>
     <div class="table-wrap"><table id="tbl-ytd-hl"></table></div>
-  </div>
-
-  <!-- Tab: Revenue -->
-  <div id="tab-revenue" class="tab-content">
-    <div id="rev-kpi-grid" class="kpi-grid"></div>
-    <div id="rev-fy-progress" class="kpi-grid" style="grid-template-columns:repeat(6,1fr);"></div>
-    <div id="rev-chart-wrap">
-      <div class="chart-grid">
-        <div class="chart-card">
-          <div class="chart-title">A. Branch YTD Attainment — Net Revenue SA Actual (MKRW)</div>
-          <div class="chart-wrap"><canvas id="chartRevA"></canvas></div>
-        </div>
-        <div class="chart-card">
-          <div class="chart-title">B. ON Total Monthly AP Target vs SA Net Revenue</div>
-          <div class="chart-wrap"><canvas id="chartRevB"></canvas></div>
-        </div>
-      </div>
-    </div>
-    <div class="section-title">Branch Net Revenue — AP Target vs SA Actual (MKRW)</div>
-    <div class="table-wrap"><table id="tbl-revenue"></table></div>
-
-    <!-- P&L Detail Table -->
-    <div style="display:flex;align-items:center;gap:16px;margin-top:28px;margin-bottom:0;flex-wrap:wrap;">
-      <div class="section-title" style="margin:0;">P&amp;L Detail — AP Target vs Actual (전 지점)</div>
-      <div class="filter-bar" style="margin:0;padding:0;border:none;background:none;">
-        <span><label style="font-size:12px;margin-right:4px;">기간</label>
-          <select id="rev-pl-from" onchange="renderRevenuePLTable()" style="font-size:12px;padding:3px 6px;">
-            <option value="0">Jan</option><option value="1">Feb</option><option value="2">Mar</option>
-            <option value="3">Apr</option><option value="4">May</option><option value="5">Jun</option>
-            <option value="6">Jul</option><option value="7">Aug</option><option value="8">Sep</option>
-            <option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option>
-          </select>
-          <span style="margin:0 4px;font-size:12px;">~</span>
-          <select id="rev-pl-to" onchange="renderRevenuePLTable()" style="font-size:12px;padding:3px 6px;">
-            <option value="0">Jan</option><option value="1">Feb</option><option value="2" selected>Mar</option>
-            <option value="3">Apr</option><option value="4">May</option><option value="5">Jun</option>
-            <option value="6">Jul</option><option value="7">Aug</option><option value="8">Sep</option>
-            <option value="9">Oct</option><option value="10">Nov</option><option value="11">Dec</option>
-          </select>
-        </span>
-      </div>
-    </div>
-    <div class="table-wrap" style="margin-top:10px;overflow-x:auto;"><table id="tbl-rev-pl" style="min-width:max-content;"></table></div>
   </div>
 
   <!-- Tab: SKU Detail -->

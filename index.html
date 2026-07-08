@@ -3548,11 +3548,21 @@ async function handleCombinedDsrUpload(input) {
     offData.rows = rows;
     offData.meta = offData.meta || {};
     offData.meta.actual_months = r2.actual_months;
+
+    // ── Order Pattern(주간/일별 발주) 재집계 — DSR raw Date 기준, 월 단위 증분 병합 ──
+    let opMonths = [];
+    try {
+      const op26 = OffIngest.parseDsrOrderPattern(wb, 2026);
+      offData.pattern = offData.pattern || {};
+      const opRes = OffIngest.applyOrderPatternToPattern(offData.pattern, op26);
+      opMonths = opRes.months || [];
+    } catch (opErr) { console.warn('Order Pattern 재집계 실패:', opErr); }
+
     const { error: upErr } = await _supabase.from('off_dashboard_snapshots')
       .upsert({ id: 1, data: offData, updated_at: new Date().toISOString() });
     if (upErr) throw new Error('Off 스냅샷 저장 실패: ' + upErr.message);
 
-    statusEl.textContent = `✓ 완료 — On ${onCnt.toLocaleString('ko-KR')}행 · Off 26Y ${res26.matched.toLocaleString('ko-KR')}행/25Y ${res25.matched.toLocaleString('ko-KR')}행 반영 (Off 실현월 ${r2.actual_months})`;
+    statusEl.textContent = `✓ 완료 — On ${onCnt.toLocaleString('ko-KR')}행 · Off 26Y ${res26.matched.toLocaleString('ko-KR')}행/25Y ${res25.matched.toLocaleString('ko-KR')}행 반영 (Off 실현월 ${r2.actual_months}${opMonths.length ? ' · OrderPattern 월 ' + opMonths.map(m=>m+1).join(',') : ''})`;
     statusEl.style.color = 'var(--positive)';
   } catch (err) {
     console.error('Combined DSR error:', err);

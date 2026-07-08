@@ -226,8 +226,96 @@
     return { offChannel, onTotal, onSku, onSkuBrand };
   }
 
+  // ── Order Pattern 재집계: DSR 라인아이템 → weekly_acct[ch][acct][월][주5], daily_acct[ch][acct][월][일] (HL) ──
+  //  Date 컬럼 기준. expectedYear만 집계. 반환 { weekly_acct, daily_acct, months, year }.
+  function parseDsrOrderPattern(wb, expectedYear) {
+    const sh = wb.Sheets[wb.SheetNames[0]];
+    const range = XLSX.utils.decode_range(sh['!ref']);
+    const cSeg  = _offFindColByHeader(sh, range, 'Segment');
+    const cGrp  = _offFindColByHeader(sh, range, 'Group');
+    const cDate = _offFindColByHeader(sh, range, 'Date');
+    const cHl   = _offFindColByHeader(sh, range, 'HL');
+    if (cGrp < 0 || cHl < 0 || cDate < 0) {   // Date 없으면 주/일별 집계 불가
+      console.warn('[OffIngest OrderPattern] Date/Group/HL 컬럼 누락 → 스킵 (Group=' + cGrp + ' HL=' + cHl + ' Date=' + cDate + ')');
+      return { weekly_acct: {}, daily_acct: {}, months: [], year: expectedYear };
+    }
+    const weekly = {}, daily = {};
+    const monthsSeen = new Set();
+    const _dim = (y, m) => new Date(y, m + 1, 0).getDate();
+    for (let R = range.s.r + 1; R <= range.e.r; R++) {
+      const seg = cSeg >= 0 ? _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSeg })]) : null;
+      const grp = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cGrp })]);
+      if (!grp) continue;
+      const chKey = seg ? _OFF_TR_CH_MAP[seg] : _OFF_GRP_CH[grp];
+      const acKey = _OFF_TR_AC_MAP[grp];
+      if (!chKey || !acKey) continue;   // On-Trade 지역 행 등 자동 스킵
+      const dCell = sh[XLSX.utils.encode_cell({ r: R, c: cDate })];
+      if (!dCell) continue;
+      let year, mi = -1, day = -1;
+      if (dCell.t === 'n') { const d = XLSX.SSF.parse_date_code(dCell.v); if (d) { year = d.y; mi = d.m - 1; day = d.d; } }
+      else if (dCell.t === 'd') { year = dCell.v.getFullYear(); mi = dCell.v.getMonth(); day = dCell.v.getDate(); }
+      if (mi < 0 || day < 1) continue;
+      if (expectedYear && year !== expectedYear) continue;
+      const hlN = _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cHl })]);
+      if (!hlN) continue;
+      const wk = Math.min(Math.max(Math.ceil(day / 7) - 1, 0), 4);   // 0-based, 5주 (1~7일→W1 …)
+      if (!weekly[chKey]) weekly[chKey] = {};
+      if (!weekly[chKey][acKey]) weekly[chKey][acKey] = Array.from({ length: 12 }, () => [0, 0, 0, 0, 0]);
+      weekly[chKey][acKey][mi][wk] += hlN;
+      if (!daily[chKey]) daily[chKey] = {};
+      if (!daily[chKey][acKey]) daily[chKey][acKey] = Array.from({ length: 12 }, () => []);
+      const arr = daily[chKey][acKey][mi];
+      const dim = _dim(year, mi);
+      while (arr.length < dim) arr.push(0);
+      arr[day - 1] = (arr[day - 1] || 0) + hlN;
+      monthsSeen.add(mi);
+    }
+    const months = [...monthsSeen].sort((a, b) => a - b);
+    console.log('[OffIngest OrderPattern] 연도 ' + expectedYear + ' / 커버월(0-based) [' + months.join(',') + '] / 채널 ' + Object.keys(weekly).join(','));
+    return { weekly_acct: weekly, daily_acct: daily, months, year: expectedYear };
+  }
+
+  // Order Pattern 결과를 기존 pattern에 **월 단위 병합**(mutate). res.months만 덮어쓰고 나머지 월 보존(증분).
+  //  대상 월은 기존 전 계정 0으로 초기화 후 새 값 반영 → 그 달 무주문 계정도 0이 됨(applyDsrToRows와 동일 규칙).
+  function applyOrderPatternToPattern(pattern, res) {
+    if (!pattern.weekly_acct || typeof pattern.weekly_acct !== 'object') pattern.weekly_acct = {};
+    if (!pattern.daily_acct  || typeof pattern.daily_acct  !== 'object') pattern.daily_acct  = {};
+    const months = res.months || [];
+    if (!months.length) return { months: [] };
+    const year = res.year || 2026;
+    const _dim = (m) => new Date(year, m + 1, 0).getDate();
+    // 1) 대상 월 zero-out (기존 모든 계정)
+    for (const ch in pattern.weekly_acct)
+      for (const ac in pattern.weekly_acct[ch]) {
+        const wa = pattern.weekly_acct[ch][ac]; if (!Array.isArray(wa)) continue;
+        for (const mi of months) wa[mi] = [0, 0, 0, 0, 0];
+      }
+    for (const ch in pattern.daily_acct)
+      for (const ac in pattern.daily_acct[ch]) {
+        const da = pattern.daily_acct[ch][ac]; if (!Array.isArray(da)) continue;
+        for (const mi of months) da[mi] = Array(_dim(mi)).fill(0);
+      }
+    // 2) 새 값 반영 (없던 조합은 신규 생성)
+    for (const ch in res.weekly_acct) {
+      if (!pattern.weekly_acct[ch]) pattern.weekly_acct[ch] = {};
+      for (const ac in res.weekly_acct[ch]) {
+        if (!Array.isArray(pattern.weekly_acct[ch][ac])) pattern.weekly_acct[ch][ac] = Array.from({ length: 12 }, () => [0, 0, 0, 0, 0]);
+        for (const mi of months) pattern.weekly_acct[ch][ac][mi] = res.weekly_acct[ch][ac][mi];
+      }
+    }
+    for (const ch in res.daily_acct) {
+      if (!pattern.daily_acct[ch]) pattern.daily_acct[ch] = {};
+      for (const ac in res.daily_acct[ch]) {
+        if (!Array.isArray(pattern.daily_acct[ch][ac])) pattern.daily_acct[ch][ac] = Array.from({ length: 12 }, () => []);
+        for (const mi of months) pattern.daily_acct[ch][ac][mi] = res.daily_acct[ch][ac][mi];
+      }
+    }
+    return { months };
+  }
+
   global.OffIngest = {
     parseDsrWorkbook, applyDsrToRows, parseVolumeRofo,
+    parseDsrOrderPattern, applyOrderPatternToPattern,
     _OFF_TR_CH_MAP, _OFF_TR_AC_MAP, _OFF_GRP_CH, _VOL_CH_MAP,
     _offFindColByHeader, _offCellStr, _offCellNum
   };
