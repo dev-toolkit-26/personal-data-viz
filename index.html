@@ -3572,7 +3572,7 @@ async function handleCombinedDsrUpload(input) {
     const REG = { 'Seoul':'Seoul','Seoul_East':'Seoul','Seoul_South':'Seoul','Seoul_West':'Seoul',
                   'Busan':'Busan','Daegu':'Daegu','Jeju':'Jeju','Daejeon':'Daejeon','Gwangju':'Gwangju','On_0.0':'On_0.0' };
     const ON_HDR = ['Month','Date','Week','Customer Group','NEW SKU','Volume in Case','Volume in Hectolitre','UnitsSold','Day'];
-    const onRows = [ON_HDR]; let onCnt = 0;
+    const onRows = [ON_HDR]; const onRowsAll = [ON_HDR]; let onCnt = 0;
     for (let i = 1; i < all.length; i++) {
       const r = all[i]; if (!r) continue;
       const team = r[iTeam] != null ? String(r[iTeam]).trim() : '';
@@ -3584,15 +3584,19 @@ async function handleCombinedDsrUpload(input) {
       if (/^ALSM/i.test(grp) || seg.toUpperCase() === 'ALSM') continue;
       const d = r[iDate]; if (!(d instanceof Date) || isNaN(d)) continue;
       if (d.getFullYear() !== 2026) continue;   // On Dashboard is on a 2026 basis — 2025 Excludes the row (prevents double-counting the current month)
-      if (d.getMonth() !== maxMon) continue;     // 최신월만 반영 (과거 마감월 보존)
       const cg = REG[grp] || grp;
       const wk = Math.ceil(d.getDate() / 7);
-      onRows.push([d.getMonth() + 1, d, wk, cg, r[iSku], r[iVol], r[iHl], r[iQty], d.getDate()]);
+      const rowArr = [d.getMonth() + 1, d, wk, cg, r[iSku], r[iVol], r[iHl], r[iQty], d.getDate()];
+      onRowsAll.push(rowArr);                     // 전체 2026 월 — Order Pattern용(YTD 파일이면 1~현재월 한번에 반영)
+      if (d.getMonth() !== maxMon) continue;      // 최신월만 반영 (지표·과거 마감월 보존)
+      onRows.push(rowArr);
       onCnt++;
     }
     statusEl.textContent = `On ${onCnt.toLocaleString('ko-KR')}Aggregating rows → applying to dashboard…`;
     await new Promise(r => setTimeout(r, 10));
     const dsrResult = _parseDsrRows(onRows, null);
+    // Order Pattern은 전체 월 기준으로 집계(YTD 파일=1~현재월 한번에) — 지표(regionHl·act_monthly 등)는 최신월만 유지
+    dsrResult.orderPattern = _parseDsrRows(onRowsAll, null).orderPattern;
     applyDataUpdate(null, dsrResult);
     _upReRenderAll();
     const tsEl = document.getElementById('upload-ts'); if (tsEl) tsEl.textContent = 'Last Updated: ' + new Date().toLocaleString('ko-KR');
