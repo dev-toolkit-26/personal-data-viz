@@ -3514,6 +3514,14 @@ async function handleCombinedDsrUpload(input) {
     if (iTeam < 0 || iGrp < 0 || iSku < 0 || iHl < 0 || iDate < 0)
       throw new Error('Consolidated file column missing (check Team/Group/Date/NEW SKU/HL)');
 
+    // ── 최신월만 반영 안전장치: 파일에 여러 월이 섞여 있어도 '가장 최신 2026 월'만 적용 → 과거 마감월은 절대 덮어쓰지 않음 ──
+    const _MON_NM = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let maxMon = -1;
+    for (let i = 1; i < all.length; i++) {
+      const d = all[i] && all[i][iDate];
+      if (d instanceof Date && !isNaN(d) && d.getFullYear() === 2026) { const m = d.getMonth(); if (m > maxMon) maxMon = m; }
+    }
+
     // ── On feed: Team=Synthesize the On row into On raw format → Reuse the existing parser core ──
     const REG = { 'Seoul':'Seoul','Seoul_East':'Seoul','Seoul_South':'Seoul','Seoul_West':'Seoul',
                   'Busan':'Busan','Daegu':'Daegu','Jeju':'Jeju','Daejeon':'Daejeon','Gwangju':'Gwangju','On_0.0':'On_0.0' };
@@ -3530,6 +3538,7 @@ async function handleCombinedDsrUpload(input) {
       if (/^ALSM/i.test(grp) || seg.toUpperCase() === 'ALSM') continue;
       const d = r[iDate]; if (!(d instanceof Date) || isNaN(d)) continue;
       if (d.getFullYear() !== 2026) continue;   // On Dashboard is on a 2026 basis — 2025 Excludes the row (prevents double-counting the current month)
+      if (d.getMonth() !== maxMon) continue;     // 최신월만 반영 (과거 마감월 보존)
       const cg = REG[grp] || grp;
       const wk = Math.ceil(d.getDate() / 7);
       onRows.push([d.getMonth() + 1, d, wk, cg, r[iSku], r[iVol], r[iHl], r[iQty], d.getDate()]);
@@ -3548,6 +3557,7 @@ async function handleCombinedDsrUpload(input) {
     await new Promise(r => setTimeout(r, 10));
     const res26 = OffIngest.parseDsrWorkbook(wb, 2026);
     const res25 = OffIngest.parseDsrWorkbook(wb, 2025);
+    if (maxMon >= 0) res26.months = (res26.months || []).filter(m => m === maxMon);   // 최신월만 반영 (과거 마감월 보존)
     const { data: offRow, error: offErr } = await _supabase.from('off_dashboard_snapshots').select('data').eq('id', 1).single();
     if (offErr) throw new Error('Off Failed to read snapshot: ' + offErr.message);
     const offData = (offRow && offRow.data) || {};
@@ -3562,6 +3572,7 @@ async function handleCombinedDsrUpload(input) {
     let opMonths = [];
     try {
       const op26 = OffIngest.parseDsrOrderPattern(wb, 2026);
+      if (maxMon >= 0) op26.months = (op26.months || []).filter(m => m === maxMon);   // 최신월만 반영
       offData.pattern = offData.pattern || {};
       const opRes = OffIngest.applyOrderPatternToPattern(offData.pattern, op26);
       opMonths = opRes.months || [];
@@ -3571,7 +3582,7 @@ async function handleCombinedDsrUpload(input) {
       .upsert({ id: 1, data: offData, updated_at: new Date().toISOString() });
     if (upErr) throw new Error('Off Snapshot save failed: ' + upErr.message);
 
-    statusEl.textContent = `✓ Done — On ${onCnt.toLocaleString('ko-KR')}rows · Off 26Y ${res26.matched.toLocaleString('ko-KR')}row/25Y ${res25.matched.toLocaleString('ko-KR')}Apply row (Off realized month ${r2.actual_months}${opMonths.length ? ' · OrderPattern Month ' + opMonths.map(m=>m+1).join(',') : ''})`;
+    statusEl.textContent = `✓ Done — 적용월 ${maxMon >= 0 ? _MON_NM[maxMon] : '-'}만 반영(과거 마감월 보존) · On ${onCnt.toLocaleString('ko-KR')}rows · Off 26Y ${res26.matched.toLocaleString('ko-KR')}row/25Y ${res25.matched.toLocaleString('ko-KR')}Apply row (Off realized month ${r2.actual_months}${opMonths.length ? ' · OrderPattern Month ' + opMonths.map(m=>m+1).join(',') : ''})`;
     statusEl.style.color = 'var(--positive)';
   } catch (err) {
     console.error('Combined DSR error:', err);
