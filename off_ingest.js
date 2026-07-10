@@ -66,9 +66,9 @@
     const cSku  = _offFindColByHeader(sh, range, 'New SKU', 'NEW SKU');
     const cDate = _offFindColByHeader(sh, range, 'Date');
     const cMon  = _offFindColByHeader(sh, range, 'Month');
-    const cHl   = _offFindColByHeader(sh, range, 'HL');
-    const cQty  = _offFindColByHeader(sh, range, 'Qty');
-    const cNsv  = _offFindColByHeader(sh, range, 'NSV');
+    const cHl   = _offFindColByHeader(sh, range, 'HL', 'Volume in Hectolitre');   // 원본 raw 헤더 별칭
+    const cQty  = _offFindColByHeader(sh, range, 'Qty', 'UnitsSold');
+    const cNsv  = _offFindColByHeader(sh, range, 'NSV', 'Net Value');
     if (cGrp < 0 || cSku < 0 || cHl < 0 || (cDate < 0 && cMon < 0)) {
       throw new Error('필수 컬럼 누락: Group=' + cGrp + ' SKU=' + cSku + ' HL=' + cHl + ' Date=' + cDate + ' Month=' + cMon);
     }
@@ -234,7 +234,7 @@
     const cSeg  = _offFindColByHeader(sh, range, 'Segment');
     const cGrp  = _offFindColByHeader(sh, range, 'Group');
     const cDate = _offFindColByHeader(sh, range, 'Date');
-    const cHl   = _offFindColByHeader(sh, range, 'HL');
+    const cHl   = _offFindColByHeader(sh, range, 'HL', 'Volume in Hectolitre');   // 원본 raw 헤더 별칭
     if (cGrp < 0 || cHl < 0 || cDate < 0) {   // Date 없으면 주/일별 집계 불가
       console.warn('[OffIngest OrderPattern] Date/Group/HL 컬럼 누락 → 스킵 (Group=' + cGrp + ' HL=' + cHl + ' Date=' + cDate + ')');
       return { weekly_acct: {}, daily_acct: {}, months: [], year: expectedYear };

@@ -3499,9 +3499,18 @@ async function handleCombinedDsrUpload(input) {
     const ws  = wb.Sheets[wb.SheetNames[0]];
     const all = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
     const H = (all[0] || []).map(h => h != null ? String(h).trim() : '');
-    const ix = n => H.indexOf(n);
-    const iTeam = ix('Team'), iGrp = ix('Group'), iSeg = ix('Segment'), iDate = ix('Date'), iSku = ix('NEW SKU'),
-          iVol = ix('Vol'), iHl = ix('HL'), iQty = ix('Qty');
+    // 원본(raw) DSR 헤더 별칭 지원 — Customer.Team/Customer Group/Volume in Hectolitre 등도 그대로 업로드
+    // (정규화: 소문자·공백제거 후 완전일치 우선, 없으면 부분포함으로 폴백)
+    const _nrm = s => String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, '');
+    const ix = (...names) => {
+      const N = names.map(_nrm);
+      for (let i = 0; i < H.length; i++) { if (N.includes(_nrm(H[i]))) return i; }              // 완전일치
+      for (let i = 0; i < H.length; i++) { const h = _nrm(H[i]); if (N.some(n => n.length >= 4 && h.includes(n))) return i; }  // 부분포함
+      return -1;
+    };
+    const iTeam = ix('Team', 'Customer.Team'), iGrp = ix('Group', 'Customer Group'), iSeg = ix('Segment', 'Customer.Segment'),
+          iDate = ix('Date'), iSku = ix('NEW SKU', 'New SKU'),
+          iVol = ix('Vol', 'Volume in Case'), iHl = ix('HL', 'Volume in Hectolitre'), iQty = ix('Qty', 'UnitsSold');
     if (iTeam < 0 || iGrp < 0 || iSku < 0 || iHl < 0 || iDate < 0)
       throw new Error('Consolidated file column missing (check Team/Group/Date/NEW SKU/HL)');
 
