@@ -9670,8 +9670,10 @@ function parseFcstWeeklyWorkbook(wb, fileName){
     const a1 = String(ws['A1']?.v||'').trim().toLowerCase();
     const a2 = String(ws['A2']?.v||'').trim().toLowerCase();
     if(a1!=='month' || a2!=='account'){ skipped.push({sheet:sn, reason:'Not a valid format'}); continue; }
-    const resolved = _resolveOffAccountBySheet(sn);
-    if(!resolved){ skipped.push({sheet:sn, reason:'No Account mapping'}); continue; }
+    // 계정 인식: 시트명 우선, 실패하면 B2(Account 값)로도 시도 — 시트명 미스 대비
+    let resolved = _resolveOffAccountBySheet(sn);
+    if(!resolved){ const b2 = ws['B2']?.v; if(b2 != null && String(b2).trim()) resolved = _resolveOffAccountBySheet(String(b2)); }
+    if(!resolved){ skipped.push({sheet:sn, reason:'No Account mapping (sheet name·B2 both unrecognized)'}); continue; }
     const monthIdx = _parseMonthName(ws['B1']?.v);
     if(monthIdx < 0){ skipped.push({sheet:sn, reason:'Month recognition failed'}); continue; }
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
