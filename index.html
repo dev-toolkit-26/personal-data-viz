@@ -2995,6 +2995,51 @@ function _parseDsrRows(rows, fcstMonth = null) {
            monthlyTtlHl, monthlyRegionHl, monthsSeen: [...monthsSeen] };
 }
 
+// On order_pattern은 업로드마다 통째 교체되어 최신 파일에 없는 과거월이 사라진다.
+// Off(applyOrderPatternToPattern)처럼 '월 단위로 병합'해 과거월을 보존한다.
+// 규칙: 새 파일에 들어있는 월 → 새 값으로 대체, 그 외 월 → 기존 값 유지. daily(당월 상세)는 새 값 사용.
+function _upMergeOrderPatternMonths(oldOP, newOP) {
+  if (!oldOP || !Array.isArray(oldOP.weekly_labels) || !oldOP.weekly_labels.length) return newOP;
+  if (!newOP || !Array.isArray(newOP.weekly_labels)) return oldOP;
+  const monOf = lbl => _UP_MONTH_NUM[String(lbl).split(' ')[0]] || 0;
+  const wkOf  = lbl => { const p = String(lbl).split(' ')[1]; return p ? (parseInt(p.replace('W','')) || 0) : 0; };
+  const newMonths = new Set((newOP.weekly_labels || []).map(monOf));
+  const groups = Array.from(new Set([...(oldOP.groups || []), ...(newOP.groups || [])])).sort();
+  const skus   = Array.from(new Set([...(oldOP.skus   || []), ...(newOP.skus   || [])])).sort();
+  const cols = [];   // { mon, wk, label, i, src }
+  (oldOP.weekly_labels || []).forEach((lbl, i) => {
+    const mon = monOf(lbl); if (newMonths.has(mon)) return;   // 새 파일에 있는 월은 old를 버림(대체)
+    cols.push({ mon, wk: wkOf(lbl), label: lbl, i, src: 'old' });
+  });
+  (newOP.weekly_labels || []).forEach((lbl, i) => {
+    cols.push({ mon: monOf(lbl), wk: wkOf(lbl), label: lbl, i, src: 'new' });
+  });
+  cols.sort((a, b) => a.mon - b.mon || a.wk - b.wk);
+  function buildWeekly(oldSeries, newSeries) {
+    const out = {};
+    for (const g of groups) {
+      out[g] = {};
+      for (const sk of skus) {
+        out[g][sk] = cols.map(c => {
+          const src = c.src === 'new' ? newSeries : oldSeries;
+          return (src && src[g] && src[g][sk] && src[g][sk][c.i]) || 0;
+        });
+      }
+    }
+    return out;
+  }
+  const useNewDaily = newOP.daily_labels && newOP.daily_labels.length;
+  return {
+    groups, skus,
+    weekly_labels: cols.map(c => c.label),
+    daily_labels: useNewDaily ? newOP.daily_labels : (oldOP.daily_labels || []),
+    weekly_hl:  buildWeekly(oldOP.weekly_hl  || {}, newOP.weekly_hl  || {}),
+    weekly_qty: buildWeekly(oldOP.weekly_qty || {}, newOP.weekly_qty || {}),
+    daily_hl:  useNewDaily ? (newOP.daily_hl  || {}) : (oldOP.daily_hl  || {}),
+    daily_qty: useNewDaily ? (newOP.daily_qty || {}) : (oldOP.daily_qty || {}),
+  };
+}
+
 function _upUpdateFcstEntry(entry, newFcst, mtdKey, preserveLastWk, monthChanged) {
   mtdKey = mtdKey || 'mtd_actual';
   const oldThis = entry.this_week_fcst;
@@ -3311,7 +3356,7 @@ function applyDataUpdate(fcstResult, dsrResult) {
       }
     }
 
-    D.order_pattern = orderPattern;
+    D.order_pattern = _upMergeOrderPatternMonths(D.order_pattern, orderPattern);   // 월 단위 병합(과거월 보존) — Off와 동일
   }
 }
 
