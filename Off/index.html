@@ -7411,11 +7411,9 @@ function _currentOwner() { return sessionStorage.getItem('auth_label') || ''; }
 function _isAdmin()      { return sessionStorage.getItem('auth_admin') === 'ok'; }
 
 function switchTabUpdate() {
-  if (sessionStorage.getItem('auth_admin') === 'ok') {
-    _doSwitchToUpdate();
-  } else {
-    document.getElementById('upload-pw-overlay').style.display = 'flex';
-  }
+  // Off Data Update는 로그인한 모든 사용자에게 개방 (별도 admin 권한 불필요)
+  // — 서버 저장(off_dashboard_snapshots)도 open_all RLS라 클라이언트 게이트만 제거하면 됨.
+  _doSwitchToUpdate();
 }
 function cancelUploadPw() {
   document.getElementById('upload-pw-overlay').style.display = 'none';
