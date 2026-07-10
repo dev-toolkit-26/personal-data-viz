@@ -3597,6 +3597,15 @@ async function handleCombinedDsrUpload(input) {
     const dsrResult = _parseDsrRows(onRows, null);
     // Order Pattern은 전체 월 기준으로 집계(YTD 파일=1~현재월 한번에) — 지표(regionHl·act_monthly 등)는 최신월만 유지
     dsrResult.orderPattern = _parseDsrRows(onRowsAll, null).orderPattern;
+    // Off와 동일하게: 최신 저장본(order_pattern)을 DB에서 다시 읽어 병합 base로 합침
+    // → 세션/메모리가 최신월만 갖고 있어도(단일월 파일) 저장돼 있던 과거월이 유실되지 않음.
+    try {
+      const { data: onSnap } = await _supabase.from('dashboard_snapshots').select('data').eq('id', 1).single();
+      const persistedOP = onSnap && onSnap.data && onSnap.data.order_pattern;
+      if (persistedOP && Array.isArray(persistedOP.weekly_labels) && persistedOP.weekly_labels.length) {
+        DASHBOARD_DATA.order_pattern = _upMergeOrderPatternMonths(DASHBOARD_DATA.order_pattern, persistedOP);
+      }
+    } catch (e) { console.warn('order_pattern persisted-reload for merge failed:', e); }
     applyDataUpdate(null, dsrResult);
     _upReRenderAll();
     const tsEl = document.getElementById('upload-ts'); if (tsEl) tsEl.textContent = 'Last Updated: ' + new Date().toLocaleString('ko-KR');
