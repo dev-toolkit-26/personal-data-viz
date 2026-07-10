@@ -2426,6 +2426,7 @@ const _UP_DASH_REGIONS = ["Seoul","Busan","DaeGu & JeJu","DaeJeon","GwangJu"];
 const _HL_DISPLAY_ORDER = ['TTL', 'Seoul', 'Busan', 'DaeGu & JeJu', 'DaeJeon', 'GwangJu'];
 const _UP_EXCLUDE = new Set(["On_0.0"]);
 const _UP_MONTH_NAMES = {1:"Jan",2:"Feb",3:"Mar",4:"Apr",5:"May",6:"Jun",7:"Jul",8:"Aug",9:"Sep",10:"Oct",11:"Nov",12:"Dec"};
+const _UP_MONTH_NUM = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
 const _UP_FCST_MONTH = 4;
 function _upGetFcstMonth() { return DASHBOARD_DATA?.wk_meta?.month || _UP_FCST_MONTH; }
 // FCST Excel SKUname → dashboard SKU name conversion (used when names differ across sources)
@@ -8850,10 +8851,73 @@ function _opRenderDailySmallMultiples(seriesData, labels, group, sku, unit, unit
   });
 }
 
+// Off-Trade format: expand order_pattern to the full calendar range at render time.
+//   weekly = Jan-W1 through the latest month present (all weeks), daily = day 1..last day of the month.
+// Existing series are positional to op.weekly_labels/op.daily_labels, so remap by matching label text.
+// Works on already-stored data (no re-upload needed); missing weeks/days render as 0.
+function _opFullRangeView(op) {
+  const fm = _upGetFcstMonth();
+  // Weekly full range
+  let maxMon = fm, maxWk = 5;
+  (op.weekly_labels || []).forEach(function(lbl) {
+    const parts = String(lbl).split(' ');
+    const moNum = _UP_MONTH_NUM[parts[0]];
+    const wk = parseInt((parts[1] || '').replace('W', ''));
+    if (moNum && moNum > maxMon) maxMon = moNum;
+    if (isFinite(wk) && wk > maxWk) maxWk = wk;
+  });
+  const weeklyLabels = [], weeklyIdx = {};
+  for (let mo = 1; mo <= maxMon; mo++) {
+    for (let wk = 1; wk <= maxWk; wk++) {
+      const lbl = (_UP_MONTH_NAMES[mo] || ('M' + mo)) + ' W' + wk;
+      weeklyIdx[lbl] = weeklyLabels.length;
+      weeklyLabels.push(lbl);
+    }
+  }
+  // Daily full range — month from stored daily labels (else fcst month)
+  let dMon = fm;
+  if (op.daily_labels && op.daily_labels.length) {
+    const p = parseInt(String(op.daily_labels[0]).split('/')[0]);
+    if (isFinite(p)) dMon = p;
+  }
+  const daysInMon = new Date(2026, dMon, 0).getDate();
+  const dailyLabels = [], dailyIdx = {};
+  for (let d = 1; d <= daysInMon; d++) {
+    const lbl = String(dMon).padStart(2, '0') + '/' + String(d).padStart(2, '0');
+    dailyIdx[lbl] = dailyLabels.length;
+    dailyLabels.push(lbl);
+  }
+  function remap(series, oldLabels, idxMap, newLen) {
+    const out = {};
+    for (const g in (series || {})) {
+      out[g] = {};
+      for (const sk in series[g]) {
+        const arr = new Array(newLen).fill(0);
+        const old = series[g][sk] || [];
+        for (let i = 0; i < oldLabels.length; i++) {
+          const ni = idxMap[oldLabels[i]];
+          if (ni != null) arr[ni] = old[i] || 0;
+        }
+        out[g][sk] = arr;
+      }
+    }
+    return out;
+  }
+  return {
+    groups: op.groups, skus: op.skus,
+    weekly_labels: weeklyLabels, daily_labels: dailyLabels,
+    weekly_hl:  remap(op.weekly_hl,  op.weekly_labels || [], weeklyIdx, weeklyLabels.length),
+    weekly_qty: remap(op.weekly_qty, op.weekly_labels || [], weeklyIdx, weeklyLabels.length),
+    daily_hl:   remap(op.daily_hl,   op.daily_labels  || [], dailyIdx,  dailyLabels.length),
+    daily_qty:  remap(op.daily_qty,  op.daily_labels  || [], dailyIdx,  dailyLabels.length),
+  };
+}
+
 function renderOrderPattern() {
-  const op = DASHBOARD_DATA.order_pattern;
-  if (!op) { console.warn('No order_pattern'); return; }
+  const opRaw = DASHBOARD_DATA.order_pattern;
+  if (!opRaw) { console.warn('No order_pattern'); return; }
   _opInitFilters();
+  const op = _opFullRangeView(opRaw);   // Off-Trade format: full Jan~ weekly + full-month daily
 
   const group = document.getElementById('op-group').value;
   const sku   = document.getElementById('op-sku').value;
