@@ -5104,7 +5104,7 @@ function renderOffRofoSheet(){
       + '<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">Act '+_offFmt(chAct)+' / RoFo '+_offFmt(chRofo)+' HL</div></div>');
     sections.push('<div class="section-title" style="margin-top:14px;">'+(ch.label||ch.key)+' — <span style="color:'+_offAchColor(chAch)+'">'+_offFmtPct(chAch)+'</span> · '+monName+' RoFo <b>'+_offFmt(chRofo)+'</b> / Actual '+_offFmt(chAct)+' HL (Channel RoFo=P07)</div>'
       + '<div class="table-wrap"><table style="width:100%"><thead><tr>'
-      + '<th style="text-align:left">Account</th><th>'+monName+' Actual</th><th>\''+monName+' 25</th><th>YoY%</th><th style="text-align:left;width:45%">Comment</th>'
+      + '<th style="text-align:left">Account</th><th style="text-align:right">'+monName+' Actual</th><th style="text-align:right">\''+monName+' 25</th><th style="text-align:right">YoY%</th><th style="text-align:left;width:45%">Comment</th>'
       + '</tr></thead><tbody>'+rows+'</tbody></table></div>');
   });
   const sumEl=document.getElementById('off-rofo-summary'); if(sumEl) sumEl.innerHTML=sumCards.join('');
