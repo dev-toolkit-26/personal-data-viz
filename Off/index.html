@@ -405,7 +405,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
   align-items: stretch;
 }
 .fcst-acct-card {
-  flex: 0 0 515px; min-width: 515px; max-width: 515px;          /* W1~W5 + vsRoFo + LM + LY + SKU Name */
+  flex: 0 0 515px; min-width: 515px; max-width: 515px;          /* W1~W5 + vsRoFo(Total only) + LM + LY + SKU Name */
   background: #fff; border-radius: 8px; padding: 10px;
   box-shadow: 0 1px 2px rgba(0,0,0,.04); border-top: 3px solid var(--accent);
 }
@@ -5469,7 +5469,7 @@ function renderFcstSkuVsLmLy(){
       }
       const cellVsRofo = cellRo ? cellFc / cellRo : null;   // Cell FCST ÷ Cell RoFo (SKU total)
 
-      let h = `<div class="fcst-acct-card ${klass}"><div class="fcst-acct-title">${cell.name}${cellVsRofo!=null?` · <span style="font-weight:600;color:#9e1310;">FCST/RoFo ${(cellVsRofo*100).toFixed(0)}%</span>`:''}</div>`;
+      let h = `<div class="fcst-acct-card ${klass}"><div class="fcst-acct-title">${cell.name}${(klass==='total' && cellVsRofo!=null)?` · <span style="font-weight:600;color:#9e1310;">FCST/RoFo ${(cellVsRofo*100).toFixed(0)}%</span>`:''}</div>`;
       h += `<div class="issue-item" style="border-bottom:1px solid #e5e7eb;padding:0 0 3px;margin-bottom:2px;font-size:9px;color:#9ca3af;font-weight:600;">
         <span class="issue-sku"></span>
         <span class="issue-ref-w">W1</span>
@@ -5477,7 +5477,7 @@ function renderFcstSkuVsLmLy(){
         <span class="issue-ref-w">W3</span>
         <span class="issue-ref-w">W4</span>
         <span class="issue-ref-w">W5</span>
-        <span class="issue-ref" style="color:#9e1310;">vs RoFo</span>
+        ${klass==='total'?`<span class="issue-ref" style="color:#9e1310;">vs RoFo</span>`:''}
         <span class="issue-ref">LM</span>
         <span class="issue-ref">LY</span>
       </div>`;
@@ -5506,7 +5506,7 @@ function renderFcstSkuVsLmLy(){
         return `<div class="issue-item"${klass ? ` style="${klass}"`:''}${isBrand ? ' onclick="toggleFcstBrand(this)"':''}>
           <span class="issue-sku" title="${label}" style="${skuStyle}">${labelHtml}</span>
           ${wCells}
-          <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.ro)}</span><span style="color:${vsRofoCol};font-weight:600;">${vsRofo==null?'—':(vsRofo*100).toFixed(0)+'%'}</span></span>
+          ${klass==='total'?`<span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.ro)}</span><span style="color:${vsRofoCol};font-weight:600;">${vsRofo==null?'—':(vsRofo*100).toFixed(0)+'%'}</span></span>`:''}
           <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.prev)}</span>${fmtPct(lmPct)}</span>
           <span class="issue-ref"><span class="issue-ref-hl">${fmtHL(v.ly)}</span>${fmtPct(lyPct)}</span>
         </div>`;
