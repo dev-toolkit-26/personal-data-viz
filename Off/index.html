@@ -2498,7 +2498,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
         <div id="off-fcst-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em;line-height:1.6"></div>
         <!-- Confirm the Account being uploaded -->
         <div style="margin-top:16px;">
-          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">📋 FCST upload status by Account <span style="font-weight:400;color:var(--text-muted);font-size:11px;">(Uploaded if there is a FCST value in the forecast month ✓)</span></div>
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">📋 FCST upload status by SR <span style="font-weight:400;color:var(--text-muted);font-size:11px;">(담당 SR별 · 업로드 주차 기준 · 🟢 = 이번 주 갱신 / 🟠 = 과거 주 / ○ = 미업로드)</span></div>
           <div id="off-fcst-accounts" style="font-size:11px;"></div>
         </div>
       </div>
@@ -9276,6 +9276,17 @@ const _OFF_FCST_ACCOUNTS = [
   {ch:'SM',acct:'Express',sheet:'Express'},
   {ch:'ALSM',acct:'ALSM',sheet:'ALSM'},
 ];
+// account별 담당 SR (owner). '' = 미지정. 인사 변동 시 여기만 수정.
+// 채널키/계정키는 _OFF_FCST_ACCOUNTS(=weekly_fcst·fcst_meta 키)와 동일해야 함.
+const _OFF_FCST_OWNERS = {
+  CVS:   { GS25:'김한준', CU:'전병권', K7:'이용주', E24:'전병권', Cspace:'전병권' },
+  HYPER: { 'E-mart':'박찬국', Lottemart:'정다정', Kimsclub:'정다정', Megamart:'박기태', Homeplus:'박기태' },
+  UNION: { Hanaro:'정다정' },
+  'C&C': { Costco:'박기태', 'E-Traders':'박찬국', Lottemaxx:'정다정' },
+  SM:    { 'GS Super':'박기태', 'Lotte Super':'정다정', Everyday:'박찬국', Nobrand:'박찬국', Seowon:'최지수', Korail:'전병권', Express:'박기태' },
+  ALSM:  { ALSM:'박세일' },
+};
+function _offOwnerOf(chKey, acctKey){ return (_OFF_FCST_OWNERS[chKey] && _OFF_FCST_OWNERS[chKey][acctKey]) || ''; }
 // Columns by series: G..R = 25Y, U..AF = 26 AP, AI..AT = 26 RoFo
 const _OFF_LY_COLS   = ['G','H','I','J','K','L','M','N','O','P','Q','R'];
 const _OFF_AP_COLS   = ['U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF'];
@@ -9748,6 +9759,12 @@ function _offApplyWeeklyToData(data, fcstUpdates){
       if(!wf[u.ch]) wf[u.ch] = {};
       if(!wf[u.ch][u.acct]) wf[u.ch][u.acct] = {};
       wf[u.ch][u.acct][u.monthIdx] = acctWeeks;
+      // per-account 업로드 메타(시각·ISO주차) 기록 — "이번 주 SR 갱신 여부" 추적용. 올라온 계정만 스탬프.
+      if(!data.pattern.fcst_meta || typeof data.pattern.fcst_meta !== 'object') data.pattern.fcst_meta = {};
+      const fm = data.pattern.fcst_meta;
+      if(!fm[u.ch]) fm[u.ch] = {};
+      const _now = new Date();
+      fm[u.ch][u.acct] = { updated_at: _now.toISOString(), week: _isoWeek(_now), monthIdx: u.monthIdx };
     }
   }
   return { updated, added };
@@ -9843,6 +9860,14 @@ async function offHandleFcstWeeklyUpload(input){
   input.value = '';
 }
 
+// ISO 8601 week number (Mon-based). 업로드 시각의 캘린더 주차 산출용.
+function _isoWeek(d){
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  return Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+}
 // Forecast month (fcst_m last month with data) index
 function _offFcstMonthIdx(){
   const tf = (OFF.total && OFF.total.fcst_m) || [];
@@ -9850,26 +9875,63 @@ function _offFcstMonthIdx(){
   return (_OFF_ACT_MONTHS || 6);
 }
 
-// Check accounts being uploaded: show whether a forecast-month FCST exists per account as chips (✓ Uploaded / ○ not uploaded)
+// 담당 SR별로 계정 업로드 현황을 그룹핑해서 표시.
+// 각 계정: 예측월 FCST 값 존재 + 마지막 업로드 ISO 주차 → 🟢 이번주 / 🟠 과거주 / 이력없음 / 미업로드.
+// "이번주 갱신" = 예측월 값 있고, 마지막 업로드가 이번 ISO 주차에 이뤄짐(= 담당 SR이 이번 주에 올림).
 function _offRenderFcstAccountCheck(){
   const el = document.getElementById('off-fcst-accounts'); if(!el) return;
   const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const mi = _offFcstMonthIdx();
-  let done=0, total=0, html='';
+  const fmeta = (window.OFF_SEED && OFF_SEED.pattern && OFF_SEED.pattern.fcst_meta) || {};
+  const curWk = _isoWeek(new Date());
+  // 계정을 담당 SR 버킷으로 수집 ('미지정'은 항상 맨 뒤)
+  const buckets = {}; const order = [];
   (OFF.channels||[]).forEach(function(ch){
-    const accs = (ch.accounts||[]).filter(function(a){ return (a.skus||[]).length; });
-    if(!accs.length) return;
-    const chips = accs.map(function(a){
-      total++;
+    (ch.accounts||[]).forEach(function(a){
+      if(!(a.skus||[]).length) return;
+      const owner = _offOwnerOf(ch.key, a.name) || '미지정';
+      if(!buckets[owner]){ buckets[owner] = {accts:[], thisWk:0, total:0}; if(owner!=='미지정') order.push(owner); }
+      const b = buckets[owner];
       const fc = (a.m && a.m.fcst_m && a.m.fcst_m[mi]) || 0;
-      const ok = fc > 0.001; if(ok) done++;
-      const c = ok ? '#16a34a' : '#9ca3af', bg = ok ? 'rgba(22,163,74,.1)' : 'rgba(0,0,0,.04)';
-      return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;border:1px solid '+c+';background:'+bg+';color:'+c+';font-weight:600;margin:2px;">'
-        + (ok?'✓':'○') + ' ' + a.name + (ok?' <span style="font-weight:400;opacity:.75;">'+Math.round(fc)+' HL</span>':'') + '</span>';
-    }).join('');
-    html += '<div style="margin-bottom:8px;"><div style="font-size:10.5px;color:var(--text-muted);font-weight:700;margin-bottom:3px;">'+(ch.label||ch.key)+'</div><div style="display:flex;flex-wrap:wrap;">'+chips+'</div></div>';
+      const ok = fc > 0.001;
+      const meta = (fmeta[ch.key] && fmeta[ch.key][a.name]) || null;
+      const wk = meta ? meta.week : null;
+      const isThis = ok && !!meta && wk === curWk;
+      b.total++; if(isThis) b.thisWk++;
+      b.accts.push({name:a.name, ok:ok, meta:meta, wk:wk, isThis:isThis});
+    });
   });
-  el.innerHTML = '<div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);">'+(monNames[mi]||'')+' Forecast month · <b style="color:var(--primary);">'+done+'/'+total+'</b> Account uploaded</div>' + (html || '<span style="color:var(--text-muted);">No account data</span>');
+  if(buckets['미지정']) order.push('미지정');
+  let doneThis=0, total=0;
+  order.forEach(function(o){ doneThis += buckets[o].thisWk; total += buckets[o].total; });
+  const fmtDate = function(iso){ try{ const d=new Date(iso); return monNames[d.getMonth()]+' '+d.getDate(); }catch(e){ return ''; } };
+  let html='';
+  order.forEach(function(owner){
+    const b = buckets[owner];
+    const dot = b.thisWk===b.total ? '🟢' : (b.thisWk===0 ? '🔴' : '🟠');
+    const nameColor = owner==='미지정' ? 'var(--text-muted)' : 'var(--text)';
+    const chips = b.accts.map(function(a){
+      let c, bg, icon, extra;
+      if(a.isThis){
+        c='#16a34a'; bg='rgba(22,163,74,.1)'; icon='✓'; extra='W'+a.wk+' 🟢 '+fmtDate(a.meta.updated_at);
+      } else if(a.ok && a.meta){
+        const ago = Math.max(0, curWk - a.wk);
+        c='#d97706'; bg='rgba(217,119,6,.1)'; icon='✓'; extra='W'+a.wk+' 🟠'+(ago>0?(' '+ago+'주전'):'')+' · '+fmtDate(a.meta.updated_at);
+      } else if(a.ok){
+        c='#9ca3af'; bg='rgba(0,0,0,.04)'; icon='✓'; extra='이력없음';
+      } else {
+        c='#9ca3af'; bg='rgba(0,0,0,.04)'; icon='○'; extra='미업로드';
+      }
+      return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:12px;border:1px solid '+c+';background:'+bg+';color:'+c+';font-weight:600;margin:2px;">'
+        + icon + ' ' + a.name + ' <span style="font-weight:400;opacity:.8;">'+extra+'</span></span>';
+    }).join('');
+    html += '<div style="margin-bottom:10px;"><div style="font-size:11px;font-weight:700;margin-bottom:3px;color:'+nameColor+';">'
+      + dot+' '+owner+' <span style="font-weight:400;color:var(--text-muted);">이번주 '+b.thisWk+'/'+b.total+' 갱신</span></div>'
+      + '<div style="display:flex;flex-wrap:wrap;">'+chips+'</div></div>';
+  });
+  el.innerHTML = '<div style="margin-bottom:8px;font-size:11px;color:var(--text-muted);">'
+    + (monNames[mi]||'')+' 예측월 · 담당 SR별 · <b style="color:var(--primary);">이번주 '+doneThis+'/'+total+'</b> 갱신 <span style="opacity:.7;">(🟢 = 이번 주 W'+curWk+' 갱신)</span></div>'
+    + (html || '<span style="color:var(--text-muted);">No account data</span>');
 }
 
 // DSR Upload: auto-detect year (Date column) → 26Y is act_*, 25Y is ly_* Update
