@@ -9684,14 +9684,17 @@ function parseFcstWeeklyWorkbook(wb, fileName){
       if(bc && bc.v != null && bc.v !== ''){ curBrand = String(bc.v).trim(); }
       if(!sc || sc.v == null || sc.v === '') continue;
       const sku = String(sc.v).trim(); if(!sku) continue;
-      const weeks = []; let sum = 0, any = false;
+      const weeks = []; let any = false;
       for(let C = 2; C <= 6; C++){                              // C~G = 1W~5W (enter HL directly)
         const n = Number(ws[XLSX.utils.encode_cell({r:R,c:C})]?.v);
         const hl = isFinite(n) ? n : 0;                        // Cell value = HL (no unit conversion)
-        weeks.push(hl); sum += hl; if(hl) any = true;
+        weeks.push(hl); if(hl) any = true;
       }
       if(!any) continue;
-      skus.push({ brand: curBrand, sku, weeks, monthly: sum });
+      // 각 주(W1~W5)는 그 시점의 '월 전체 재예측'(누적 아님) → 월 FCST = 합산이 아니라 가장 최근(마지막 입력) 주 값
+      let latest = 0;
+      for(let w=weeks.length-1; w>=0; w--){ if(weeks[w]){ latest = weeks[w]; break; } }
+      skus.push({ brand: curBrand, sku, weeks, monthly: latest });
     }
     if(skus.length) updates.push({ ch:resolved.ch, acct:resolved.acct, monthIdx, sheetName:sn, skus });
     else skipped.push({sheet:sn, reason:'No data'});
