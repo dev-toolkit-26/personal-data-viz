@@ -5078,7 +5078,7 @@ function renderOffRofoSheet(){
     // RoFo는 채널 단위(P07). 거래처 행은 Actual·LY·YoY·코멘트(거래처 단위).
     const chRofo=mv(ch.m,'rofo_m'), chAct=mv(ch.m,'act_m'), chLy=mv(ch.m,'ly_m');
     let rows='', any=false;
-    (ch.accounts||[]).forEach(acc=>{
+    _offChannelAcctOrder(ch.key, ch.accounts||[]).forEach(acc=>{
       const ac=mv(acc.m,'act_m'), ly=mv(acc.m,'ly_m');
       if(ac<0.01 && ly<0.01) return;
       any=true;
@@ -5161,12 +5161,11 @@ function renderFcstChartC(){
 }
 // 채널별 거래처 정렬 우선순위 — CVS는 K7(세븐일레븐) 맨 앞
 function _offChannelAcctOrder(chKey, accounts){
-  if(chKey === 'CVS'){
-    const k7 = accounts.filter(a => (a.name || a) === 'K7');
-    const rest = accounts.filter(a => (a.name || a) !== 'K7');
-    return [...k7, ...rest];
-  }
-  return accounts;
+  // 매출 순서 — YTD Actual 내림차순(큰 거래처 우선). Actual 동률/부재 시 RoFo YTD로 보조 정렬.
+  return accounts.slice().sort((a,b)=>{
+    const am=(a&&a.m)||{}, bm=(b&&b.m)||{};
+    return (bm.act_ytd||0)-(am.act_ytd||0) || (bm.rofo_ytd||0)-(am.rofo_ytd||0);
+  });
 }
 // 선택 월과 겹치는 ISO 달력주(월~일)를 순서대로 최대 5개 → W1~W5 날짜범위 라벨.
 // 규칙: 1일이 포함된 월~일 주 = W1. 겹치는 주가 6개면 6번째를 W5에 합침(5칸 유지), 4개면 W5 빈칸.
@@ -5688,7 +5687,7 @@ function renderYTDTable() {
       rowHtml('OFF TTL', OFF.total, 'ttl') +
       OFF.channels.filter(_offInTtl).map(ch =>
         rowHtml(ch.label || ch.key, ch.m, 'ch') +
-        ch.accounts.map(acc => rowHtml('└ ' + acc.name, acc.m, 'acct')).join('')
+        _offChannelAcctOrder(ch.key, ch.accounts).map(acc => rowHtml('└ ' + acc.name, acc.m, 'acct')).join('')
       ).join('')
     }</tbody>`;
   const tbl = document.getElementById('tbl-ytd-hl');
