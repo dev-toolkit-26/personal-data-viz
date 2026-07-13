@@ -35,9 +35,9 @@
     'GSSuper':'GS Super','LotteSuper':'Lotte Super','Everyday':'Everyday','NoBrand':'Nobrand',
     'Seowon':'Seowon','Korail':'Korail','Express':'Express',
     'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
-    // ⚠ Off와 합산 안 하는 별도 채널. DSR raw의 실제 Group 문자열에 맞게 확인/추가 필요.
-    'E-com':'E-com','Ecom':'E-com','E-Commerce':'E-com','E-commerce':'E-com',
-    'Military':'Military','군':'Military','PX':'Military'
+    // Off와 합산 안 하는 별도 채널 (DSR Group: On-line→E-com, military→Military)
+    'On-line':'E-com','On-Line':'E-com','Online':'E-com','on-line':'E-com',
+    'military':'Military','Military':'Military'
   };
   // Segment 컬럼이 없을 때 Group으로 채널 역추론
   const _OFF_GRP_CH = {
@@ -47,9 +47,9 @@
     'Costco':'C&C','E-Traders':'C&C','Vic Market':'C&C',
     'Hanaromart':'UNION',
     'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
-    // ⚠ 별도 채널(Off 합산 제외) — 실제 DSR Group 문자열 확인 후 조정.
-    'E-com':'E-com','Ecom':'E-com','E-Commerce':'E-com','E-commerce':'E-com',
-    'Military':'Military','군':'Military','PX':'Military'
+    // 별도 채널(Off 합산 제외) — Group으로 채널 판정
+    'On-line':'E-com','On-Line':'E-com','Online':'E-com','on-line':'E-com',
+    'military':'Military','Military':'Military'
   };
 
   // 헤더 텍스트로 컬럼 찾기 (대소문자/공백 무시)
@@ -90,7 +90,7 @@
       const grp = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cGrp })]);
       const sku = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSku })]);
       if (!grp || !sku) { skipped++; continue; }
-      const chKey = seg ? _OFF_TR_CH_MAP[seg] : _OFF_GRP_CH[grp];
+      const chKey = (seg && _OFF_TR_CH_MAP[seg]) || _OFF_GRP_CH[grp];   // Segment 미인식(E-com·Military 등)이면 Group으로 폴백
       const acKey = _OFF_TR_AC_MAP[grp];
       if (!chKey || !acKey) { skipped++; continue; }  // On-Trade 지역 행 등은 여기서 스킵
       let mi = -1, year = expectedYear || 2026;
@@ -255,7 +255,7 @@
       const seg = cSeg >= 0 ? _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSeg })]) : null;
       const grp = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cGrp })]);
       if (!grp) continue;
-      const chKey = seg ? _OFF_TR_CH_MAP[seg] : _OFF_GRP_CH[grp];
+      const chKey = (seg && _OFF_TR_CH_MAP[seg]) || _OFF_GRP_CH[grp];   // Segment 미인식(E-com·Military 등)이면 Group으로 폴백
       const acKey = _OFF_TR_AC_MAP[grp];
       if (!chKey || !acKey) continue;   // On-Trade 지역 행 등 자동 스킵
       const dCell = sh[XLSX.utils.encode_cell({ r: R, c: cDate })];
