@@ -498,7 +498,7 @@ td.sr-cell{white-space:nowrap}
   <div class="box" style="margin-bottom:20px">
     <h3>Western SKU 상세</h3>
     <div class="ow"><table class="utable">
-      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th></tr></thead>
+      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th><th class="r">'26 TTL</th><th class="r">'26 점유율</th><th class="r">vs '25</th></tr></thead>
       <tbody id="otWestBody"></tbody>
     </table></div>
   </div>
@@ -512,7 +512,7 @@ td.sr-cell{white-space:nowrap}
   <div class="box" style="margin-bottom:24px">
     <h3>Chinese SKU 상세</h3>
     <div class="ow"><table class="utable">
-      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th></tr></thead>
+      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th><th class="r">'26 TTL</th><th class="r">'26 점유율</th><th class="r">vs '25</th></tr></thead>
       <tbody id="otChinBody"></tbody>
     </table></div>
   </div>
@@ -529,7 +529,7 @@ td.sr-cell{white-space:nowrap}
   <div class="box" style="margin-bottom:20px">
     <h3>Lager SKU 상세</h3>
     <div class="ow"><table class="utable">
-      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th></tr></thead>
+      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th><th class="r">'26 TTL</th><th class="r">'26 점유율</th><th class="r">vs '25</th></tr></thead>
       <tbody id="otLagBody"></tbody>
     </table></div>
   </div>
@@ -543,7 +543,7 @@ td.sr-cell{white-space:nowrap}
   <div class="box" style="margin-bottom:24px">
     <h3>Wheat SKU 상세</h3>
     <div class="ow"><table class="utable">
-      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th></tr></thead>
+      <thead><tr><th>SKU</th><th class="r">Y2025</th><th class="r">1월</th><th class="r">2월</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th><th class="r">'26 TTL</th><th class="r">'26 점유율</th><th class="r">vs '25</th></tr></thead>
       <tbody id="otWhtBody"></tbody>
     </table></div>
   </div>
@@ -3823,10 +3823,23 @@ function renderOtShrChart(canvasId,shrData,volData,prevChart){
 
 function renderOtTable(tbodyId,data){
   const tbody=document.getElementById(tbodyId);if(!tbody)return;
-  if(!data.length){tbody.innerHTML='<tr><td colspan="14" style="text-align:center;color:var(--muted)">데이터 없음</td></tr>';return;}
+  if(!data.length){tbody.innerHTML='<tr><td colspan="17" style="text-align:center;color:var(--muted)">데이터 없음</td></tr>';return;}
+  const ttl26Of=d=>OT_MK.reduce((s,k)=>s+(d[k]||0),0);
+  const sum26=data.reduce((s,d)=>s+ttl26Of(d),0);          // 카테고리 26년 합계(점유율 분모)
+  const sum25=data.reduce((s,d)=>s+(d.y2025||0),0);        // 카테고리 25년 합계(점유율 분모)
   tbody.innerHTML=data.map(d=>{
     const mCells=OT_MK.map(k=>`<td class="r">${d[k]>0?Number(d[k]).toLocaleString():'–'}</td>`).join('');
-    return`<tr><td>${fmtSku(d.sku)}</td><td class="r">${d.y2025>0?Number(d.y2025).toLocaleString():'–'}</td>${mCells}</tr>`;
+    const t26=ttl26Of(d);
+    const shr26=sum26>0?t26/sum26*100:0;                   // 26년 점유율(%)
+    const shr25=sum25>0?(d.y2025||0)/sum25*100:0;          // 25년(LY) 점유율(%)
+    const dPP=shr26-shr25;                                 // 점유율 변화(%p, vs LY)
+    const hasShr=t26>0||(d.y2025||0)>0;
+    const dCol=dPP>0.05?'var(--positive,#00873e)':dPP<-0.05?'var(--negative,#dc2626)':'var(--muted)';
+    const dArrow=dPP>0.05?'▲':dPP<-0.05?'▼':'–';
+    const t26Cell=`<td class="r bo">${t26>0?Number(Math.round(t26)).toLocaleString():'–'}</td>`;
+    const shrCell=`<td class="r">${hasShr?shr26.toFixed(1)+'%':'–'}</td>`;
+    const dCell=hasShr?`<td class="r" style="color:${dCol};font-weight:600">${dArrow} ${dPP>=0?'+':''}${dPP.toFixed(1)}%p</td>`:'<td class="r" style="color:var(--muted)">–</td>';
+    return`<tr><td>${fmtSku(d.sku)}</td><td class="r">${d.y2025>0?Number(d.y2025).toLocaleString():'–'}</td>${mCells}${t26Cell}${shrCell}${dCell}</tr>`;
   }).join('');
 }
 
