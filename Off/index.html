@@ -32,7 +32,7 @@
 const OFF_CHANNELS      = (window.OFF_SEED && OFF_SEED.channels) || [];
 const OFF_CHANNEL_KEYS  = OFF_CHANNELS.map(c => c.key);
 // Off TTL·전체 채널 합계에서 제외할 채널(별도 표기용). E-com·Military는 Off와 합산하지 않음.
-const _OFF_TTL_EXCLUDE  = new Set(['E-com','Military']);
+const _OFF_TTL_EXCLUDE  = new Set(['E-com','Military','DF']);
 const _offInTtl = c => !_OFF_TTL_EXCLUDE.has((c && c.key !== undefined) ? c.key : c);
 const OFF_DISPLAY_ORDER = ['TTL', ...OFF_CHANNEL_KEYS];
 const DASHBOARD_TAG     = '';   // (사용 안 함) 별도 off-trade 프로젝트라 격리 컬럼 불필요
@@ -8301,6 +8301,7 @@ window.MIN_OFF_CH = [
     {key:'hanaro',label:'Hanaro'} ]},
   { key:'alsm',  label:'ALSM',  color:'#9333ea', bg:'#faf5ff', accounts:[] },  // 단일 채널(하위 거래처 없음)
   { key:'ecom',     label:'E-com',    color:'#0891b2', bg:'#ecfeff', accounts:[] },  // Off 미합산 별도 채널
+  { key:'df',       label:'DF',       color:'#7c3aed', bg:'#f5f3ff', accounts:[] },
   { key:'military', label:'Military', color:'#65a30d', bg:'#f7fee7', accounts:[] },
 ];
 // 거래처키 → 채널키 역매핑 (필터/색상용). 채널키는 포함하지 않음(채널 vs 거래처 구분에 사용).
@@ -9360,6 +9361,7 @@ const _OFF_FCST_ACCOUNTS = [
   {ch:'ALSM',acct:'ALSM',sheet:'ALSM'},
   // Off와 합산하지 않는 별도 채널 — 각각 단일 계정. 취합본/주간FCST 시트명은 실제 탭명에 맞게 조정.
   {ch:'E-com',acct:'E-com',sheet:'E-comm'},   // 취합본 시트명은 'E-comm'(m 두 개)
+  {ch:'DF',acct:'DF',sheet:'DF'},
   {ch:'Military',acct:'Military',sheet:'Military'},
 ];
 // account별 담당 SR (owner). '' = 미지정. 인사 변동 시 여기만 수정.
@@ -9372,6 +9374,7 @@ const _OFF_FCST_OWNERS = {
   SM:    { 'GS Super':'박기태', 'Lotte Super':'정다정', Everyday:'박찬국', Nobrand:'박찬국', Seowon:'최지수', Korail:'전병권', Express:'박기태' },
   ALSM:  { ALSM:'박세일' },
   'E-com':    { 'E-com':'이용주' },
+  DF:         { DF:'김한준' },
   Military:   { Military:'김한준' },
 };
 function _offOwnerOf(chKey, acctKey){ return (_OFF_FCST_OWNERS[chKey] && _OFF_FCST_OWNERS[chKey][acctKey]) || ''; }

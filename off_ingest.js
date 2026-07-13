@@ -189,10 +189,9 @@
   // ── P07 "01. 2026 Volume" RoFo 파서 ──────────────────────────────────
   // 시트 2026RF07: Team/Channel/Brand/SKU(FCST) + Jan~Dec(HL). block1(Jan열~)만 HL.
   // 반환 { offChannel:{offKey:[12]}, onTotal:[12] }. 소계/합계행·비대상 Team 제외.
-  const _VOL_CH_MAP = { 'CVS':'CVS','Hyper':'HYPER','Cash & Carry':'C&C','Cash&Carry':'C&C','Union Shop':'UNION','CLSM':'SM','ALSM':'ALSM' };
-  // Off와 합산 안 하는 별도 채널은 Team 컬럼으로 구분됨(team='E-comm'→E-com, team='DF'→Military).
-  // DF는 channel이 'DF'/'Military' 혼재하고 'DF Total'은 /total/ 필터로 제외되므로 team 기준으로 누적.
-  const _VOL_TEAM_MAP = { 'E-comm':'E-com', 'DF':'Military' };
+  const _VOL_CH_MAP = { 'CVS':'CVS','Hyper':'HYPER','Cash & Carry':'C&C','Cash&Carry':'C&C','Union Shop':'UNION','CLSM':'SM','ALSM':'ALSM',
+    // Off 미합산 별도 채널 — team=E-comm/DF 안에서 Channel 컬럼 기준으로 분리(E-comm→E-com, DF→DF, Military→Military).
+    'E-comm':'E-com', 'DF':'DF', 'Military':'Military' };
   function parseVolumeRofo(wb, sheetName) {
     const sn = sheetName || '2026RF07';
     const sh = wb.Sheets[sn];
@@ -224,13 +223,8 @@
       if (!sku || sku === '0') continue;
       if (!brand || brand === 'TOTAL' || brand === 'Brand') continue;    // 합계/헤더행 제외
       if (ch && /total/i.test(ch)) continue;                              // "CVS Total" 등 소계 제외
-      if (team === 'OFF') {
-        const key = _VOL_CH_MAP[ch]; if (!key) { unmappedOff.add(ch || '(빈채널)'); continue; }
-        if (!offChannel[key]) offChannel[key] = z();
-        for (let m = 0; m < 12; m++) offChannel[key][m] += gn(r, cJan + m);
-        offRows++;
-      } else if (_VOL_TEAM_MAP[team]) {
-        const key = _VOL_TEAM_MAP[team];   // team=E-comm→E-com, team=DF→Military ('… Total'행은 위 /total/ 필터에서 제외)
+      if (team === 'OFF' || team === 'E-comm' || team === 'DF') {   // 별도팀도 Channel 기준으로 분리(E-comm→E-com, DF→DF, Military→Military)
+        const key = _VOL_CH_MAP[ch]; if (!key) { unmappedOff.add(team + '|' + (ch || '(빈채널)')); continue; }
         if (!offChannel[key]) offChannel[key] = z();
         for (let m = 0; m < 12; m++) offChannel[key][m] += gn(r, cJan + m);
         offRows++;
