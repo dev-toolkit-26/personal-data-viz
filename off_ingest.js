@@ -22,6 +22,9 @@
     if (cell.v == null) return null;
     return String(cell.v).trim();
   }
+  // cellDates(t:'d')는 한국 LMT 등 타임존 아티팩트로 실제 자정에서 몇 시간 어긋나 날짜가 하루 밀릴 수 있음.
+  // 가장 가까운 UTC 자정으로 정규화 후 getUTC* 로 읽으면 정확. (숫자 셀은 XLSX.SSF.parse_date_code로 이미 정확)
+  function _offNormDate(d) { return new Date(Math.round(d.getTime() / 86400000) * 86400000); }
 
   // Segment(채널)·Group(거래처) → Off 표준 키 매핑
   const _OFF_TR_CH_MAP = { 'CVS':'CVS','CLSM':'SM','ALSM':'ALSM','Hyper':'HYPER','Cash&Carry':'C&C','Union Shop':'UNION' };
@@ -95,7 +98,7 @@
         const dCell = sh[XLSX.utils.encode_cell({ r: R, c: cDate })];
         if (dCell) {
           if (dCell.t === 'n') { const d = XLSX.SSF.parse_date_code(dCell.v); if (d) { year = d.y; mi = d.m - 1; } }
-          else if (dCell.t === 'd') { year = dCell.v.getFullYear(); mi = dCell.v.getMonth(); }
+          else if (dCell.t === 'd') { const nd = _offNormDate(dCell.v); year = nd.getUTCFullYear(); mi = nd.getUTCMonth(); }
         }
       }
       if (mi < 0 && cMon >= 0) {
@@ -259,7 +262,7 @@
       if (!dCell) continue;
       let year, mi = -1, day = -1;
       if (dCell.t === 'n') { const d = XLSX.SSF.parse_date_code(dCell.v); if (d) { year = d.y; mi = d.m - 1; day = d.d; } }
-      else if (dCell.t === 'd') { year = dCell.v.getFullYear(); mi = dCell.v.getMonth(); day = dCell.v.getDate(); }
+      else if (dCell.t === 'd') { const nd = _offNormDate(dCell.v); year = nd.getUTCFullYear(); mi = nd.getUTCMonth(); day = nd.getUTCDate(); }
       if (mi < 0 || day < 1) continue;
       if (expectedYear && year !== expectedYear) continue;
       const hlN = _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cHl })]);

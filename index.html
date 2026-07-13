@@ -2522,6 +2522,18 @@ function _upCountWorkdays(start, end) {
   return count;
 }
 function _upExcelDate(serial) { return new Date(Math.round((serial - 25569) * 86400 * 1000)); }
+// SheetJS의 cellDates는 한국 LMT 등 타임존 아티팩트로 실제 자정에서 몇 시간 어긋나 날짜가 하루 밀릴 수 있음
+// (예: 7/1 → 2026-06-30T14:59:08Z). Date(cellDates)든 엑셀 serial이든 '가장 가까운 UTC 자정'으로 정규화하고,
+// 이후 getUTC* 로 읽으면 타임존 무관하게 정확한 달력 날짜가 됨.
+function _dsrNormDate(v) {
+  if (v == null) return null;
+  if (typeof v === 'number') return _upExcelDate(v);              // 엑셀 serial → 정확한 UTC 자정
+  let t;
+  if (v instanceof Date) t = v.getTime();
+  else { const d = new Date(v); if (isNaN(d)) return null; t = d.getTime(); }
+  if (isNaN(t)) return null;
+  return new Date(Math.round(t / 86400000) * 86400000);          // 가장 가까운 UTC 자정으로 반올림(±12h 이내 보정)
+}
 
 function _upBuildWkMeta(wkNum, mm, dd, year) {
   const month = parseInt(mm), day = parseInt(dd);
@@ -3564,8 +3576,8 @@ async function handleCombinedDsrUpload(input) {
     const _MON_NM = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     let maxMon = -1;
     for (let i = 1; i < all.length; i++) {
-      const d = all[i] && all[i][iDate];
-      if (d instanceof Date && !isNaN(d) && d.getFullYear() === 2026) { const m = d.getMonth(); if (m > maxMon) maxMon = m; }
+      const d = _dsrNormDate(all[i] && all[i][iDate]);
+      if (d && d.getUTCFullYear() === 2026) { const m = d.getUTCMonth(); if (m > maxMon) maxMon = m; }
     }
 
     // ── On 피드: Team=On 행을 On raw 형식으로 합성 → 기존 파서 코어 재사용 ──
@@ -3582,12 +3594,12 @@ async function handleCombinedDsrUpload(input) {
       // ALSM은 DSR Raw에서 7월부터 팀이 'On'으로 표기되지만 Off 대시보드 전용 채널 →
       // On 피드에서 제외(Off 피드는 Group/Segment 매핑으로 Team 무관하게 별도 집계함)
       if (/^ALSM/i.test(grp) || seg.toUpperCase() === 'ALSM') continue;
-      const d = r[iDate]; if (!(d instanceof Date) || isNaN(d)) continue;
-      if (d.getFullYear() !== 2026) continue;   // On 대시보드는 2026 기준 — 2025 행 제외(현재월 이중합산 방지)
+      const d = _dsrNormDate(r[iDate]); if (!d) continue;
+      if (d.getUTCFullYear() !== 2026) continue;   // On 대시보드는 2026 기준 — 2025 행 제외(현재월 이중합산 방지)
       const cg = REG[grp] || grp;
-      const wk = Math.ceil(d.getDate() / 7);
-      const rowArr = [d.getMonth() + 1, d, wk, cg, r[iSku], r[iVol], r[iHl], r[iQty], d.getDate()];
-      if (d.getMonth() !== maxMon) continue;      // 최신월만 반영 (지표·과거 마감월 보존)
+      const wk = Math.ceil(d.getUTCDate() / 7);
+      const rowArr = [d.getUTCMonth() + 1, d, wk, cg, r[iSku], r[iVol], r[iHl], r[iQty], d.getUTCDate()];
+      if (d.getUTCMonth() !== maxMon) continue;      // 최신월만 반영 (지표·과거 마감월 보존)
       onRows.push(rowArr);
       onCnt++;
     }
