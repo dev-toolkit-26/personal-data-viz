@@ -214,6 +214,7 @@
     const gs = (r, c) => _offCellStr(sh[XLSX.utils.encode_cell({ r, c })]);
     const gn = (r, c) => _offCellNum(sh[XLSX.utils.encode_cell({ r, c })]);
     const offChannel = {}; const onTotal = z(); const onSku = {}; const onSkuBrand = {};
+    const unmappedOff = new Set(); const otherTeam = new Set();   // 진단: 미매핑 OFF 채널 / ON·OFF 아닌 team|채널
     let offRows = 0, onRows = 0;
     for (let r = hr + 1; r <= range.e.r; r++) {
       const team = gs(r, cTeam), ch = gs(r, cCh);
@@ -223,7 +224,7 @@
       if (!brand || brand === 'TOTAL' || brand === 'Brand') continue;    // 합계/헤더행 제외
       if (ch && /total/i.test(ch)) continue;                              // "CVS Total" 등 소계 제외
       if (team === 'OFF') {
-        const key = _VOL_CH_MAP[ch]; if (!key) continue;
+        const key = _VOL_CH_MAP[ch]; if (!key) { unmappedOff.add(ch || '(빈채널)'); continue; }
         if (!offChannel[key]) offChannel[key] = z();
         for (let m = 0; m < 12; m++) offChannel[key][m] += gn(r, cJan + m);
         offRows++;
@@ -231,10 +232,12 @@
         if (!onSku[sku]) { onSku[sku] = z(); onSkuBrand[sku] = brand; }
         for (let m = 0; m < 12; m++) { const v = gn(r, cJan + m); onTotal[m] += v; onSku[sku][m] += v; }
         onRows++;
+      } else if (ch) {
+        otherTeam.add((team || '(빈team)') + '|' + ch);   // ON/OFF 아닌 team의 채널 행(E-com/Military 후보)
       }
     }
-    console.log('[OffIngest Volume] 시트 ' + sn + ' / OFF ' + offRows + '행(' + Object.keys(offChannel).join(',') + ') / ON ' + onRows + '행(SKU ' + Object.keys(onSku).length + ')');
-    return { offChannel, onTotal, onSku, onSkuBrand };
+    console.log('[OffIngest Volume] 시트 ' + sn + ' / OFF ' + offRows + '행(' + Object.keys(offChannel).join(',') + ') / ON ' + onRows + '행(SKU ' + Object.keys(onSku).length + ') / 미매핑OFF[' + [...unmappedOff].join(',') + '] / 기타team[' + [...otherTeam].join(',') + ']');
+    return { offChannel, onTotal, onSku, onSkuBrand, unmappedOff: [...unmappedOff], otherTeam: [...otherTeam] };
   }
 
   // ── Order Pattern 재집계: DSR 라인아이템 → weekly_acct[ch][acct][월][주5], daily_acct[ch][acct][월][일] (HL) ──
