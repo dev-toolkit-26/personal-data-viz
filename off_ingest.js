@@ -31,7 +31,10 @@
     'Hanaromart':'Hanaro','Costco':'Costco','E-Traders':'E-Traders','Vic Market':'Costco',
     'GSSuper':'GS Super','LotteSuper':'Lotte Super','Everyday':'Everyday','NoBrand':'Nobrand',
     'Seowon':'Seowon','Korail':'Korail','Express':'Express',
-    'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM'
+    'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
+    // ⚠ Off와 합산 안 하는 별도 채널. DSR raw의 실제 Group 문자열에 맞게 확인/추가 필요.
+    'E-com':'E-com','Ecom':'E-com','E-Commerce':'E-com','E-commerce':'E-com',
+    'Military':'Military','군':'Military','PX':'Military'
   };
   // Segment 컬럼이 없을 때 Group으로 채널 역추론
   const _OFF_GRP_CH = {
@@ -40,7 +43,10 @@
     'Emart':'HYPER','LotteMart':'HYPER','Lottemart':'HYPER','Megamart':'HYPER','Homeplus':'HYPER','NewCore':'HYPER',
     'Costco':'C&C','E-Traders':'C&C','Vic Market':'C&C',
     'Hanaromart':'UNION',
-    'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM'
+    'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
+    // ⚠ 별도 채널(Off 합산 제외) — 실제 DSR Group 문자열 확인 후 조정.
+    'E-com':'E-com','Ecom':'E-com','E-Commerce':'E-com','E-commerce':'E-com',
+    'Military':'Military','군':'Military','PX':'Military'
   };
 
   // 헤더 텍스트로 컬럼 찾기 (대소문자/공백 무시)

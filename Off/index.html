@@ -31,6 +31,9 @@
 // ═══════════════════════════════════════════════════════════════════
 const OFF_CHANNELS      = (window.OFF_SEED && OFF_SEED.channels) || [];
 const OFF_CHANNEL_KEYS  = OFF_CHANNELS.map(c => c.key);
+// Off TTL·전체 채널 합계에서 제외할 채널(별도 표기용). E-com·Military는 Off와 합산하지 않음.
+const _OFF_TTL_EXCLUDE  = new Set(['E-com','Military']);
+const _offInTtl = c => !_OFF_TTL_EXCLUDE.has((c && c.key !== undefined) ? c.key : c);
 const OFF_DISPLAY_ORDER = ['TTL', ...OFF_CHANNEL_KEYS];
 const DASHBOARD_TAG     = '';   // (사용 안 함) 별도 off-trade 프로젝트라 격리 컬럼 불필요
 
@@ -104,7 +107,7 @@ function finalizeOff(rows){
     for(const acc of ch.accounts) acc.m = offAggMetrics(acc.skus);
     ch.m = offAggMetrics(ch.accounts);
   }
-  const total = offAggMetrics(channels);
+  const total = offAggMetrics(channels.filter(_offInTtl));   // Off TTL = 코어 채널만(E-com·Military 제외)
   // 채널 RoFo는 RoFo 파일(SKU별 rofo_m) 합계로 통일 — P07 채널 override 비활성화.
   const rofoCh = null;  // (구) window._OFF_ROFO_CH
   if(rofoCh){
@@ -1302,7 +1305,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
       var _lm = ci-1;   // 전월(vs LM)
       // (brand|sku) 기준으로 전 채널·어카운트 합산
       var agg={};
-      (OFF.channels||[]).forEach(function(c){ (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
+      (OFF.channels||[]).forEach(function(c){ if(!_offInTtl(c)) return; (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
         var actA=s.act_m||s.act_hl_m||[], lyA=s.ly_m||s.ly_hl_m||[], rofoA=s.rofo_m||[], fcstA=s.fcst_m||[];
         var key=(s.brand||'(기타)')+'|'+(s.sku||'');
         if(!agg[key]) agg[key]={brand:s.brand||'(기타)', sku:s.sku||'', rofo:0, fcst:0, mtd:0, lm:0, ly:0};
@@ -1390,7 +1393,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
         return (gpPP>=0 ? 'ahead of the working-day pace by ' : 'behind the working-day pace by ') + Math.abs(gpPP).toFixed(1) + ' points';
       };
       var skuMap = {};
-      (OFF.channels||[]).forEach(function(c){ (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
+      (OFF.channels||[]).forEach(function(c){ if(!_offInTtl(c)) return; (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
         var arr = s.act_m || s.act_hl_m || [], fArr = s.fcst_m || [];
         var mtdHL = arr[ci]||0, fcstHL = fArr[ci]||0;
         if (mtdHL<=0.001 && fcstHL<=0.001) return;
@@ -5222,6 +5225,7 @@ function renderFcstTable(){
     const tly = sumArr(OFF.total && OFF.total.ly_m);
     const tWks = [0,0,0,0,0]; let tAny = false;
     for(const cc of OFF.channels){
+      if(!_offInTtl(cc)) continue;   // E-com·Military는 TTL 주간합계 제외
       const w = weeklyFcstFor(cc.key, cc.accounts.map(a => a.name));
       if(w){ for(let i=0;i<5;i++){ tWks[i] += (w[i]||0); if(w[i]) tAny = true; } }
     }
@@ -8400,6 +8404,7 @@ function renderSkuTable(){
   const brandMap = new Map();
   for(const cc of OFF.channels){
     if(ch !== 'ALL' && cc.key !== ch) continue;
+    if(ch === 'ALL' && !_offInTtl(cc)) continue;   // ALL 집계에서 E-com·Military 제외(별도 채널로만 표시)
     for(const acc of cc.accounts){
       if(ac !== 'ALL' && acc.name !== ac) continue;
       for(const s of (acc.skus || [])){
@@ -8565,6 +8570,7 @@ function _offAggregateBySku(ch, ac, brand){
   const map = {};
   for(const cc of OFF.channels){
     if(ch !== 'ALL' && cc.key !== ch) continue;
+    if(ch === 'ALL' && !_offInTtl(cc)) continue;   // ALL 집계에서 E-com·Military 제외(별도 채널로만 표시)
     for(const acc of cc.accounts){
       if(ac !== 'ALL' && acc.name !== ac) continue;
       for(const s of acc.skus){
@@ -9271,6 +9277,9 @@ const _OFF_FCST_ACCOUNTS = [
   {ch:'SM',acct:'Korail',sheet:'Korail'},
   {ch:'SM',acct:'Express',sheet:'Express'},
   {ch:'ALSM',acct:'ALSM',sheet:'ALSM'},
+  // Off와 합산하지 않는 별도 채널 — 각각 단일 계정. 취합본/주간FCST 시트명은 실제 탭명에 맞게 조정.
+  {ch:'E-com',acct:'E-com',sheet:'E-com'},
+  {ch:'Military',acct:'Military',sheet:'Military'},
 ];
 // account별 담당 SR (owner). '' = 미지정. 인사 변동 시 여기만 수정.
 // 채널키/계정키는 _OFF_FCST_ACCOUNTS(=weekly_fcst·fcst_meta 키)와 동일해야 함.
@@ -9281,6 +9290,8 @@ const _OFF_FCST_OWNERS = {
   'C&C': { Costco:'박기태', 'E-Traders':'박찬국', Lottemaxx:'정다정' },
   SM:    { 'GS Super':'박기태', 'Lotte Super':'정다정', Everyday:'박찬국', Nobrand:'박찬국', Seowon:'최지수', Korail:'전병권', Express:'박기태' },
   ALSM:  { ALSM:'박세일' },
+  'E-com':    { 'E-com':'이용주' },
+  Military:   { Military:'김한준' },
 };
 function _offOwnerOf(chKey, acctKey){ return (_OFF_FCST_OWNERS[chKey] && _OFF_FCST_OWNERS[chKey][acctKey]) || ''; }
 // 시리즈별 컬럼: G..R = 25Y, U..AF = 26 AP, AI..AT = 26 RoFo
