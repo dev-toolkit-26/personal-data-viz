@@ -9353,7 +9353,7 @@ const _OFF_FCST_ACCOUNTS = [
   {ch:'SM',acct:'Express',sheet:'Express'},
   {ch:'ALSM',acct:'ALSM',sheet:'ALSM'},
   // Off와 합산하지 않는 별도 채널 — 각각 단일 계정. 취합본/주간FCST 시트명은 실제 탭명에 맞게 조정.
-  {ch:'E-com',acct:'E-com',sheet:'E-com'},
+  {ch:'E-com',acct:'E-com',sheet:'E-comm'},   // 취합본 시트명은 'E-comm'(m 두 개)
   {ch:'Military',acct:'Military',sheet:'Military'},
 ];
 // account별 담당 SR (owner). '' = 미지정. 인사 변동 시 여기만 수정.
@@ -9678,7 +9678,7 @@ const _OFF_FCST_SHEET_MAP = (() => {
   for(const a of _OFF_FCST_ACCOUNTS){ m[_offNormKey(a.acct)] = { ch:a.ch, acct:a.acct }; }
   // 파일 시트명 특화 별칭 (정규화 키 → canonical acct)
   const acctOf = key => { const e = _OFF_FCST_ACCOUNTS.find(x => x.acct === key); return e ? { ch:e.ch, acct:e.acct } : null; };
-  const alias = { kims:'Kimsclub', magmart:'Megamart', lottemax:'Lottemaxx', alsmtotal:'ALSM' };
+  const alias = { kims:'Kimsclub', magmart:'Megamart', lottemax:'Lottemaxx', alsmtotal:'ALSM', ecomm:'E-com', ecom:'E-com' };
   for(const [k,v] of Object.entries(alias)){ const r = acctOf(v); if(r) m[k] = r; }
   return m;
 })();
