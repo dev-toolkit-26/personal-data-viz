@@ -9685,11 +9685,14 @@ function parseFcstWeeklyWorkbook(wb, fileName){
         weeks.push(hl); if(hl) any = true;
       }
       if(!any) continue;
-      // 각 주(W1~W5)는 그 시점의 '월 전체 재예측'(누적 아님) → 월 FCST = 합산이 아니라 가장 최근(마지막 입력) 주 값
-      let latest = 0;
-      for(let w=weeks.length-1; w>=0; w--){ if(weeks[w]){ latest = weeks[w]; break; } }
-      skus.push({ brand: curBrand, sku, weeks, monthly: latest });
+      skus.push({ brand: curBrand, sku, weeks });
     }
+    // 각 주(W1~W5)는 그 시점의 '계정 전체 재예측'(누적 아님) → 월 FCST = 합산이 아니라 '가장 최근(마지막 입력) 주'.
+    // 계정 전체에서 값이 있는 마지막 주를 찾아 모든 SKU를 그 주 값으로 통일(그 주에 없는 SKU=0) →
+    // 계정 FCST 합 = 그 주(W) 컬럼 합계와 정확히 일치(SKU별 마지막 주를 섞어 쓰면 W 컬럼보다 커지는 오류 방지).
+    let lastWk = -1;
+    for(let w=0; w<5; w++){ if(skus.some(s => s.weeks[w])) lastWk = w; }
+    for(const s of skus){ s.monthly = lastWk >= 0 ? (s.weeks[lastWk] || 0) : 0; }
     if(skus.length) updates.push({ ch:resolved.ch, acct:resolved.acct, monthIdx, sheetName:sn, skus });
     else skipped.push({sheet:sn, reason:'데이터없음'});
   }
@@ -9731,8 +9734,8 @@ function _applyAccountVolumeRows(newRows){
   OFF_SEED.rows = newRows;
 }
 
-// ② FCST 주간 폼 적용 (incremental — 해당 (ch, acct, sku, monthIdx) fcst_m만 갱신)
-// 주간 FCST를 data 객체(rows + pattern.weekly_fcst)에 병합. 업로드된 (ch,acct,sku)만 갱신.
+// ② FCST 주간 폼 적용 — 업로드된 '계정·월' 단위로 fcst_m 교체(그 계정의 해당 월은 이번 파일이 최종본).
+// 다른 계정/월은 보존. 주간 FCST를 data 객체(rows + pattern.weekly_fcst)에 병합.
 function _offApplyWeeklyToData(data, fcstUpdates){
   if(!Array.isArray(data.rows)) data.rows = [];
   if(!data.pattern || typeof data.pattern !== 'object') data.pattern = {};
@@ -9740,6 +9743,9 @@ function _offApplyWeeklyToData(data, fcstUpdates){
   const wf = data.pattern.weekly_fcst;
   let updated = 0, added = 0;
   for(const u of fcstUpdates){
+    // 재업로드 = 계정 전체 재예측 → 이번 파일에 없는 SKU의 옛 fcst_m가 남아 FCST를 부풀리지 않도록
+    // 해당 계정·월 fcst_m를 먼저 전부 0으로 초기화(그다음 업로드된 SKU만 값 세팅).
+    for(const r of data.rows){ if(r.ch === u.ch && r.acct === u.acct && Array.isArray(r.fcst_m)) r.fcst_m[u.monthIdx] = 0; }
     // weekly_fcst[채널][계정][월] = 계정의 SKU 주차값 합계(5주, HL) — 표는 계정 단위로 W1~W5 표시
     const acctWeeks = [0,0,0,0,0]; let hasWeeks = false;
     for(const sd of u.skus){
