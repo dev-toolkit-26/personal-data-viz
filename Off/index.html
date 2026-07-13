@@ -4855,7 +4855,7 @@ function _ytdRegionData() {
 function renderYTDCharts() {
   if(!OFF || !OFF.channels || !OFF.channels.length){ console.warn('[Off YTD] OFF 미초기화'); return; }
   // 26년 채널 그래프(A·B)에서는 UNION 제외(현재 거래 없음) — Chart C/D 표는 전체 유지
-  const channels = OFF.channels.filter(c => c.key !== 'UNION');
+  const channels = OFF.channels.filter(c => c.key !== 'UNION' && _offInTtl(c));   // 이컴·군납 제외
   const labels = channels.map(c => c.key);
   const actMo = _OFF_ACT_MONTHS;   // 실현 월 수 (예: 4)
   const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -4918,7 +4918,7 @@ function renderYTDCharts() {
 function _offPopulateYTDCFilters(){
   const chSel = document.getElementById('ytdC-channel');
   if(chSel && chSel.options.length <= 1){
-    chSel.innerHTML = ['ALL', ...OFF.channels.map(c=>c.key)]
+    chSel.innerHTML = ['ALL', ...OFF.channels.filter(_offInTtl).map(c=>c.key)]
       .map(k => `<option value="${k}">${k==='ALL'?'전체':k}</option>`).join('');
   }
   _offUpdateYTDCAccountDropdown();
@@ -4928,7 +4928,7 @@ function _offUpdateYTDCAccountDropdown(){
   const ch = document.getElementById('ytdC-channel')?.value || 'ALL';
   const cur = acSel.value || 'ALL';
   let accounts = ['ALL'];
-  if(ch === 'ALL') OFF.channels.forEach(c => c.accounts.forEach(a => accounts.push(a.name)));
+  if(ch === 'ALL') OFF.channels.filter(_offInTtl).forEach(c => c.accounts.forEach(a => accounts.push(a.name)));
   else { const cc = OFF.channels.find(c=>c.key===ch); if(cc) accounts = ['ALL', ...cc.accounts.map(a=>a.name)]; }
   acSel.innerHTML = accounts.map(a => `<option value="${a}"${a===cur?' selected':''}>${a==='ALL'?'전체':a}</option>`).join('');
   if(!accounts.includes(cur)) acSel.value = 'ALL';
@@ -5612,7 +5612,7 @@ function renderYTDTable() {
       <th style="color:#9ca3af">RoFo vs AP</th>
     </tr></thead><tbody>${
       rowHtml('OFF TTL', OFF.total, 'ttl') +
-      OFF.channels.map(ch =>
+      OFF.channels.filter(_offInTtl).map(ch =>
         rowHtml(ch.label || ch.key, ch.m, 'ch') +
         ch.accounts.map(acc => rowHtml('└ ' + acc.name, acc.m, 'acct')).join('')
       ).join('')
@@ -8221,6 +8221,8 @@ window.MIN_OFF_CH = [
   { key:'union', label:'UNION', color:'#0d9488', bg:'#f0fdfa', accounts:[
     {key:'hanaro',label:'Hanaro'} ]},
   { key:'alsm',  label:'ALSM',  color:'#9333ea', bg:'#faf5ff', accounts:[] },  // 단일 채널(하위 거래처 없음)
+  { key:'ecom',     label:'이컴', color:'#0891b2', bg:'#ecfeff', accounts:[] },  // Off 미합산 별도 채널
+  { key:'military', label:'군납', color:'#65a30d', bg:'#f7fee7', accounts:[] },
 ];
 // 거래처키 → 채널키 역매핑 (필터/색상용). 채널키는 포함하지 않음(채널 vs 거래처 구분에 사용).
 window.MIN_ACCT_TO_CH = {};
