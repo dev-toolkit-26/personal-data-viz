@@ -9983,7 +9983,7 @@ function _offRenderFcstAccountCheck(){
   const buckets = {}; const order = [];
   (OFF.channels||[]).forEach(function(ch){
     (ch.accounts||[]).forEach(function(a){
-      if(!(a.skus||[]).length) return;
+      if(!(a.skus||[]).length && _offInTtl(ch)) return;   // 코어 빈 계정은 숨김, 별도 채널(E-com·Military)은 항상 표시(업로드 대상)
       const owner = _offOwnerOf(ch.key, a.name) || '미지정';
       if(!buckets[owner]){ buckets[owner] = {accts:[], thisWk:0, total:0}; if(owner!=='미지정') order.push(owner); }
       const b = buckets[owner];
