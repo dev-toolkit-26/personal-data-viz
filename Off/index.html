@@ -5296,11 +5296,11 @@ function renderFcstTable(){
     </tr>`);
     parts.push(_fcstDrillChildRows(_coreAccs, 'ttl'));
   }
-  const _emitFcstChannel = (cc) => {
+  const _emitFcstChannel = (cc, alwaysShow) => {
     const rf = sumArr(cc.m && cc.m.rofo_m);
     const fc = sumArr(cc.m && cc.m.fcst_m), ac = sumArr(cc.m && cc.m.act_m);
     const ly = sumArr(cc.m && cc.m.ly_m);
-    if((rf+fc+ac+ly) < 0.01) return;
+    if(!alwaysShow && (rf+fc+ac+ly) < 0.01) return;   // 데이터 없으면 숨김(단 별도 채널은 alwaysShow로 항상 표시)
     const achRf = rf ? ac/rf : null;
     const fcRf  = rf ? fc/rf : null;   // FCST vs RoFo (예측/타깃)
     const yoy   = ly ? fc/ly - 1 : null;   // 최신 FCST vs 전년(YoY)
@@ -5321,7 +5321,7 @@ function renderFcstTable(){
       const arf=sumArr(acc.m && acc.m.rofo_m);
       const afc=sumArr(acc.m && acc.m.fcst_m), aac=sumArr(acc.m && acc.m.act_m);
       const aly=sumArr(acc.m && acc.m.ly_m);
-      if((arf+afc+aac+aly) < 0.01) continue;
+      if(!alwaysShow && (arf+afc+aac+aly) < 0.01) continue;
       const aAchRf = arf ? aac/arf : null;
       const afcRf  = arf ? afc/arf : null;
       const ayoy   = aly ? afc/aly - 1 : null;   // 최신 FCST vs 전년(YoY)
@@ -5344,10 +5344,10 @@ function renderFcstTable(){
   for(const cc of OFF.channels.filter(_offInTtl)) _emitFcstChannel(cc);
   // 별도(Non-Off) 섹션 — 이컴·군납 (Off TTL 미포함, 시각적으로 분리)
   const _sepChs = OFF.channels.filter(c => !_offInTtl(c));
-  const _sepHasData = _sepChs.some(cc => (sumArr(cc.m&&cc.m.rofo_m)+sumArr(cc.m&&cc.m.fcst_m)+sumArr(cc.m&&cc.m.act_m)+sumArr(cc.m&&cc.m.ly_m)) >= 0.01);
-  if(_sepHasData){
+  if(_sepChs.length){
+    // 데이터 없어도 구조(행)는 항상 표시 — 25년부터 자료 채우면 값이 들어옴
     parts.push(`<tr class="brand-start" style="background:#f1f5f9;"><td colspan="13" style="font-weight:700;color:#475569;font-size:11px;padding:6px 10px;letter-spacing:.3px;">— 별도 (Non-Off · Off TTL 미포함) —</td></tr>`);
-    for(const cc of _sepChs) _emitFcstChannel(cc);
+    for(const cc of _sepChs) _emitFcstChannel(cc, true);
   }
   const head = `<thead><tr>
     <th style="text-align:left">채널 / 거래처</th>
