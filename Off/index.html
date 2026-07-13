@@ -344,6 +344,9 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 table { width: 100%; border-collapse: collapse; font-size: 11px; }
 thead th { background: var(--primary); color: #fff; padding: 6px 8px; text-align: right; white-space: nowrap; cursor: pointer; user-select: none; }
 #tbl-sku thead th { position: sticky; top: 0; z-index: 2; }
+/* FCST Summary: 초록 헤더 고정(스크롤 내려도 보임) + 드릴다운 Brand 경계 강화 */
+#tbl-fcst thead th { position: sticky; top: 0; z-index: 3; }
+#tbl-fcst tbody tr.fcst-drill-brand td { border-top: 2px solid #94a3b8; background: #eef2f7; }
 
 /* ── P&L Detail Table: sticky header + first two columns ── */
 #tbl-rev-pl thead th { position: sticky; top: 0; z-index: 3; }
@@ -2177,7 +2180,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </div>
 
     <div class="section-title" id="fcst-table-title">FCST Summary — 채널 ▸ 거래처 (HL)</div>
-    <div class="table-wrap"><table id="tbl-fcst"></table></div>
+    <div class="table-wrap" style="max-height:70vh; overflow-y:auto;"><table id="tbl-fcst"></table></div>
 
     <div class="fc-note" style="margin-top:10px;color:#94a3b8;font-size:11px;">ⓘ 행(Off TTL·채널·거래처)을 클릭하면 아래로 Brand▸SKU 상세가 펼쳐집니다.</div>
   </div>
@@ -5240,7 +5243,7 @@ function renderFcstTable(){
       const anyW = o.w.some(x=>x>0.001);
       const wcells = o.w.map(v=>`<td style="text-align:right;font-size:10px;color:#94a3b8;">${anyW?_offFmt(v):'—'}</td>`).join('');
       const nm = isBrand ? `<b style="color:#475569">${label}</b>` : `<span style="color:#64748b">· ${label}</span>`;
-      return `<tr class="fcst-drill-child" data-parent="${parentId}" style="display:none;background:#fbfcfe;font-size:11px;">
+      return `<tr class="fcst-drill-child${isBrand?' fcst-drill-brand':''}" data-parent="${parentId}" style="display:none;background:#fbfcfe;font-size:11px;">
         <td style="padding-left:${isBrand?40:60}px;">${nm}</td>
         <td style="text-align:right;color:#555">${_offFmt(rf)}</td>
         ${wcells}
