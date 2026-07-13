@@ -5244,12 +5244,11 @@ function renderFcstTable(){
       <td class="td-brand"><span class="${_offGrCls(tYoy)}">${_offFmtGr(tYoy)}</span></td>
     </tr>`);
   }
-  for(const cc of OFF.channels){
+  const _emitFcstChannel = (cc) => {
     const rf = sumArr(cc.m && cc.m.rofo_m);
     const fc = sumArr(cc.m && cc.m.fcst_m), ac = sumArr(cc.m && cc.m.act_m);
     const ly = sumArr(cc.m && cc.m.ly_m);
-    if((rf+fc+ac+ly) < 0.01) continue;
-    const achFc = fc ? ac/fc : null;
+    if((rf+fc+ac+ly) < 0.01) return;
     const achRf = rf ? ac/rf : null;
     const fcRf  = rf ? fc/rf : null;   // FCST vs RoFo (예측/타깃)
     const yoy   = ly ? fc/ly - 1 : null;   // 최신 FCST vs 전년(YoY)
@@ -5270,7 +5269,6 @@ function renderFcstTable(){
       const afc=sumArr(acc.m && acc.m.fcst_m), aac=sumArr(acc.m && acc.m.act_m);
       const aly=sumArr(acc.m && acc.m.ly_m);
       if((arf+afc+aac+aly) < 0.01) continue;
-      const aAchFc = afc ? aac/afc : null;
       const aAchRf = arf ? aac/arf : null;
       const afcRf  = arf ? afc/arf : null;
       const ayoy   = aly ? afc/aly - 1 : null;   // 최신 FCST vs 전년(YoY)
@@ -5287,6 +5285,15 @@ function renderFcstTable(){
         <td><span class="${_offGrCls(ayoy)}">${_offFmtGr(ayoy)}</span></td>
       </tr>`);
     }
+  };
+  // Off 코어 채널
+  for(const cc of OFF.channels.filter(_offInTtl)) _emitFcstChannel(cc);
+  // 별도(Non-Off) 섹션 — 이컴·군납 (Off TTL 미포함, 시각적으로 분리)
+  const _sepChs = OFF.channels.filter(c => !_offInTtl(c));
+  const _sepHasData = _sepChs.some(cc => (sumArr(cc.m&&cc.m.rofo_m)+sumArr(cc.m&&cc.m.fcst_m)+sumArr(cc.m&&cc.m.act_m)+sumArr(cc.m&&cc.m.ly_m)) >= 0.01);
+  if(_sepHasData){
+    parts.push(`<tr class="brand-start" style="background:#f1f5f9;"><td colspan="13" style="font-weight:700;color:#475569;font-size:11px;padding:6px 10px;letter-spacing:.3px;">— 별도 (Non-Off · Off TTL 미포함) —</td></tr>`);
+    for(const cc of _sepChs) _emitFcstChannel(cc);
   }
   const head = `<thead><tr>
     <th style="text-align:left">채널 / 거래처</th>
