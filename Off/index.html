@@ -9880,10 +9880,19 @@ async function offHandleRofoUpload(input){
       input.value = ''; return;
     }
     const newRows = parseOffFcstWorkbook(wb);
-    if(!newRows.length){ el.textContent = '⚠ 파싱된 행 없음 (시트명·양식 확인)'; return; }
+    // 진단: 별도 채널(E-com·Military) 시트 인식 여부·행수 + 워크북 실제 시트명
+    const sheetSet = new Set(wb.SheetNames);
+    const cntByCh = {}; for(const r of newRows) cntByCh[r.ch] = (cntByCh[r.ch]||0)+1;
+    const sepDiag = ['E-com','Military'].map(ch=>{
+      const meta = _OFF_FCST_ACCOUNTS.find(a=>a.ch===ch);
+      const found = !!(meta && sheetSet.has(meta.sheet));
+      return `${ch}(시트 '${meta?meta.sheet:'?'}' ${found?'✓있음':'✗없음'}, ${cntByCh[ch]||0}행)`;
+    }).join(' · ');
+    if(!newRows.length){ el.innerHTML = '⚠ 파싱된 행 없음. 워크북 시트: <span style="font-size:11px">'+wb.SheetNames.join(', ')+'</span>'; return; }
     _applyAccountVolumeRows(newRows);
     OFF = finalizeOff(OFF_SEED.rows);
-    el.innerHTML = '✓ RoFo(통합본) 적용: <b>' + newRows.length + ' rows</b> · AP·RoFo·25Y 갱신 (Actual·FCST 보존)';
+    el.innerHTML = '✓ RoFo(통합본) 적용: <b>' + newRows.length + ' rows</b> · AP·RoFo·25Y 갱신 (Actual·FCST 보존)'
+      + '<br><span style="font-size:11px;color:#64748b">별도채널 ' + sepDiag + ' · 전체시트: ' + wb.SheetNames.join(', ') + '</span>';
     _offRerenderActive();
     _offUpdateDataStatus();
   } catch(e){ el.innerHTML = '<span style="color:#dc2626">오류: ' + (e.message || e) + '</span>'; console.error(e); }
