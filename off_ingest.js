@@ -189,7 +189,9 @@
   // ── P07 "01. 2026 Volume" RoFo 파서 ──────────────────────────────────
   // 시트 2026RF07: Team/Channel/Brand/SKU(FCST) + Jan~Dec(HL). block1(Jan열~)만 HL.
   // 반환 { offChannel:{offKey:[12]}, onTotal:[12] }. 소계/합계행·비대상 Team 제외.
-  const _VOL_CH_MAP = { 'CVS':'CVS','Hyper':'HYPER','Cash & Carry':'C&C','Cash&Carry':'C&C','Union Shop':'UNION','CLSM':'SM','ALSM':'ALSM' };
+  const _VOL_CH_MAP = { 'CVS':'CVS','Hyper':'HYPER','Cash & Carry':'C&C','Cash&Carry':'C&C','Union Shop':'UNION','CLSM':'SM','ALSM':'ALSM',
+    // Off와 합산 안 하는 별도 채널 (P07 Channel 컬럼: DF=Military, E-commd=E-com)
+    'DF':'Military', 'E-commd':'E-com', 'E-comm':'E-com', 'E-com':'E-com' };
   function parseVolumeRofo(wb, sheetName) {
     const sn = sheetName || '2026RF07';
     const sh = wb.Sheets[sn];

@@ -108,22 +108,25 @@ function finalizeOff(rows){
     ch.m = offAggMetrics(ch.accounts);
   }
   const total = offAggMetrics(channels.filter(_offInTtl));   // Off TTL = 코어 채널만(E-com·Military 제외)
-  // 채널 RoFo는 RoFo 파일(SKU별 rofo_m) 합계로 통일 — P07 채널 override 비활성화.
-  const rofoCh = null;  // (구) window._OFF_ROFO_CH
+  // 코어 채널 RoFo = 계정별 rofo_m 합(취합본)으로 통일(P07 채널 override 비활성).
+  // 단, E-com·Military는 취합본에 SKU가 없고 RoFo가 P07 채널단위로만 오므로 rofo_channel을 그 두 채널에만 적용.
+  const rofoCh = window._OFF_ROFO_CH || null;
   if(rofoCh){
     const am = _OFF_ACT_MONTHS;
-    const tot = offZero12();
     for(const ch of channels){
+      if(_offInTtl(ch)) continue;                 // 코어 채널·Off TTL은 불변
       const rm = rofoCh[ch.key]; if(!rm) continue;
       ch.m.rofo_m = rm.slice();
       ch.m.rofo_ytd = offYtdSum(rm); ch.m.rofo_mtd = offSumN(rm, am);
       ch.m.ach_rofo = ch.m.rofo_mtd ? ch.m.act_mtd/ch.m.rofo_mtd : null;
       ch.m.rofo_vs_ap = ch.m.ap_ytd ? ch.m.rofo_ytd/ch.m.ap_ytd - 1 : null;
-      for(let i=0;i<12;i++) tot[i] += (rm[i]||0);
+      if(ch.accounts.length === 1 && ch.accounts[0].m){   // 단일 계정(E-com/Military)은 계정 RoFo도 채널값으로
+        const a = ch.accounts[0].m;
+        a.rofo_m = rm.slice(); a.rofo_ytd = offYtdSum(rm); a.rofo_mtd = offSumN(rm, am);
+        a.ach_rofo = a.rofo_mtd ? a.act_mtd/a.rofo_mtd : null;
+        a.rofo_vs_ap = a.ap_ytd ? a.rofo_ytd/a.ap_ytd - 1 : null;
+      }
     }
-    total.rofo_m = tot; total.rofo_ytd = offYtdSum(tot); total.rofo_mtd = offSumN(tot, am);
-    total.ach_rofo = total.rofo_mtd ? total.act_mtd/total.rofo_mtd : null;
-    total.rofo_vs_ap = total.ap_ytd ? total.rofo_ytd/total.ap_ytd - 1 : null;
   }
   return {
     meta: (window.OFF_SEED && OFF_SEED.meta) || {},
