@@ -3655,6 +3655,21 @@ const OT_COLORS = [
   '#00873e','#1e40af','#dc2626','#d97706','#7c3aed','#be185d','#0e7490',
   '#059669','#10b981','#3b82f6','#ef4444','#f59e0b','#8b5cf6','#ec4899','#64748b'
 ];
+// 브랜드(sku)별 고정 색상 — 지점(지역) 필터를 바꿔도 브랜드마다 항상 같은 색.
+// Heineken은 항상 그린. 나머지는 섹션 내 sku 목록을 안정 정렬해 색 인덱스 고정(초록 계열 제외).
+const OT_HE_COLOR = '#00873e';
+const OT_COLORS_OTHER = ['#1e40af','#dc2626','#d97706','#7c3aed','#be185d','#0e7490','#3b82f6','#ef4444','#f59e0b','#8b5cf6','#ec4899','#64748b'];
+function otColorFor(sku){
+  if(!sku) return '#64748b';
+  if(/heineken/i.test(sku)) return OT_HE_COLOR;
+  const all=[...OT_BOTTLE,...OT_DRAUGHT];
+  const row=all.find(d=>d.sku===sku);
+  const section=row?row.section:'';
+  // 같은 섹션(카테고리) 안의 브랜드만 정렬 → 차트 내 색 중복 방지 + 지점 무관 고정
+  const skus=[...new Set(all.filter(d=>d.section===section).map(d=>d.sku))].filter(s=>s&&!/heineken/i.test(s)).sort();
+  const idx=skus.indexOf(sku);
+  return idx<0 ? '#64748b' : OT_COLORS_OTHER[idx%OT_COLORS_OTHER.length];
+}
 const otF = {region:'전체'};
 let otBWestVolChart=null, otBWestShrChart=null, otBChinVolChart=null, otBChinShrChart=null;
 let otDLagVolChart=null, otDLagShrChart=null, otDWhtVolChart=null, otDWhtShrChart=null;
@@ -3770,7 +3785,7 @@ function renderOtVolChart(canvasId,data,prevChart){
   const skus=[...new Set(data.map(d=>d.sku))];
   const datasets=skus.map((sku,i)=>{
     const rows=data.filter(d=>d.sku===sku);
-    return{label:fmtSku(sku),data:OT_MK.map(k=>rows.reduce((s,d)=>s+(d[k]||0),0)),backgroundColor:OT_COLORS[i%OT_COLORS.length]+'cc',borderColor:OT_COLORS[i%OT_COLORS.length],borderWidth:1};
+    return{label:fmtSku(sku),data:OT_MK.map(k=>rows.reduce((s,d)=>s+(d[k]||0),0)),backgroundColor:otColorFor(sku)+'cc',borderColor:otColorFor(sku),borderWidth:1};
   });
   return new Chart(canvas,{type:'bar',data:{labels:OT_ML,datasets},options:{...CD,plugins:{...CD.plugins,tooltip:{mode:'index',intersect:false}},scales:{...CD.scales,x:{...CD.scales.x,stacked:true},y:{...CD.scales.y,stacked:true}},responsive:true,maintainAspectRatio:true}});
 }
@@ -3784,14 +3799,14 @@ function renderOtShrChart(canvasId,shrData,volData,prevChart){
     const skus=[...new Set(shrData.map(d=>d.sku))];
     datasets=skus.map((sku,i)=>{
       const rows=shrData.filter(d=>d.sku===sku);
-      return{label:fmtSku(sku),data:OT_MK.map(k=>rows.reduce((s,d)=>s+(d[k]||0),0)*100),borderColor:OT_COLORS[i%OT_COLORS.length],backgroundColor:'transparent',tension:0.3,borderWidth:2,pointRadius:3};
+      return{label:fmtSku(sku),data:OT_MK.map(k=>rows.reduce((s,d)=>s+(d[k]||0),0)*100),borderColor:otColorFor(sku),backgroundColor:'transparent',tension:0.3,borderWidth:2,pointRadius:3};
     });
   } else if(volData&&volData.length){
     const skus=[...new Set(volData.map(d=>d.sku))];
     const totals=OT_MK.map(k=>volData.reduce((s,d)=>s+(d[k]||0),0));
     const total25=volData.reduce((s,d)=>s+(d.y2025||0),0);   // 2025 섹션 합계(연간 볼륨)
     skus.forEach((sku,i)=>{
-      const col=OT_COLORS[i%OT_COLORS.length];
+      const col=otColorFor(sku);
       const skuRows=volData.filter(d=>d.sku===sku);
       // 2026 월별 점유율 (실선)
       datasets.push({label:fmtSku(sku),data:OT_MK.map((k,mi)=>totals[mi]?skuRows.reduce((s,d)=>s+(d[k]||0),0)/totals[mi]*100:0),borderColor:col,backgroundColor:'transparent',tension:0.3,borderWidth:2,pointRadius:3});
