@@ -35,9 +35,10 @@
     'GSSuper':'GS Super','LotteSuper':'Lotte Super','Everyday':'Everyday','NoBrand':'Nobrand',
     'Seowon':'Seowon','Korail':'Korail','Express':'Express',
     'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
-    // Off와 합산 안 하는 별도 채널 (DSR Group: On-line→E-com, military→Military)
+    // Off와 합산 안 하는 별도 채널 (DSR Group: On-line→E-com, military→Military, DutyFree/DF→DF)
     'On-line':'E-com','On-Line':'E-com','Online':'E-com','on-line':'E-com',
-    'military':'Military','Military':'Military'
+    'military':'Military','Military':'Military',
+    'DutyFree':'DF','Duty Free':'DF','DF':'DF','dutyfree':'DF','duty free':'DF'
   };
   // Segment 컬럼이 없을 때 Group으로 채널 역추론
   const _OFF_GRP_CH = {
@@ -49,7 +50,8 @@
     'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
     // 별도 채널(Off 합산 제외) — Group으로 채널 판정
     'On-line':'E-com','On-Line':'E-com','Online':'E-com','on-line':'E-com',
-    'military':'Military','Military':'Military'
+    'military':'Military','Military':'Military',
+    'DutyFree':'DF','Duty Free':'DF','DF':'DF','dutyfree':'DF','duty free':'DF'
   };
 
   // 헤더 텍스트로 컬럼 찾기 (대소문자/공백 무시)
