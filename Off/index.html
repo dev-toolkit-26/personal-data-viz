@@ -2186,6 +2186,13 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <div class="table-wrap" style="overflow:visible;"><table id="tbl-fcst"></table></div>
 
     <div class="fc-note" style="margin-top:10px;color:#94a3b8;font-size:11px;">ⓘ 행(Off TTL·채널·거래처)을 클릭하면 아래로 Brand▸SKU 상세가 펼쳐집니다.</div>
+    <div class="fc-note" style="margin-top:8px;color:#94a3b8;font-size:11px;line-height:1.75;border-top:1px solid #e5e7eb;padding-top:8px;">
+      <b style="color:#64748b;">ⓘ 어카운트 RoFo 산정·반영 방식</b><br>
+      · <b>어카운트 RoFo = 해당 거래처 SKU별 RoFo(<code>rofo_m</code>) 합계</b> — 포션(비중)으로 재분배하는 게 아니라 <b>SKU 단위 값을 그대로 합산</b>합니다. 채널 RoFo = 소속 거래처 합계. (포션 안분은 주간 W1~W5 FCST에만 적용)<br>
+      · <b>코어 채널</b>(CVS·HYPER·UNION·C&amp;C·SM·ALSM): <b>Account Volume 취합본</b>의 SKU 단위 RoFo를 그대로 반영.<br>
+      · <b>별도 채널</b>(E-com·DF·Military): 취합본에 SKU가 없어 <b>P07(01. 2026 Volume)</b>의 채널 RoFo를 사용하고, SKU RoFo도 P07 SKU 단위로 반영(<b>SKU 합 = 채널 총계</b>). 단일 거래처라 어카운트 = 채널 동일값.<br>
+      · RoFo는 <b>롤링 예측</b>이라 마감월은 실적이, 미래월(예: 7월)은 예측치가 반영됩니다.
+    </div>
   </div>
 
   <!-- Tab: YTD -->
