@@ -9428,11 +9428,15 @@ function parseOffFcstWorkbook(wb){
 const _OFF_TR_CH_MAP = { 'CVS':'CVS','CLSM':'SM','ALSM':'ALSM','Hyper':'HYPER','Cash&Carry':'C&C','Union Shop':'UNION' };
 const _OFF_TR_AC_MAP = {
   'GS25':'GS25','CU':'CU','KoreaSeven':'K7','Emart24':'E24','cspace':'Cspace',
-  'Emart':'E-mart','LotteMart':'Lottemart','Megamart':'Megamart','Homeplus':'Homeplus','NewCore':'Lottemart',
+  'Emart':'E-mart','LotteMart':'Lottemart','Lottemart':'Lottemart','Megamart':'Megamart','Homeplus':'Homeplus','NewCore':'Lottemart',
   'Hanaromart':'Hanaro','Costco':'Costco','E-Traders':'E-Traders','Vic Market':'Costco',
   'GSSuper':'GS Super','LotteSuper':'Lotte Super','Everyday':'Everyday','NoBrand':'Nobrand',
   'Seowon':'Seowon','Korail':'Korail','Express':'Express',
-  'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM'
+  'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
+  // Off와 합산 안 하는 별도 채널 (DSR Group: On-line→E-com, military→Military, DutyFree/DF→DF)
+  'On-line':'E-com','On-Line':'E-com','Online':'E-com','on-line':'E-com',
+  'military':'Military','Military':'Military',
+  'DutyFree':'DF','Duty Free':'DF','DF':'DF','dutyfree':'DF','duty free':'DF'
 };
 // 헤더 텍스트로 컬럼 찾기 (대소문자/공백 무시)
 function _offFindColByHeader(sh, range, ...candidates){
@@ -9456,7 +9460,11 @@ const _OFF_GRP_CH = {
   'Emart':'HYPER','LotteMart':'HYPER','Megamart':'HYPER','Homeplus':'HYPER','NewCore':'HYPER',
   'Costco':'C&C','E-Traders':'C&C','Vic Market':'C&C',
   'Hanaromart':'UNION',
-  'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM'
+  'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
+  // 별도 채널(Off 합산 제외) — Group으로 채널 판정
+  'On-line':'E-com','On-Line':'E-com','Online':'E-com','on-line':'E-com',
+  'military':'Military','Military':'Military',
+  'DutyFree':'DF','Duty Free':'DF','DF':'DF','dutyfree':'DF','duty free':'DF'
 };
 function parseDsrWorkbook(wb, expectedYear){
   const sh = wb.Sheets[wb.SheetNames[0]];
@@ -9482,8 +9490,8 @@ function parseDsrWorkbook(wb, expectedYear){
     const grp = _offCellStr(sh[XLSX.utils.encode_cell({r:R, c:cGrp})]);
     const sku = _offCellStr(sh[XLSX.utils.encode_cell({r:R, c:cSku})]);
     if(!grp || !sku){ skipped++; continue; }
-    // 채널: Segment 컬럼 우선, 없으면 Group으로 역추론
-    const chKey = seg ? _OFF_TR_CH_MAP[seg] : _OFF_GRP_CH[grp];
+    // 채널: Segment 컬럼 우선, 미인식(E-com·Military·DF 등)/없으면 Group으로 역추론
+    const chKey = (seg && _OFF_TR_CH_MAP[seg]) || _OFF_GRP_CH[grp];
     const acKey = _OFF_TR_AC_MAP[grp];
     if(!chKey || !acKey){ skipped++; continue; }
     // 월/연도 결정
