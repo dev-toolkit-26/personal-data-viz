@@ -1182,8 +1182,12 @@ td.sr-cell{white-space:nowrap}
       </div>
     </div>
     <div style="height:300px;margin-bottom:18px"><canvas id="drBwChart"></canvas></div>
-    <!-- 뷰3: 원본형 표 (주별 철수 + 진척률) -->
-    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">주별 철수 = 이번주 − 지난주 운영대수 · 진척률 = (현재 − 14W) ÷ 14W · 최신 주차 강조</div>
+    <!-- 뷰3: 원본형 표 (주별 철수 / 운영대수 잔량 토글) -->
+    <div class="frow" style="margin:0 0 6px">
+      <button class="fb on" id="drBwTblWd" onclick="setBwTblMode('withdraw',this)">주별 철수</button>
+      <button class="fb" id="drBwTblInst" onclick="setBwTblMode('inst',this)">운영대수(잔량)</button>
+    </div>
+    <div id="drBwTblNote" style="font-size:11px;color:var(--muted);margin-bottom:6px"></div>
     <div class="ow"><table class="utable" id="drBwTable"></table></div>
   </div>
 
@@ -1906,7 +1910,7 @@ function initDraughtView(){
 }
 
 // ── C. BLADE 철수 진척 (지점×주차 운영대수 → 철수/진척률) ─────────────
-let drBwChartObj=null, drBwMetric='inst', drBwRegion='ALL';
+let drBwChartObj=null, drBwMetric='inst', drBwRegion='ALL', drBwTblMode='withdraw';
 function bwLabel(reg){ const x=DR_OFFICE_LIST.find(o=>o.full===reg); return x?x.label:reg.replace(/^On /,''); }
 function bwMonthOf(num){ if(num<15)return null; return ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Math.floor((num-15)/4)]||('~'+num+'W'); }
 function bwPrep(){
@@ -1990,31 +1994,40 @@ function drawBwChart(P){
       y:{ticks:{color:'#6b7280',callback:v=>isRate?v+'%':v},grid:{color:'#e5e7eb'}}}}});
 }
 function bwTableHTML(P){
-  const wds=P.weeks.filter(w=>w.num>=15);   // 14W는 baseline(철수 없음)
-  // 월 그룹
+  const inst = drBwTblMode==='inst';   // 잔량(운영대수) 모드 vs 주별 철수 모드
+  const wks = inst ? P.weeks.slice() : P.weeks.filter(w=>w.num>=15);   // 철수는 14W baseline 제외
+  const showSub = !inst;   // 잔량 모드는 월 소계 없음(레벨값이라)
+  // 월 그룹 (잔량 14W는 '기준')
   const groups=[]; let cg=null;
-  wds.forEach(w=>{const m=bwMonthOf(w.num); if(!cg||cg.m!==m){cg={m,weeks:[]};groups.push(cg);} cg.weeks.push(w);});
+  wks.forEach(w=>{const m=(inst&&w.num<15)?'기준':(bwMonthOf(w.num)||('~'+w.num+'W')); if(!cg||cg.m!==m){cg={m,weeks:[]};groups.push(cg);} cg.weeks.push(w);});
   const latestNum=P.weeks[P.weeks.length-1].num;
   // 헤더
   let h='<thead><tr><th rowspan="2" style="text-align:left">지점</th>';
-  groups.forEach(g=>{ h+=`<th colspan="${g.weeks.length+1}" style="text-align:center;border-left:2px solid var(--border)">${g.m}</th>`; });
-  h+='<th rowspan="2" class="r">누적철수</th><th rowspan="2" class="r">진척률</th></tr><tr>';
-  groups.forEach(g=>{ g.weeks.forEach(w=>{ h+=`<th class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${w.week}</th>`; }); h+='<th class="r" style="border-left:2px solid var(--border);color:var(--muted)">소계</th>'; });
+  groups.forEach(g=>{ h+=`<th colspan="${g.weeks.length+(showSub?1:0)}" style="text-align:center;border-left:2px solid var(--border)">${g.m}</th>`; });
+  h+=`<th rowspan="2" class="r">${inst?'남은대수':'누적철수'}</th><th rowspan="2" class="r">진척률</th></tr><tr>`;
+  groups.forEach(g=>{ g.weeks.forEach(w=>{ h+=`<th class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${w.week}</th>`; }); if(showSub) h+='<th class="r" style="border-left:2px solid var(--border);color:var(--muted)">소계</th>'; });
   h+='</tr></thead><tbody>';
   const rowFor=(label,series,isTot)=>{
-    // withdraw per week = inst - prevInst
-    const wdByNum={}; let prev=null;
-    series.forEach(s=>{ if(s.inst!=null){ if(prev!=null) wdByNum[s.num]=s.inst-prev; prev=s.inst; } });
     const st=bwStat(series); if(!st)return '';
     let r=`<tr${isTot?' style="font-weight:700;background:var(--surface2)"':''}><td style="text-align:left">${label}</td>`;
-    groups.forEach(g=>{ let sub=0; g.weeks.forEach(w=>{ const v=wdByNum[w.num]; if(v!=null)sub+=v; r+=`<td class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${v!=null?(v===0?'0':v):'–'}</td>`; }); r+=`<td class="r" style="border-left:2px solid var(--border);color:${sub<0?'#e30613':'var(--muted)'}">${sub||'0'}</td>`; });
-    r+=`<td class="r" style="color:#e30613;font-weight:700">${drFmt(st.withdrawn)}</td><td class="r" style="font-weight:700">${bwRate(st.rate)}</td></tr>`;
+    if(inst){
+      groups.forEach(g=>{ g.weeks.forEach(w=>{ const s=series.find(x=>x.num===w.num); const v=s?s.inst:null; r+=`<td class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${v!=null?drFmt(v):'–'}</td>`; }); });
+      r+=`<td class="r" style="font-weight:700">${drFmt(st.latest)}</td><td class="r" style="font-weight:700;color:#e30613">${bwRate(st.rate)}</td></tr>`;
+    } else {
+      const wdByNum={}; let prev=null;
+      series.forEach(s=>{ if(s.inst!=null){ if(prev!=null) wdByNum[s.num]=s.inst-prev; prev=s.inst; } });
+      groups.forEach(g=>{ let sub=0; g.weeks.forEach(w=>{ const v=wdByNum[w.num]; if(v!=null)sub+=v; r+=`<td class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${v!=null?(v===0?'0':v):'–'}</td>`; }); r+=`<td class="r" style="border-left:2px solid var(--border);color:${sub<0?'#e30613':'var(--muted)'}">${sub||'0'}</td>`; });
+      r+=`<td class="r" style="color:#e30613;font-weight:700">${drFmt(st.withdrawn)}</td><td class="r" style="font-weight:700">${bwRate(st.rate)}</td></tr>`;
+    }
     return r;
   };
   let body=rowFor('Total',bwSeriesArr(P,'Total'),true);
   P.regions.forEach(r=>{ body+=rowFor(bwLabel(r),bwSeriesArr(P,r),false); });
+  const note=document.getElementById('drBwTblNote');
+  if(note) note.textContent=inst?'각 주차 운영대수(잔량) · 남은대수=최신주 · 진척률=(현재 − 14W) ÷ 14W · 최신 주차 강조':'주별 철수 = 이번주 − 지난주 운영대수 · 진척률 = (현재 − 14W) ÷ 14W · 최신 주차 강조';
   return h+body+'</tbody>';
 }
+function setBwTblMode(m,el){ drBwTblMode=m; el.parentElement.querySelectorAll('.fb').forEach(b=>b.classList.remove('on')); el.classList.add('on'); document.getElementById('drBwTable').innerHTML=bwTableHTML(bwPrep()); }
 function setBwMetric(m,el){ drBwMetric=m; document.querySelectorAll('#drBwMetInst,#drBwMetRate').forEach(b=>b.classList.remove('on')); el.classList.add('on'); const P=bwPrep(); drawBwChart(P); }
 function setBwRegion(k,el){ drBwRegion=k; el.parentElement.querySelectorAll('.fb').forEach(b=>b.classList.remove('on')); el.classList.add('on'); const P=bwPrep(); drawBwChart(P); }
 
