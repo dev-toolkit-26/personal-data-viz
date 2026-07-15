@@ -57,7 +57,7 @@ let RSP_DATA_BASE=[],CC_DATA_BASE=[],WS_DATA_BASE=[],Y25_DATA=[];
 let OT_BOTTLE=[],OT_DRAUGHT=[],OT_WS=[];
 let PAULANER_DATA=[];
 let BOTTLE_INCENTIVE=[];
-let DRAUGHT_MOVEMENT=[],DRAUGHT_STOCK=[],DRAUGHT_BLADE=[];
+let DRAUGHT_MOVEMENT=[],DRAUGHT_STOCK=[],DRAUGHT_BLADE=[],DRAUGHT_BLADE_WD=[];
 let PA_INSTALL_DATA=[];   // PA Normal/Column 설치 (paulaner_pa_installs) — 20L 키그와 별도
 let siRspAll=[],siCcAll=[];
 const siRF={team:'전체',type:'전체'};
@@ -893,6 +893,11 @@ td.sr-cell{white-space:nowrap}
         <table class="utable"><thead><tr><th>Kind</th><th>Label</th><th class="r">입고</th><th class="r">출고</th><th class="r">기말/건수</th></tr></thead>
         <tbody id="pbDrBlade"></tbody></table>
       </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 4px">⑤ BLADE 철수 진척 (BLADE Withdraw Progress 시트 · 지점×주차 운영대수 → 목표 −100%)</div>
+      <div class="ow" style="max-height:180px">
+        <table class="utable"><thead><tr><th>지점</th><th class="r">주차수</th><th class="r">기준(14W)</th><th class="r">최신주</th><th class="r">진척률</th></tr></thead>
+        <tbody id="pbDrBladeWd"></tbody></table>
+      </div>
       <div style="font-size:11px;font-weight:700;color:var(--muted);margin:12px 0 4px">④ PA 신규설치 (Paulaner Normal / Column · 업장단위 → 파울라너 20L 탭)</div>
       <div class="ow" style="max-height:180px">
         <table class="utable"><thead><tr><th>지역</th><th>시스템</th><th>거래처명</th><th class="r">대수</th><th class="r">설치월</th></tr></thead>
@@ -1157,6 +1162,29 @@ td.sr-cell{white-space:nowrap}
     <div class="ow" style="margin-bottom:18px"><table class="utable" id="drProgTable"></table></div>
     <div class="frow" id="drProgAssetRow" style="margin-bottom:8px"></div>
     <div style="height:320px"><canvas id="drProgChart"></canvas></div>
+  </div>
+
+  <!-- C. BLADE 철수 진척 -->
+  <div class="box" id="drBwBox" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <h2 style="margin:0">BLADE 철수 진척 <span style="font-size:13px;font-weight:400;color:var(--muted)">지점별 운영대수 → 주별 철수 · 목표 −100%</span></h2>
+      <div id="drBwMeta" style="font-size:12px;color:var(--muted)"></div>
+    </div>
+    <div id="drBwEmpty" style="display:none;color:var(--muted);font-size:13px;padding:20px 0">데이터가 없습니다. 'BLADE Withdraw Progress' 시트가 포함된 Draught Analysis 파일을 ‘데이터 업데이트’ 탭에서 업로드하세요. (테이블 미생성 시 migrations/draught_blade_withdraw.sql 실행)</div>
+    <!-- 뷰1: 지점별 진척 요약 카드 -->
+    <div id="drBwCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px"></div>
+    <!-- 뷰2: 주차별 추이 -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="frow" id="drBwRegionRow" style="margin:0"></div>
+      <div class="frow" style="margin:0">
+        <button class="fb on" id="drBwMetInst" onclick="setBwMetric('inst',this)">운영대수</button>
+        <button class="fb" id="drBwMetRate" onclick="setBwMetric('rate',this)">누적 진척률</button>
+      </div>
+    </div>
+    <div style="height:300px;margin-bottom:18px"><canvas id="drBwChart"></canvas></div>
+    <!-- 뷰3: 원본형 표 (주별 철수 + 진척률) -->
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">주별 철수 = 이번주 − 지난주 운영대수 · 진척률 = (현재 − 14W) ÷ 14W · 최신 주차 강조</div>
+    <div class="ow"><table class="utable" id="drBwTable"></table></div>
   </div>
 
 </div>
@@ -1825,10 +1853,11 @@ async function loadAllData(){
       sGet('bottle_incentive','order=team').catch(()=>[]),
     ]);
   // Draught System (별도 로드 — 테이블 미생성 시에도 대시보드 동작 유지)
-  [DRAUGHT_MOVEMENT,DRAUGHT_STOCK,DRAUGHT_BLADE]=await Promise.all([
+  [DRAUGHT_MOVEMENT,DRAUGHT_STOCK,DRAUGHT_BLADE,DRAUGHT_BLADE_WD]=await Promise.all([
     sGet('draught_movement','order=id').catch(()=>[]),
     sGet('draught_stock','order=id').catch(()=>[]),
     sGet('draught_blade','order=id').catch(()=>[]),
+    sGet('draught_blade_withdraw','order=week_num').catch(()=>[]),
   ]);
   // PA Normal/Column 설치 (별도 로드 — 테이블 미생성 시에도 대시보드 동작 유지)
   PA_INSTALL_DATA = await sGet('paulaner_pa_installs','order=region').catch(()=>[]);
@@ -1873,7 +1902,121 @@ function drFmt(v){return (v==null||v==='')?'–':Number(v).toLocaleString('ko-KR
 function initDraughtView(){
   renderDraughtSummary();
   renderDraughtProgress();
+  renderBladeWithdraw();
 }
+
+// ── C. BLADE 철수 진척 (지점×주차 운영대수 → 철수/진척률) ─────────────
+let drBwChartObj=null, drBwMetric='inst', drBwRegion='ALL';
+function bwLabel(reg){ const x=DR_OFFICE_LIST.find(o=>o.full===reg); return x?x.label:reg.replace(/^On /,''); }
+function bwMonthOf(num){ if(num<15)return null; return ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Math.floor((num-15)/4)]||('~'+num+'W'); }
+function bwPrep(){
+  const byReg={};
+  DRAUGHT_BLADE_WD.forEach(r=>{ (byReg[r.region]=byReg[r.region]||[]).push({num:+r.week_num,week:r.week,inst:+r.installation}); });
+  Object.values(byReg).forEach(a=>a.sort((x,y)=>x.num-y.num));
+  const wkMap=new Map(); DRAUGHT_BLADE_WD.forEach(r=>wkMap.set(+r.week_num,r.week));
+  const weeks=[...wkMap.keys()].sort((a,b)=>a-b).map(n=>({num:n,week:wkMap.get(n)}));
+  const regions=Object.keys(byReg).sort((a,b)=>{const ia=DR_OFFICE_LIST.findIndex(x=>x.full===a),ib=DR_OFFICE_LIST.findIndex(x=>x.full===b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  const totalSeries=weeks.map(w=>{let s=0,any=false;regions.forEach(r=>{const f=byReg[r].find(x=>x.num===w.num);if(f){s+=f.inst;any=true;}});return any?s:null;});
+  return {byReg,weeks,regions,totalSeries};
+}
+function bwSeriesArr(P,reg){
+  if(reg==='Total') return P.weeks.map((w,i)=>({num:w.num,week:w.week,inst:P.totalSeries[i]}));
+  const a=P.byReg[reg]||[];
+  return P.weeks.map(w=>{const f=a.find(x=>x.num===w.num);return {num:w.num,week:w.week,inst:f?f.inst:null};});
+}
+function bwStat(series){
+  const nn=series.filter(s=>s.inst!=null);
+  if(!nn.length)return null;
+  const base=nn[0].inst, latest=nn[nn.length-1];
+  const rate=base?(latest.inst-base)/base*100:null;
+  return {base, baseWk:nn[0].week, latest:latest.inst, latestWk:latest.week, withdrawn:latest.inst-base, rate};
+}
+function bwRate(v){ return (v==null||!isFinite(v))?'–':(v>0?'+':'')+v.toFixed(1)+'%'; }
+function renderBladeWithdraw(){
+  const box=document.getElementById('drBwBox'); if(!box)return;
+  const has=DRAUGHT_BLADE_WD.length>0;
+  document.getElementById('drBwEmpty').style.display=has?'none':'block';
+  document.getElementById('drBwMeta').textContent='';
+  const cardsEl=document.getElementById('drBwCards'), tblEl=document.getElementById('drBwTable'), regRow=document.getElementById('drBwRegionRow');
+  if(!has){ cardsEl.innerHTML=''; tblEl.innerHTML=''; regRow.innerHTML=''; if(drBwChartObj){drBwChartObj.destroy();drBwChartObj=null;} return; }
+  const P=bwPrep();
+  const baseWk=P.weeks[0].week, latestWk=P.weeks[P.weeks.length-1].week;
+  document.getElementById('drBwMeta').textContent=`기준 ${baseWk} · 최신 ${latestWk} · ${P.regions.length}개 지점`;
+  // 뷰1: 카드 (Total 먼저, 지점은 진척률 낮은순=선두)
+  const totStat=bwStat(bwSeriesArr(P,'Total'));
+  const regStats=P.regions.map(r=>({reg:r,stat:bwStat(bwSeriesArr(P,r))})).filter(x=>x.stat).sort((a,b)=>a.stat.rate-b.stat.rate);
+  const card=(label,stat,isTot)=>{
+    const fill=Math.max(0,Math.min(100,-stat.rate));
+    const col=isTot?'#111827':'#e30613';
+    return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px;${isTot?'background:var(--surface2);':''}">
+      <div style="font-size:12px;color:var(--muted);font-weight:700">${label}</div>
+      <div style="font-size:22px;font-weight:800;color:${col};line-height:1.15">${bwRate(stat.rate)}</div>
+      <div style="font-size:11px;color:var(--muted)">${drFmt(stat.base)} → ${drFmt(stat.latest)}대 · 철수 ${drFmt(-stat.withdrawn)}</div>
+      <div style="height:6px;background:var(--border);border-radius:3px;margin-top:8px;overflow:hidden"><div style="height:100%;width:${fill}%;background:#16a34a"></div></div>
+      <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px">목표 −100%</div>
+    </div>`;
+  };
+  cardsEl.innerHTML=(totStat?card('Total',totStat,true):'')+regStats.map(x=>card(bwLabel(x.reg),x.stat,false)).join('');
+  // 뷰2: 지점 버튼 + 차트
+  regRow.innerHTML=[{k:'ALL',l:'전체'}].concat(P.regions.map(r=>({k:r,l:bwLabel(r)}))).map(o=>`<button class="fb${drBwRegion===o.k?' on':''}" onclick="setBwRegion('${o.k.replace(/'/g,"\\'")}',this)">${o.l}</button>`).join('');
+  drawBwChart(P);
+  // 뷰3: 원본형 표 (주별 철수 + 진척률)
+  tblEl.innerHTML=bwTableHTML(P);
+}
+function drawBwChart(P){
+  const canvas=document.getElementById('drBwChart'); if(!canvas)return;
+  if(drBwChartObj){drBwChartObj.destroy();drBwChartObj=null;}
+  const labels=P.weeks.map(w=>w.week);
+  const mkData=(series)=>series.map(s=>{
+    if(s.inst==null)return null;
+    if(drBwMetric==='rate'){ const b=series.find(x=>x.inst!=null); return b&&b.inst?+(((s.inst-b.inst)/b.inst)*100).toFixed(1):null; }
+    return s.inst;
+  });
+  const palette=['#e30613','#2563eb','#16a34a','#f59e0b','#7c3aed','#0891b2','#db2777'];
+  let datasets;
+  if(drBwRegion==='ALL'){
+    datasets=[{label:'Total',data:mkData(bwSeriesArr(P,'Total')),borderColor:'#111827',borderWidth:2.5,tension:.25,pointRadius:2,borderDash:[]}]
+      .concat(P.regions.map((r,i)=>({label:bwLabel(r),data:mkData(bwSeriesArr(P,r)),borderColor:palette[i%palette.length],borderWidth:1.5,tension:.25,pointRadius:1.5})));
+  } else {
+    const c=drBwRegion==='Total'?'#111827':palette[P.regions.indexOf(drBwRegion)%palette.length];
+    datasets=[{label:drBwRegion==='Total'?'Total':bwLabel(drBwRegion),data:mkData(bwSeriesArr(P,drBwRegion)),borderColor:c,backgroundColor:c+'22',borderWidth:2.5,tension:.25,pointRadius:2,fill:drBwMetric==='rate'}];
+  }
+  const isRate=drBwMetric==='rate';
+  drBwChartObj=new Chart(canvas,{type:'line',data:{labels,datasets},options:{
+    responsive:true,maintainAspectRatio:false,spanGaps:true,
+    plugins:{legend:{labels:{color:'#6b7280',font:{size:11},boxWidth:12}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+(isRate?(c.parsed.y+'%'):(drFmt(c.parsed.y)+'대'))}}},
+    scales:{x:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}},
+      y:{ticks:{color:'#6b7280',callback:v=>isRate?v+'%':v},grid:{color:'#e5e7eb'}}}}});
+}
+function bwTableHTML(P){
+  const wds=P.weeks.filter(w=>w.num>=15);   // 14W는 baseline(철수 없음)
+  // 월 그룹
+  const groups=[]; let cg=null;
+  wds.forEach(w=>{const m=bwMonthOf(w.num); if(!cg||cg.m!==m){cg={m,weeks:[]};groups.push(cg);} cg.weeks.push(w);});
+  const latestNum=P.weeks[P.weeks.length-1].num;
+  // 헤더
+  let h='<thead><tr><th rowspan="2" style="text-align:left">지점</th>';
+  groups.forEach(g=>{ h+=`<th colspan="${g.weeks.length+1}" style="text-align:center;border-left:2px solid var(--border)">${g.m}</th>`; });
+  h+='<th rowspan="2" class="r">누적철수</th><th rowspan="2" class="r">진척률</th></tr><tr>';
+  groups.forEach(g=>{ g.weeks.forEach(w=>{ h+=`<th class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${w.week}</th>`; }); h+='<th class="r" style="border-left:2px solid var(--border);color:var(--muted)">소계</th>'; });
+  h+='</tr></thead><tbody>';
+  const rowFor=(label,series,isTot)=>{
+    // withdraw per week = inst - prevInst
+    const wdByNum={}; let prev=null;
+    series.forEach(s=>{ if(s.inst!=null){ if(prev!=null) wdByNum[s.num]=s.inst-prev; prev=s.inst; } });
+    const st=bwStat(series); if(!st)return '';
+    let r=`<tr${isTot?' style="font-weight:700;background:var(--surface2)"':''}><td style="text-align:left">${label}</td>`;
+    groups.forEach(g=>{ let sub=0; g.weeks.forEach(w=>{ const v=wdByNum[w.num]; if(v!=null)sub+=v; r+=`<td class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${v!=null?(v===0?'0':v):'–'}</td>`; }); r+=`<td class="r" style="border-left:2px solid var(--border);color:${sub<0?'#e30613':'var(--muted)'}">${sub||'0'}</td>`; });
+    r+=`<td class="r" style="color:#e30613;font-weight:700">${drFmt(st.withdrawn)}</td><td class="r" style="font-weight:700">${bwRate(st.rate)}</td></tr>`;
+    return r;
+  };
+  let body=rowFor('Total',bwSeriesArr(P,'Total'),true);
+  P.regions.forEach(r=>{ body+=rowFor(bwLabel(r),bwSeriesArr(P,r),false); });
+  return h+body+'</tbody>';
+}
+function setBwMetric(m,el){ drBwMetric=m; document.querySelectorAll('#drBwMetInst,#drBwMetRate').forEach(b=>b.classList.remove('on')); el.classList.add('on'); const P=bwPrep(); drawBwChart(P); }
+function setBwRegion(k,el){ drBwRegion=k; el.parentElement.querySelectorAll('.fb').forEach(b=>b.classList.remove('on')); el.classList.add('on'); const P=bwPrep(); drawBwChart(P); }
 
 // ── A. Summary (엑셀 Summary 양식 재현) ──────────────────────────
 function renderDraughtSummary(){
@@ -3093,7 +3236,7 @@ function drParsePAInstall(wb){
 // ═══════════════════════════════════════════════════
 //  Draught Analysis 업로드 (Summary / Progress / 26Y BLADE Plan / PA 설치)
 // ═══════════════════════════════════════════════════
-let parsedDraught={movement:[],stock:[],blade:[],paInstall:[]};
+let parsedDraught={movement:[],stock:[],blade:[],paInstall:[],bladeWd:[]};
 function drSheetRows(wb,name){
   const lower=name.toLowerCase();
   const exact=wb.SheetNames.find(s=>s.trim().toLowerCase()===lower);
@@ -3200,6 +3343,34 @@ function drParseBlade(wb){
   }
   return blade;
 }
+// 'BLADE Withdraw Progress' 시트 → 지점×주차 운영대수(Installation in Outlet). Total 제외(프론트 합산).
+function drParseBladeWithdraw(wb){
+  const rows=drSheetRows(wb,'BLADE Withdraw'); if(!rows)return [];
+  const isWk=v=>typeof v==='string' && /^\d+W$/.test(v.trim());
+  // 주차 헤더 행: 주차 셀이 5개 이상인 행
+  let wh=-1;
+  for(let i=0;i<Math.min(rows.length,20);i++){
+    const r=rows[i]||[]; if(r.filter(isWk).length>=5){wh=i;break;}
+  }
+  if(wh<0)return [];
+  const col2wk={};
+  (rows[wh]||[]).forEach((v,c)=>{ if(isWk(v)){const w=v.trim();col2wk[c]={week:w,num:parseInt(w,10)};} });
+  const out=[];
+  let cur=null;
+  for(let i=wh+1;i<rows.length;i++){
+    const r=rows[i]||[];
+    const lbl=r[1]!=null?String(r[1]).trim():'';
+    const rtype=r[2]!=null?String(r[2]).trim():'';
+    if(lbl) cur=lbl;
+    if(rtype==='Installation in Outlet' && cur && cur!=='Total'){
+      Object.entries(col2wk).forEach(([c,wk])=>{
+        const v=r[c];
+        if(typeof v==='number' && v>0) out.push({region:cur,week:wk.week,week_num:wk.num,installation:Math.round(v)});
+      });
+    }
+  }
+  return out;
+}
 function readDraught(input){
   const file=input.files[0]; if(!file)return;
   document.getElementById('fnDraught').textContent=file.name;
@@ -3207,15 +3378,26 @@ function readDraught(input){
   reader.onload=function(ev){
     try{
       const wb=XLSX.read(ev.target.result,{type:'array'});
-      const movement=drParseMovement(wb), stock=drParseStock(wb), blade=drParseBlade(wb), paInstall=drParsePAInstall(wb);
+      const movement=drParseMovement(wb), stock=drParseStock(wb), blade=drParseBlade(wb), paInstall=drParsePAInstall(wb), bladeWd=drParseBladeWithdraw(wb);
       if(!movement.length && !stock.length && !blade.length){
         alert('⚠ Draught 파일 형식 오류\nSummary / Progress / 26Y BLADE Plan 시트를 찾을 수 없습니다.');
         input.value=''; return;
       }
-      parsedDraught={movement,stock,blade,paInstall};
+      parsedDraught={movement,stock,blade,paInstall,bladeWd};
       const sumMonths=r=>[1,2,3,4,5,6,7,8,9,10,11,12].reduce((s,m)=>s+drN(r['m'+m]),0);
       const paUnits=paInstall.reduce((s,d)=>{for(let m=3;m<=12;m++)s+=(d['m'+m]||0);return s;},0);
-      document.getElementById('pcDraught').textContent=`Movement ${movement.length} · Stock ${stock.length} · BLADE ${blade.length} · PA설치 ${paInstall.length}업장/${paUnits}대`;
+      const bwRegs=new Set(bladeWd.map(r=>r.region)), bwWks=new Set(bladeWd.map(r=>r.week));
+      document.getElementById('pcDraught').textContent=`Movement ${movement.length} · Stock ${stock.length} · BLADE ${blade.length} · PA설치 ${paInstall.length}업장/${paUnits}대 · 철수 ${bwRegs.size}지점×${bwWks.size}주차`;
+      const bwPrev=document.getElementById('pbDrBladeWd');
+      if(bwPrev){
+        const byR={}; bladeWd.forEach(r=>{(byR[r.region]=byR[r.region]||[]).push(r);});
+        bwPrev.innerHTML=Object.keys(byR).map(reg=>{
+          const a=byR[reg].slice().sort((x,y)=>x.week_num-y.week_num);
+          const b=a[0], l=a[a.length-1];
+          const rate=b&&b.installation?((l.installation-b.installation)/b.installation*100).toFixed(1):'–';
+          return `<tr><td>${reg}</td><td class="r">${a.length}</td><td class="r">${b?b.week+'='+b.installation:'–'}</td><td class="r">${l?l.week+'='+l.installation:'–'}</td><td class="r">${rate}%</td></tr>`;
+        }).join('')||'<tr><td colspan="5" style="color:var(--muted)">BLADE Withdraw Progress 시트 없음/미인식</td></tr>';
+      }
       document.getElementById('pbDrMove').innerHTML=movement.slice(0,80).map(r=>`<tr><td>${r.brand}</td><td>${r.asset}</td><td>${DR_ACTION_LABEL[r.action]||r.action}</td><td class="r">${drFmt(r.qty)}</td><td class="r">${drFmt(sumMonths(r))}</td></tr>`).join('');
       document.getElementById('pbDrStock').innerHTML=stock.slice(0,80).map(r=>`<tr><td>${r.asset}</td><td>${r.status}</td><td class="r">${drFmt(r.qty)}</td><td class="r">${r.ratio!=null?Math.round(r.ratio*100)+'%':'–'}</td></tr>`).join('');
       document.getElementById('pbDrBlade').innerHTML=blade.slice(0,80).map(r=>`<tr><td>${r.kind}</td><td>${r.label}</td><td class="r">${r.inq!=null?drFmt(r.inq):'–'}</td><td class="r">${r.outq!=null?drFmt(r.outq):'–'}</td><td class="r">${r.kind==='plan'?drFmt(r.ending):drFmt(r.qty)}</td></tr>`).join('');
@@ -3228,7 +3410,7 @@ function readDraught(input){
   reader.readAsArrayBuffer(file);
 }
 async function confirmDraught(){
-  const {movement,stock,blade,paInstall}=parsedDraught;
+  const {movement,stock,blade,paInstall,bladeWd}=parsedDraught;
   if(!movement.length && !stock.length && !blade.length){ alert('파일을 먼저 업로드하세요'); return; }
   const ov=document.getElementById('loadingOverlay'); if(ov)ov.style.display='flex';
   try{
@@ -3244,6 +3426,17 @@ async function confirmDraught(){
     await sIns('draught_blade',bl);
     [DRAUGHT_MOVEMENT,DRAUGHT_STOCK,DRAUGHT_BLADE]=await Promise.all([
       sGet('draught_movement','order=id'),sGet('draught_stock','order=id'),sGet('draught_blade','order=id')]);
+    // BLADE 철수 진척 — 테이블 미생성 시에도 나머지 반영은 유지
+    let bwMsg='';
+    if((bladeWd||[]).length){
+      try{
+        const bw=bladeWd.map(r=>({...r,updated_at:_at}));
+        await sDel('draught_blade_withdraw','id=gt.0');
+        await sIns('draught_blade_withdraw',bw);
+        DRAUGHT_BLADE_WD=await sGet('draught_blade_withdraw','order=week_num');
+        bwMsg='\nBLADE 철수 '+bw.length+'건 (지점×주차)';
+      }catch(be){ bwMsg='\n⚠ BLADE 철수 저장 실패: '+be.message+'\n(migrations/draught_blade_withdraw.sql 실행 필요)'; }
+    }
     // PA Normal/Column 설치 — 파일에 해당 행이 있을 때만 교체 (구버전 파일이 PA 데이터를 지우지 않도록)
     let paMsg='';
     if((paInstall||[]).length){
@@ -3257,13 +3450,13 @@ async function confirmDraught(){
         initPaulanerView();
       }catch(pe){ paMsg='\n⚠ PA 설치 저장 실패: '+pe.message+'\n(migrations/paulaner_pa_init.sql 실행 필요)'; }
     }
-    alert('✅ Draught 데이터 저장됨\nMovement '+mv.length+' · Stock '+st.length+' · BLADE '+bl.length+paMsg);
+    alert('✅ Draught 데이터 저장됨\nMovement '+mv.length+' · Stock '+st.length+' · BLADE '+bl.length+bwMsg+paMsg);
     cancelDraught(); renderUploadStatus(); initDraughtView();
   }catch(e){ alert('오류: '+e.message+'\n\n(테이블 미생성 시 migrations/draught_init.sql 을 먼저 실행하세요)'); }
   finally{ if(ov)ov.style.display='none'; }
 }
 function cancelDraught(){
-  parsedDraught={movement:[],stock:[],blade:[],paInstall:[]};
+  parsedDraught={movement:[],stock:[],blade:[],paInstall:[],bladeWd:[]};
   document.getElementById('pvDraught').style.display='none';
   document.getElementById('fnDraught').textContent='';
   document.getElementById('fDraught').value='';
