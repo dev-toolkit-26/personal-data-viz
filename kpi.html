@@ -1173,16 +1173,7 @@ td.sr-cell{white-space:nowrap}
     <div id="drBwEmpty" style="display:none;color:var(--muted);font-size:13px;padding:20px 0">데이터가 없습니다. 'BLADE Withdraw Progress' 시트가 포함된 Draught Analysis 파일을 ‘데이터 업데이트’ 탭에서 업로드하세요. (테이블 미생성 시 migrations/draught_blade_withdraw.sql 실행)</div>
     <!-- 뷰1: 지점별 진척 요약 카드 -->
     <div id="drBwCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px"></div>
-    <!-- 뷰2: 주차별 추이 -->
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
-      <div class="frow" id="drBwRegionRow" style="margin:0"></div>
-      <div class="frow" style="margin:0">
-        <button class="fb on" id="drBwMetInst" onclick="setBwMetric('inst',this)">운영대수</button>
-        <button class="fb" id="drBwMetRate" onclick="setBwMetric('rate',this)">누적 진척률</button>
-      </div>
-    </div>
-    <div style="height:300px;margin-bottom:18px"><canvas id="drBwChart"></canvas></div>
-    <!-- 뷰3: 원본형 표 (주별 철수 / 운영대수 잔량 토글) -->
+    <!-- 뷰2: 원본형 표 (주별 철수 / 운영대수 잔량 토글) -->
     <div class="frow" style="margin:0 0 6px">
       <button class="fb on" id="drBwTblWd" onclick="setBwTblMode('withdraw',this)">주별 철수</button>
       <button class="fb" id="drBwTblInst" onclick="setBwTblMode('inst',this)">운영대수(잔량)</button>
@@ -1910,7 +1901,7 @@ function initDraughtView(){
 }
 
 // ── C. BLADE 철수 진척 (지점×주차 운영대수 → 철수/진척률) ─────────────
-let drBwChartObj=null, drBwMetric='inst', drBwRegion='ALL', drBwTblMode='withdraw';
+let drBwTblMode='withdraw';
 function bwLabel(reg){ const x=DR_OFFICE_LIST.find(o=>o.full===reg); return x?x.label:reg.replace(/^On /,''); }
 function bwMonthOf(num){ if(num<15)return null; return ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Math.floor((num-15)/4)]||('~'+num+'W'); }
 function bwPrep(){
@@ -1941,14 +1932,14 @@ function renderBladeWithdraw(){
   const has=DRAUGHT_BLADE_WD.length>0;
   document.getElementById('drBwEmpty').style.display=has?'none':'block';
   document.getElementById('drBwMeta').textContent='';
-  const cardsEl=document.getElementById('drBwCards'), tblEl=document.getElementById('drBwTable'), regRow=document.getElementById('drBwRegionRow');
-  if(!has){ cardsEl.innerHTML=''; tblEl.innerHTML=''; regRow.innerHTML=''; if(drBwChartObj){drBwChartObj.destroy();drBwChartObj=null;} return; }
+  const cardsEl=document.getElementById('drBwCards'), tblEl=document.getElementById('drBwTable');
+  if(!has){ cardsEl.innerHTML=''; tblEl.innerHTML=''; return; }
   const P=bwPrep();
   const baseWk=P.weeks[0].week, latestWk=P.weeks[P.weeks.length-1].week;
   document.getElementById('drBwMeta').textContent=`기준 ${baseWk} · 최신 ${latestWk} · ${P.regions.length}개 지점`;
-  // 뷰1: 카드 (Total 먼저, 지점은 진척률 낮은순=선두)
+  // 뷰1: 카드 (Total 먼저, 지점은 DR_OFFICE_LIST 고정순 = 서울·부산·대전·대구·광주·제주)
   const totStat=bwStat(bwSeriesArr(P,'Total'));
-  const regStats=P.regions.map(r=>({reg:r,stat:bwStat(bwSeriesArr(P,r))})).filter(x=>x.stat).sort((a,b)=>a.stat.rate-b.stat.rate);
+  const regStats=P.regions.map(r=>({reg:r,stat:bwStat(bwSeriesArr(P,r))})).filter(x=>x.stat);
   const card=(label,stat,isTot)=>{
     const fill=Math.max(0,Math.min(100,-stat.rate));
     const col=isTot?'#111827':'#e30613';
@@ -1961,37 +1952,8 @@ function renderBladeWithdraw(){
     </div>`;
   };
   cardsEl.innerHTML=(totStat?card('Total',totStat,true):'')+regStats.map(x=>card(bwLabel(x.reg),x.stat,false)).join('');
-  // 뷰2: 지점 버튼 + 차트
-  regRow.innerHTML=[{k:'ALL',l:'전체'}].concat(P.regions.map(r=>({k:r,l:bwLabel(r)}))).map(o=>`<button class="fb${drBwRegion===o.k?' on':''}" onclick="setBwRegion('${o.k.replace(/'/g,"\\'")}',this)">${o.l}</button>`).join('');
-  drawBwChart(P);
-  // 뷰3: 원본형 표 (주별 철수 + 진척률)
+  // 뷰2: 원본형 표 (주별 철수 / 운영대수 잔량 토글)
   tblEl.innerHTML=bwTableHTML(P);
-}
-function drawBwChart(P){
-  const canvas=document.getElementById('drBwChart'); if(!canvas)return;
-  if(drBwChartObj){drBwChartObj.destroy();drBwChartObj=null;}
-  const labels=P.weeks.map(w=>w.week);
-  const mkData=(series)=>series.map(s=>{
-    if(s.inst==null)return null;
-    if(drBwMetric==='rate'){ const b=series.find(x=>x.inst!=null); return b&&b.inst?+(((s.inst-b.inst)/b.inst)*100).toFixed(1):null; }
-    return s.inst;
-  });
-  const palette=['#e30613','#2563eb','#16a34a','#f59e0b','#7c3aed','#0891b2','#db2777'];
-  let datasets;
-  if(drBwRegion==='ALL'){
-    datasets=[{label:'Total',data:mkData(bwSeriesArr(P,'Total')),borderColor:'#111827',borderWidth:2.5,tension:.25,pointRadius:2,borderDash:[]}]
-      .concat(P.regions.map((r,i)=>({label:bwLabel(r),data:mkData(bwSeriesArr(P,r)),borderColor:palette[i%palette.length],borderWidth:1.5,tension:.25,pointRadius:1.5})));
-  } else {
-    const c=drBwRegion==='Total'?'#111827':palette[P.regions.indexOf(drBwRegion)%palette.length];
-    datasets=[{label:drBwRegion==='Total'?'Total':bwLabel(drBwRegion),data:mkData(bwSeriesArr(P,drBwRegion)),borderColor:c,backgroundColor:c+'22',borderWidth:2.5,tension:.25,pointRadius:2,fill:drBwMetric==='rate'}];
-  }
-  const isRate=drBwMetric==='rate';
-  drBwChartObj=new Chart(canvas,{type:'line',data:{labels,datasets},options:{
-    responsive:true,maintainAspectRatio:false,spanGaps:true,
-    plugins:{legend:{labels:{color:'#6b7280',font:{size:11},boxWidth:12}},
-      tooltip:{callbacks:{label:c=>c.dataset.label+': '+(isRate?(c.parsed.y+'%'):(drFmt(c.parsed.y)+'대'))}}},
-    scales:{x:{ticks:{color:'#6b7280'},grid:{color:'#e5e7eb'}},
-      y:{ticks:{color:'#6b7280',callback:v=>isRate?v+'%':v},grid:{color:'#e5e7eb'}}}}});
 }
 function bwTableHTML(P){
   const inst = drBwTblMode==='inst';   // 잔량(운영대수) 모드 vs 주별 철수 모드
@@ -2028,8 +1990,6 @@ function bwTableHTML(P){
   return h+body+'</tbody>';
 }
 function setBwTblMode(m,el){ drBwTblMode=m; el.parentElement.querySelectorAll('.fb').forEach(b=>b.classList.remove('on')); el.classList.add('on'); document.getElementById('drBwTable').innerHTML=bwTableHTML(bwPrep()); }
-function setBwMetric(m,el){ drBwMetric=m; document.querySelectorAll('#drBwMetInst,#drBwMetRate').forEach(b=>b.classList.remove('on')); el.classList.add('on'); const P=bwPrep(); drawBwChart(P); }
-function setBwRegion(k,el){ drBwRegion=k; el.parentElement.querySelectorAll('.fb').forEach(b=>b.classList.remove('on')); el.classList.add('on'); const P=bwPrep(); drawBwChart(P); }
 
 // ── A. Summary (엑셀 Summary 양식 재현) ──────────────────────────
 function renderDraughtSummary(){
