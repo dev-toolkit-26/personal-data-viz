@@ -3344,29 +3344,33 @@ function drParseBlade(wb){
   return blade;
 }
 // 'BLADE Withdraw Progress' 시트 → 지점×주차 운영대수(Installation in Outlet). Total 제외(프론트 합산).
+// 위치 비의존: 컬럼 인덱스는 파일 !ref에 따라 밀릴 수 있고, 우측에 주차 라벨 장식 블록이 있어
+//   ① 헤더행 = 주차셀이 가장 많은 행(주 표>장식) ② 'Installation in Outlet' 셀 위치를 찾고 그 왼쪽에서 지점 라벨 스캔.
 function drParseBladeWithdraw(wb){
   const rows=drSheetRows(wb,'BLADE Withdraw'); if(!rows)return [];
+  const norm=v=>v==null?'':String(v).trim();
   const isWk=v=>typeof v==='string' && /^\d+W$/.test(v.trim());
-  // 주차 헤더 행: 주차 셀이 5개 이상인 행
-  let wh=-1;
-  for(let i=0;i<Math.min(rows.length,20);i++){
-    const r=rows[i]||[]; if(r.filter(isWk).length>=5){wh=i;break;}
-  }
-  if(wh<0)return [];
-  const col2wk={};
-  (rows[wh]||[]).forEach((v,c)=>{ if(isWk(v)){const w=v.trim();col2wk[c]={week:w,num:parseInt(w,10)};} });
-  const out=[];
-  let cur=null;
+  // 헤더행: 주차셀 최다 행
+  let wh=-1, wkMax=0;
+  rows.forEach((r,i)=>{ const n=(r||[]).filter(isWk).length; if(n>wkMax){wkMax=n;wh=i;} });
+  if(wh<0 || wkMax<5) return [];
+  const col2wk={}; const wkCols=[];
+  (rows[wh]||[]).forEach((v,c)=>{ if(isWk(v)){col2wk[c]={week:v.trim(),num:parseInt(v.trim(),10)};wkCols.push(c);} });
+  const minWkCol=Math.min(...wkCols);
+  const TYPES=['Installation in Outlet','Withdraw','Withdraw Rate(%)','Week'];
+  const out=[]; let cur=null;
   for(let i=wh+1;i<rows.length;i++){
     const r=rows[i]||[];
-    const lbl=r[1]!=null?String(r[1]).trim():'';
-    const rtype=r[2]!=null?String(r[2]).trim():'';
+    // 'Installation in Outlet' 셀 컬럼(주차 영역 왼쪽)
+    let typeCol=-1;
+    for(let c=0;c<minWkCol;c++){ if(norm(r[c])==='Installation in Outlet'){typeCol=c;break;} }
+    // 지점 라벨: typeCol(없으면 주차 시작) 왼쪽에서 마지막 비-타입 텍스트
+    const scanMax = typeCol>=0?typeCol:minWkCol;
+    let lbl='';
+    for(let c=0;c<scanMax;c++){ const t=norm(r[c]); if(t && !TYPES.includes(t)) lbl=t; }
     if(lbl) cur=lbl;
-    if(rtype==='Installation in Outlet' && cur && cur!=='Total'){
-      Object.entries(col2wk).forEach(([c,wk])=>{
-        const v=r[c];
-        if(typeof v==='number' && v>0) out.push({region:cur,week:wk.week,week_num:wk.num,installation:Math.round(v)});
-      });
+    if(typeCol>=0 && cur && !/total/i.test(cur)){
+      wkCols.forEach(c=>{ const v=r[c]; if(typeof v==='number' && v>0) out.push({region:cur,week:col2wk[c].week,week_num:col2wk[c].num,installation:Math.round(v)}); });
     }
   }
   return out;
