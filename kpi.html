@@ -1208,8 +1208,14 @@ const BD_Q3_TARGET={
   'Sunho Shon':[32,32,29],'Jinhyun Byun':[35,35,33],'Sunghun Jung':[35,35,33],'Yeongmin Kang':[35,35,33],'Gyeongho Kim':[0,0,0]
 };
 const BD_Q3_SHADE=new Set(['Minkyu Lee','Hyunjin Lee','Pilsung Kim']);   // Q3 타겟 null = 퇴사/이동 음영
+// 정재영(Jaeyoung Jung): 2Q까지 대구/제주, 3Q부터 서울 발령 → 두 지역에 각각 해당 기간만 표시.
+//   대구/제주 = H1(1~6월)만, 서울(신규 행) = Q3만. actMonths로 실적도 기간 분리.
+const jjDG=bD.srs.find(s=>s.name==='Jaeyoung Jung'&&s.region==='대구/제주');
+if(jjDG) jjDG.actMonths=['m1','m2','m3','m4','m5','m6'];
+bD.srs.push({name:'Jaeyoung Jung',region:'서울',jan:null,feb:null,mar:null,apr:null,may:null,jun:null,actMonths:['m7','m8','m9']});
 // bD.srs에 jul/aug/sep 병합 ([actual placeholder, target]). 실적은 BOTTLE_OUTLETS(m7~m9)에서.
 bD.srs.forEach(s=>{ const q=BD_Q3_TARGET[s.name]; Q3_MONTHS.forEach((m,i)=>{ s[m.key]=q?[null,q[i]]:[null,null]; }); });
+if(jjDG){ jjDG.jul=[null,null]; jjDG.aug=[null,null]; jjDG.sep=[null,null]; }   // 대구/제주는 Q3 없음(서울 이동)
 
 let q1Exp=false;
 function toggleQ1(){q1Exp=!q1Exp;renderSrTable();}
@@ -1220,6 +1226,14 @@ function renderSrTable(){
   const ca='text-align:center';
   const btnSt='background:none;border:1px solid var(--accent);border-radius:3px;cursor:pointer;font-size:10px;padding:0 5px;margin-left:5px;vertical-align:middle;color:var(--accent);font-weight:700;line-height:16px';
   const mLbl={jan:'Jan',feb:'Feb',mar:'Mar',apr:'Apr',may:'May',jun:'Jun'};
+  // SR 월별 실적 (actMonths 있으면 그 월만; 없으면 전체). BOTTLE_OUTLETS 없으면 하드코딩 fallback.
+  const _ALLM=BD_MONTHS.concat(Q3_MONTHS);
+  const srActM=(sr,mk)=>{
+    if(sr.actMonths && !sr.actMonths.includes(mk)) return null;
+    if(BOTTLE_OUTLETS.length>0) return BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[mk]||0)>0).length;
+    const kk=(_ALLM.find(x=>x.mk===mk)||{}).key;
+    return (kk && sr[kk])?sr[kk][0]??null:null;
+  };
   // 헤더 2행
   let h1=`<tr><th rowspan="2" style="${ca}">SR</th><th rowspan="2" style="${ca}">지역</th>`;
   let h2=`<tr>`;
@@ -1281,28 +1295,27 @@ function renderSrTable(){
       if(q1Exp){
         BD_MONTHS.slice(0,3).forEach(m=>{
           const target=sr[m.key]?sr[m.key][1]??null:null;
-          const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[m.mk]||0)>0).length:sr[m.key]?sr[m.key][0]??null:null;
+          const actual=srActM(sr,m.mk);
           cells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
         });
       } else {
         let q1T=0,hasT=false;
         BD_MONTHS.slice(0,3).forEach(m=>{const v=sr[m.key]?sr[m.key][1]:null;if(v!==null){q1T+=v;hasT=true;}});
         let q1A=0;
-        if(BOTTLE_OUTLETS.length>0) BD_MONTHS.slice(0,3).forEach(m=>{q1A+=BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[m.mk]||0)>0).length;});
-        else BD_MONTHS.slice(0,3).forEach(m=>{const v=sr[m.key]?sr[m.key][0]:null;if(v!==null)q1A+=v;});
+        BD_MONTHS.slice(0,3).forEach(m=>{const a=srActM(sr,m.mk); if(a!=null)q1A+=a;});
         cells+=`<td style="${sep};${ca}">${hasT?q1T:'–'}</td><td style="${ca}">${q1A||'–'}</td><td style="${ca}">${badge(pct(q1A,hasT?q1T:null))}</td>`;
       }
       BD_MONTHS.slice(3).forEach((m,i)=>{
         const mi=i+3;
         const target=sr[m.key]?sr[m.key][1]??null:null;
-        const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[m.mk]||0)>0).length:sr[m.key]?sr[m.key][0]??null:null;
+        const actual=srActM(sr,m.mk);
         cells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
       });
       // 3Q — STI 타겟, 실적은 BOTTLE_OUTLETS(m7~m9)
       Q3_MONTHS.forEach((m,i)=>{
         const s3=i===0?'border-left:3px solid var(--accent)':sep;
         const target=sr[m.key]?sr[m.key][1]??null:null;
-        const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[m.mk]||0)>0).length:null;
+        const actual=srActM(sr,m.mk);
         cells+=`<td style="${s3};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
       });
       const shade=BD_Q3_SHADE.has(sr.name);   // Q3 타겟 없음(퇴사/이동) → 음영
