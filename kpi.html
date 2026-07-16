@@ -1200,14 +1200,13 @@ const BD_MONTHS=[{key:'jan',mk:'m1',label:'1월'},{key:'feb',mk:'m2',label:'2월
 
 // STI 26Y 3Q(7·8·9월) 타겟 (파일: 취합/26y On trade bottle STI target_260713). null = 타겟없음(퇴사/이동) → 음영.
 const Q3_MONTHS=[{key:'jul',mk:'m7',label:'Jul'},{key:'aug',mk:'m8',label:'Aug'},{key:'sep',mk:'m9',label:'Sep'}];
-const BD_Q3_TARGET={
+const BD_Q3_TARGET={   // 전국 최종 STI (취합/26y On trade bottle STI target_260713_Seoul,Region · 260716). null=타겟없음(퇴사/이동)
   'Eunhee Lee':[50,50,46],'Joosuk Lee':[52,52,48],'Minkyu Lee':[null,null,null],'Hyunjin Lee':[null,null,null],
   'Hongjun Park':[45,45,40],'Pilsung Kim':[null,null,null],'Sangtae Kang':[40,40,36],'Gunseok Hong':[20,20,18],
-  'Sanghun Um':[45,45,40],'Hangjoe Yoo':[40,45,40],'Jaeyoung Jung':[42,42,38],'Gyeongjun Kwak':[40,40,35],
-  'Kyosik Kim':[30,35,30],'Hyoseong Kim':[0,0,0],'Gyuntae Kim':[35,35,35],'Taewan Kim':[58,62,57],
-  'Sunho Shon':[32,32,29],'Jinhyun Byun':[35,35,33],'Sunghun Jung':[35,35,33],'Yeongmin Kang':[35,35,33],'Gyeongho Kim':[0,0,0]
+  'Sanghun Um':[45,45,40],'Hangjoe Yoo':[40,45,40],'Jaeyoung Jung':[42,42,38],'Gyeongjun Kwak':[45,50,40],
+  'Kyosik Kim':[null,null,null],'Hyoseong Kim':[null,null,null],'Gyuntae Kim':[45,50,40],'Taewan Kim':[58,62,57],
+  'Sunho Shon':[null,null,null],'Jinhyun Byun':[null,null,null],'Sunghun Jung':[40,42,40],'Yeongmin Kang':[40,42,40],'Gyeongho Kim':[null,null,null]
 };
-const BD_Q3_SHADE=new Set(['Minkyu Lee','Hyunjin Lee','Pilsung Kim']);   // Q3 타겟 null = 퇴사/이동 음영
 // 정재영(Jaeyoung Jung): 2Q까지 대구/제주, 3Q부터 서울 발령 → 두 지역에 각각 해당 기간만 표시.
 //   대구/제주 = H1(1~6월)만, 서울(신규 행) = Q3만. actMonths로 실적도 기간 분리.
 const jjDG=bD.srs.find(s=>s.name==='Jaeyoung Jung'&&s.region==='대구/제주');
@@ -1216,6 +1215,9 @@ bD.srs.push({name:'Jaeyoung Jung',region:'서울',jan:null,feb:null,mar:null,apr
 // bD.srs에 jul/aug/sep 병합 ([actual placeholder, target]). 실적은 BOTTLE_OUTLETS(m7~m9)에서.
 bD.srs.forEach(s=>{ const q=BD_Q3_TARGET[s.name]; Q3_MONTHS.forEach((m,i)=>{ s[m.key]=q?[null,q[i]]:[null,null]; }); });
 if(jjDG){ jjDG.jul=[null,null]; jjDG.aug=[null,null]; jjDG.sep=[null,null]; }   // 대구/제주는 Q3 없음(서울 이동)
+// 음영 대상 = Q3 타겟이 하나도 없는 SR (퇴사/이동/미배정). 정재영은 서울 행에 Q3 있어 person 기준 제외.
+const BD_HAS_Q3=new Set(); bD.srs.forEach(s=>{ if(Q3_MONTHS.some(m=>s[m.key]&&s[m.key][1]!=null)) BD_HAS_Q3.add(s.name); });
+const BD_SHADE=new Set(bD.srs.map(s=>s.name).filter(n=>!BD_HAS_Q3.has(n)));
 
 let q1Exp=false, q2Exp=false;
 function toggleQ1(){q1Exp=!q1Exp;renderSrTable();}
@@ -1304,7 +1306,7 @@ function renderSrTable(){
       rCells+=`<td style="${s3};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
     });
     tbHtml+=`<tr class="rrow">${rCells}</tr>`;
-    bD.srs.filter(s=>s.region===region).slice().sort((a,b)=>(BD_Q3_SHADE.has(a.name)?1:0)-(BD_Q3_SHADE.has(b.name)?1:0)).forEach(sr=>{
+    bD.srs.filter(s=>s.region===region).slice().sort((a,b)=>(BD_SHADE.has(a.name)?1:0)-(BD_SHADE.has(b.name)?1:0)).forEach(sr=>{
       let cells=`<td class="sr-cell" style="${ca}">${sr.name}</td><td style="${ca}">${rtag(sr.region)}</td>`;
       if(q1Exp){
         BD_MONTHS.slice(0,3).forEach(m=>{
@@ -1339,7 +1341,7 @@ function renderSrTable(){
         const actual=srActM(sr,m.mk);
         cells+=`<td style="${s3};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
       });
-      const shade=BD_Q3_SHADE.has(sr.name);   // Q3 타겟 없음(퇴사/이동) → 음영
+      const shade=BD_SHADE.has(sr.name);   // Q3 타겟 없음(퇴사/이동/미배정) → 음영
       tbHtml+=`<tr${shade?' style="background:#eef1f4;color:#94a3b8;font-style:italic" title="Q3 타겟 없음 (퇴사/이동)"':''}>${cells}</tr>`;
     });
   });
