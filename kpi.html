@@ -1488,9 +1488,9 @@ initBottleView();
 
 // ═══════════════════════════════════════════════════
 // Bottle Incentive (Market Visit / Bottle Boost) — 지점별 예산 집행 현황
-// 할당(분모)은 이미지 "법인카드 결제 26Y Plan" 고정값, 집행은 BOTTLE_INCENTIVE(방문 budget 합).
-const BI_ALLOC={'서울':30000000,'부산':12500000,'대전':6000000,'광주':5500000,'대구/제주':6000000};
-const BI_ALLOC_TOTAL=60000000; // 26Y Plan 지점 합(BD/HOS/Buffer 제외)
+// 할당(분모): 26Y 인센티브 60M→90M 증액. 전체를 지역별 집행 비중(사용비율)대로 재배분(집행률 균등화). 집행은 BOTTLE_INCENTIVE(방문 budget 합).
+const BI_ALLOC={'서울':58700000,'부산':8800000,'대전':5800000,'광주':9400000,'대구/제주':7300000};
+const BI_ALLOC_TOTAL=Object.values(BI_ALLOC).reduce((a,b)=>a+b,0); // = 90,000,000 (BD/HOS/Buffer 제외). BI_ALLOC 합에서 파생 → 불일치 방지
 const BI_REGIONS=['서울','부산','대구/제주','광주','대전'];
 const BI_REG_COLORS={'서울':'#2563eb','부산':'#ea580c','대구/제주':'#9333ea','광주':'#dc2626','대전':'#0d9488'};
 // 한글 team → 지역 그리드 키 (대구·제주 묶음)
