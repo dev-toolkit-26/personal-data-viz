@@ -1217,8 +1217,9 @@ bD.srs.push({name:'Jaeyoung Jung',region:'서울',jan:null,feb:null,mar:null,apr
 bD.srs.forEach(s=>{ const q=BD_Q3_TARGET[s.name]; Q3_MONTHS.forEach((m,i)=>{ s[m.key]=q?[null,q[i]]:[null,null]; }); });
 if(jjDG){ jjDG.jul=[null,null]; jjDG.aug=[null,null]; jjDG.sep=[null,null]; }   // 대구/제주는 Q3 없음(서울 이동)
 
-let q1Exp=false;
+let q1Exp=false, q2Exp=false;
 function toggleQ1(){q1Exp=!q1Exp;renderSrTable();}
+function toggleQ2(){q2Exp=!q2Exp;renderSrTable();}
 function renderSrTable(){
   const t=document.getElementById('srTable');
   if(!t)return;
@@ -1246,10 +1247,15 @@ function renderSrTable(){
     h1+=`<th colspan="3" style="${ca};${sep}">1Q <button onclick="toggleQ1()" style="${btnSt}">+</button></th>`;
     h2+=`<th style="${sep};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
   }
-  BD_MONTHS.slice(3).forEach(m=>{
-    h1+=`<th colspan="3" style="${ca};${sep}">${mLbl[m.key]}</th>`;
+  if(q2Exp){
+    h1+=`<th colspan="3" style="${ca};${sep}">Apr <button onclick="toggleQ2()" style="${btnSt}">–</button></th>`;
+    h1+=`<th colspan="3" style="${ca};${sep}">May</th>`;
+    h1+=`<th colspan="3" style="${ca};${sep}">Jun</th>`;
+    for(let i=0;i<3;i++) h2+=`<th style="${sep};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
+  } else {
+    h1+=`<th colspan="3" style="${ca};${sep}">2Q <button onclick="toggleQ2()" style="${btnSt}">+</button></th>`;
     h2+=`<th style="${sep};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
-  });
+  }
   // 3Q (Jul·Aug·Sep) — STI 타겟
   Q3_MONTHS.forEach((m,i)=>{
     const s3=i===0?'border-left:3px solid var(--accent)':sep;
@@ -1276,12 +1282,20 @@ function renderSrTable(){
       else q1A=rd?rd.actual.slice(0,3).reduce((s,v)=>s+(v||0),0):0;
       rCells+=`<td style="${sep};${ca}">${q1T??'–'}</td><td style="${ca}">${q1A}</td><td style="${ca}">${badge(pct(q1A,q1T))}</td>`;
     }
-    BD_MONTHS.slice(3).forEach((m,i)=>{
-      const mi=i+3;
-      const target=rd?rd.target[mi]:null;
-      const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length:rd?rd.actual[mi]:null;
-      rCells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
-    });
+    if(q2Exp){
+      BD_MONTHS.slice(3,6).forEach((m,i)=>{
+        const mi=i+3;
+        const target=rd?rd.target[mi]:null;
+        const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length:rd?rd.actual[mi]:null;
+        rCells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
+      });
+    } else {
+      const q2T=rd?rd.target.slice(3,6).reduce((s,v)=>s+(v||0),0):null;
+      let q2A=0;
+      if(BOTTLE_OUTLETS.length>0) BD_MONTHS.slice(3,6).forEach(m=>{q2A+=BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length;});
+      else q2A=rd?rd.actual.slice(3,6).reduce((s,v)=>s+(v||0),0):0;
+      rCells+=`<td style="${sep};${ca}">${q2T??'–'}</td><td style="${ca}">${q2A}</td><td style="${ca}">${badge(pct(q2A,q2T))}</td>`;
+    }
     // 3Q — 지역 타겟 = 소속 SR Q3 타겟 합
     Q3_MONTHS.forEach((m,i)=>{
       const s3=i===0?'border-left:3px solid var(--accent)':sep;
@@ -1290,7 +1304,7 @@ function renderSrTable(){
       rCells+=`<td style="${s3};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
     });
     tbHtml+=`<tr class="rrow">${rCells}</tr>`;
-    bD.srs.filter(s=>s.region===region).forEach(sr=>{
+    bD.srs.filter(s=>s.region===region).slice().sort((a,b)=>(BD_Q3_SHADE.has(a.name)?1:0)-(BD_Q3_SHADE.has(b.name)?1:0)).forEach(sr=>{
       let cells=`<td class="sr-cell" style="${ca}">${sr.name}</td><td style="${ca}">${rtag(sr.region)}</td>`;
       if(q1Exp){
         BD_MONTHS.slice(0,3).forEach(m=>{
@@ -1305,12 +1319,19 @@ function renderSrTable(){
         BD_MONTHS.slice(0,3).forEach(m=>{const a=srActM(sr,m.mk); if(a!=null)q1A+=a;});
         cells+=`<td style="${sep};${ca}">${hasT?q1T:'–'}</td><td style="${ca}">${q1A||'–'}</td><td style="${ca}">${badge(pct(q1A,hasT?q1T:null))}</td>`;
       }
-      BD_MONTHS.slice(3).forEach((m,i)=>{
-        const mi=i+3;
-        const target=sr[m.key]?sr[m.key][1]??null:null;
-        const actual=srActM(sr,m.mk);
-        cells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
-      });
+      if(q2Exp){
+        BD_MONTHS.slice(3,6).forEach(m=>{
+          const target=sr[m.key]?sr[m.key][1]??null:null;
+          const actual=srActM(sr,m.mk);
+          cells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
+        });
+      } else {
+        let q2T=0,hasT=false;
+        BD_MONTHS.slice(3,6).forEach(m=>{const v=sr[m.key]?sr[m.key][1]:null;if(v!==null){q2T+=v;hasT=true;}});
+        let q2A=0;
+        BD_MONTHS.slice(3,6).forEach(m=>{const a=srActM(sr,m.mk); if(a!=null)q2A+=a;});
+        cells+=`<td style="${sep};${ca}">${hasT?q2T:'–'}</td><td style="${ca}">${q2A||'–'}</td><td style="${ca}">${badge(pct(q2A,hasT?q2T:null))}</td>`;
+      }
       // 3Q — STI 타겟, 실적은 BOTTLE_OUTLETS(m7~m9)
       Q3_MONTHS.forEach((m,i)=>{
         const s3=i===0?'border-left:3px solid var(--accent)':sep;
