@@ -1437,24 +1437,25 @@ function renderBottleKPI(){
 // SR 개인 전국 순위 — 달성률 50% + 절대 달성수 50% (3월~데이터·목표 있는 달 누적)
 function renderBottleSrRanking(){
   const t=document.getElementById('bRankTable'); if(!t)return;
-  // 집계 대상 월: 3월(인덱스2)부터, '목표 설정 + 실데이터 존재'인 달만 → 6월/이후 월 자동 포함
-  const startIdx=BD_MONTHS.findIndex(m=>m.key==='mar');
+  // 집계 대상 월: 3월부터 7월까지, '목표 설정 + 실데이터 존재'인 달만
+  const CAND=BD_MONTHS.concat([{key:'jul',mk:'m7',label:'7월'}]);
+  const startIdx=CAND.findIndex(m=>m.key==='mar');
   const active=[];
-  for(let i=startIdx;i<BD_MONTHS.length;i++){
-    const mk=BD_MONTHS[i].mk;
-    const hasTgt=(bD.overall.target[i]||0)>0;
+  for(let i=startIdx;i<CAND.length;i++){
+    const key=CAND[i].key, mk=CAND[i].mk;
+    const monthTgt=bD.srs.reduce((s,sr)=>{const v=sr[key]?sr[key][1]:null; return v!=null?s+v:s;},0);
     const hasData=BOTTLE_OUTLETS.some(d=>(d[mk]||0)>0);
-    if(hasTgt&&hasData)active.push(i);
+    if(monthTgt>0&&hasData)active.push(i);
   }
   const period=document.getElementById('bRankPeriod');
   if(!active.length){t.innerHTML='';if(period)period.textContent='(데이터 없음)';return;}
-  if(period)period.textContent=`(${BD_MONTHS[active[0]].label}~${BD_MONTHS[active[active.length-1]].label} 누적)`;
-  // SR별 달성수·목표 집계
+  if(period)period.textContent=`(${CAND[active[0]].label}~${CAND[active[active.length-1]].label} 누적)`;
+  // SR별 달성수·목표 집계 (actMonths 있으면 그 월만 실적 — 정재영 발령 분리 대응)
   const rows=bD.srs.map(sr=>{
     let ach=0,tgt=0;
     active.forEach(i=>{
-      const mk=BD_MONTHS[i].mk,key=BD_MONTHS[i].key;
-      ach+=BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[mk]||0)>0).length;
+      const mk=CAND[i].mk,key=CAND[i].key;
+      if(!(sr.actMonths&&!sr.actMonths.includes(mk))) ach+=BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[mk]||0)>0).length;
       const mt=sr[key]?sr[key][1]:null;
       if(mt!=null)tgt+=mt;
     });
