@@ -11,6 +11,18 @@
 <script src="off_ingest.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
 <script src="tts-dictionary.js"></script>
+<!-- Motion (framer-motion 계열의 바닐라 JS 빌드). ESM이라 defer 실행되므로,
+     로드 실패/지연해도 화면은 정적으로 완전히 동작해야 한다 → .kn-motion 클래스로 게이팅. -->
+<script type="module">
+  try {
+    const m = await import('https://cdn.jsdelivr.net/npm/motion@12.42.2/+esm');
+    window.__motion = m;
+    document.documentElement.classList.add('kn-motion');
+    document.dispatchEvent(new Event('kn-motion-ready'));
+  } catch (e) {
+    console.warn('[motion] 로드 실패 — 애니메이션 없이 동작합니다.', e);
+  }
+</script>
 <style>
 :root {
   --primary: #205527;
@@ -453,6 +465,13 @@ td:first-child, td:nth-child(2) { text-align: left; }
 /* Chart D wrapper — left→right reveal via clip-path */
 .kn-chart-reveal { clip-path: inset(0 100% 0 0); -webkit-clip-path: inset(0 100% 0 0); transition: clip-path 1.4s cubic-bezier(.4,0,.2,1), -webkit-clip-path 1.4s cubic-bezier(.4,0,.2,1); }
 .kn-chart-reveal.is-on { clip-path: inset(0 0 0 0); -webkit-clip-path: inset(0 0 0 0); }
+
+/* Motion 스태거 페이드인 대상. opacity:0은 motion이 실제로 로드된 경우(html.kn-motion)에만
+   적용 — 로드 실패 시 요소가 영영 안 보이는 사고를 막는다. */
+html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
+@media (prefers-reduced-motion: reduce) {
+  html.kn-motion .kn-reveal { opacity: 1; }
+}
 
 /* Weather widget (top-right) */
 .kn-weather { position:absolute; right:24px; top:24px; width:158px; background:var(--kn-card); border:1px solid var(--kn-border); border-radius:12px; padding:10px 4px; -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); z-index:20; box-shadow:0 12px 32px rgba(0,0,0,.3); }
@@ -1024,18 +1043,25 @@ td:first-child, td:nth-child(2) { text-align: left; }
       _sumMonName + ' FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL (' + overallStatus + ')';
 
     // ── KPI Cards ──
+    // n/f = 카운트업용 원본 수치와 포맷 종류. 표시 텍스트(value)는 그대로 최종값을 넣어두고
+    // (motion 미로드 시 그게 그대로 정답), 카운트업은 있을 때만 0→n을 덧씌운다.
     var kpis = [
-      { label: _sumMonName + ' AP 목표', value: _fmtHL(ttl.ap) + ' HL', sub: 'On Trade TTL', v: null, icon: '🎯' },
-      { label: 'This Wk FCST 달성률', value: _fmtPct(ttl.ap_fcst_ach), sub: 'FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL', v: ttl.ap_fcst_ach, icon: '📊' },
-      { label: 'MTD 실적 달성률', value: _fmtPct(ttl.fcst_mtd_ach), sub: 'MTD ' + _fmtHL(ttl.mtd_actual) + ' HL', v: ttl.fcst_mtd_ach, icon: '📈' },
-      { label: '전년 동월 대비 성장률', value: _fmtPctDelta(ttl.fcst_growth_lym), sub: 'LY ' + _fmtHL(ttl.ly_month) + ' HL', v: (ttl.fcst_growth_lym||0) >= 0 ? 1 : 0, icon: (ttl.fcst_growth_lym||0)>=0?'⬆':'⬇' },
+      { label: _sumMonName + ' AP 목표', value: _fmtHL(ttl.ap) + ' HL', sub: 'On Trade TTL', v: null, icon: '🎯', n: ttl.ap, f: 'hl', sfx: ' HL' },
+      { label: 'This Wk FCST 달성률', value: _fmtPct(ttl.ap_fcst_ach), sub: 'FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL', v: ttl.ap_fcst_ach, icon: '📊', n: ttl.ap_fcst_ach, f: 'pct' },
+      { label: 'MTD 실적 달성률', value: _fmtPct(ttl.fcst_mtd_ach), sub: 'MTD ' + _fmtHL(ttl.mtd_actual) + ' HL', v: ttl.fcst_mtd_ach, icon: '📈', n: ttl.fcst_mtd_ach, f: 'pct' },
+      { label: '전년 동월 대비 성장률', value: _fmtPctDelta(ttl.fcst_growth_lym), sub: 'LY ' + _fmtHL(ttl.ly_month) + ' HL', v: (ttl.fcst_growth_lym||0) >= 0 ? 1 : 0, icon: (ttl.fcst_growth_lym||0)>=0?'⬆':'⬇', n: ttl.fcst_growth_lym, f: 'pctdelta' },
     ];
     function _knKpiCls(v) { if (v == null) return ''; return v >= 0.95 ? ' is-good' : v >= 0.90 ? ' is-warn' : ' is-risk'; }
+    function _knCountAttrs(k) {
+      if (typeof k.n !== 'number' || !isFinite(k.n)) return '';   // '—' 등 비수치는 카운트업 제외
+      return ' data-kn-to="' + k.n + '" data-kn-fmt="' + k.f + '"'
+           + (k.sfx ? ' data-kn-suffix="' + k.sfx + '"' : '');
+    }
     document.getElementById('sum-kpi-grid').innerHTML = kpis.map(function(k) {
       return '<div class="kn-kpi' + _knKpiCls(k.v) + '">'
         + '<div class="kn-kpi-icon">' + k.icon + '</div>'
         + '<div class="kn-kpi-label">' + k.label + '</div>'
-        + '<div class="kn-kpi-value">' + k.value + '</div>'
+        + '<div class="kn-kpi-value"' + _knCountAttrs(k) + '>' + k.value + '</div>'
         + '<div class="kn-kpi-sub">' + k.sub + '</div>'
         + (k.v != null ? '<div class="kn-kpi-badge">' + _fmtPct(k.v) + '</div>' : '')
         + '</div>';
@@ -8626,6 +8652,75 @@ async function startOnTrade() {
   var btnNext  = document.getElementById('kn-next');
   var idx = 0, total = slides.length;
 
+  // ── Motion 리빌 ──────────────────────────────────────────────
+  // .kn-reveal은 html.kn-motion일 때만 opacity:0이 되므로(=motion 로드 성공 시에만),
+  // 미리 전 슬라이드에 발라둬도 라이브러리가 없으면 아무 일도 일어나지 않는다.
+  var _knReduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function _knBlocks(slide) { return slide ? slide.querySelectorAll('.kn-content > *') : []; }
+  function _knArm(slide) {
+    Array.prototype.forEach.call(_knBlocks(slide), function(el) { el.classList.add('kn-reveal'); });
+  }
+  slides.forEach(_knArm);
+
+  function _knFmtCount(v, kind, sfx) {
+    var s;
+    if (kind === 'pct')           s = (v * 100).toFixed(1) + '%';
+    else if (kind === 'pctdelta') s = (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+    else                          s = v.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+    return s + (sfx || '');
+  }
+
+  function revealSlide(slideIdx) {
+    var slide = slides[slideIdx];
+    var M = window.__motion;
+    if (!slide) return;
+    var blocks = _knBlocks(slide);
+    // motion 없거나 reduced-motion이면 즉시 확정 상태로 되돌리고 끝 (텍스트는 이미 최종값)
+    if (!M || _knReduce) {
+      Array.prototype.forEach.call(blocks, function(el) { el.classList.remove('kn-reveal'); });
+      return;
+    }
+    // stagger()가 없는 빌드여도 죽지 않도록 폴백(순차 delay 수동 계산).
+    // 여기서 예외가 나면 아래 클래스 해제까지 못 가서 슬라이드가 통째로 안 보인다.
+    var _stg;
+    try { _stg = (typeof M.stagger === 'function') ? M.stagger(.07) : function(i) { return i * .07; }; }
+    catch (_) { _stg = function(i) { return i * .07; }; }
+    var _unarm = function() {
+      Array.prototype.forEach.call(blocks, function(el) { el.classList.remove('kn-reveal'); });
+    };
+    // motion API가 예상과 다르면(버전 차이 등) 애니메이션을 포기하고 무조건 보이게 만든다.
+    try {
+      M.animate(blocks,
+        { opacity: [0, 1], y: [14, 0] },
+        { duration: .5, delay: _stg, ease: [.22, 1, .36, 1] }
+      ).finished.then(_unarm).catch(_unarm);
+    } catch (e) {
+      console.warn('[motion] reveal 실패 — 정적 표시로 대체', e);
+      _unarm();
+    }
+
+    Array.prototype.forEach.call(slide.querySelectorAll('[data-kn-to]'), function(el) {
+      var to = parseFloat(el.dataset.knTo);
+      if (!isFinite(to)) return;
+      var kind = el.dataset.knFmt, sfx = el.dataset.knSuffix || '';
+      var settle = function() { el.textContent = _knFmtCount(to, kind, sfx); };   // 반올림 오차 없이 정확한 최종값으로 마감
+      try {
+        M.animate(0, to, {
+          duration: .9, ease: [.22, 1, .36, 1],
+          onUpdate: function(v) { el.textContent = _knFmtCount(v, kind, sfx); }
+        }).finished.then(settle).catch(settle);
+      } catch (e) { settle(); }
+    });
+  }
+
+  // 오버레이가 열릴 때 첫 슬라이드 리빌 (showSummary 스코프에 의존하지 않도록 관찰로 처리)
+  var _knOpen = false;
+  new MutationObserver(function() {
+    var vis = overlay.style.display && overlay.style.display !== 'none';
+    if (vis && !_knOpen) { _knOpen = true; setTimeout(function() { revealSlide(idx); }, 80); }
+    else if (!vis && _knOpen) { _knOpen = false; slides.forEach(_knArm); }   // 재진입 시 다시 재생
+  }).observe(overlay, { attributes: true, attributeFilter: ['style'] });
+
   function triggerAnim(slideIdx) {
     if (slideIdx === 1) {
       try { if (typeof _sumChartD !== 'undefined' && _sumChartD) _sumChartD.resize(); } catch(_) {}
@@ -8666,7 +8761,8 @@ async function startOnTrade() {
     slides.forEach(function(s, i){ s.classList.toggle('is-active', i === idx); });
     dots.forEach(function(d, i){ d.classList.toggle('is-active', i === idx); });
     sideBtns.forEach(function(b, i){ b.classList.toggle('is-active', i === idx); });
-    setTimeout(function(){ triggerAnim(idx); }, 1120);
+    _knArm(slides[idx]);   // 트랙 이동 중에는 감춰두고, 착지 후 스태거로 등장
+    setTimeout(function(){ revealSlide(idx); triggerAnim(idx); }, 1120);
   }
   function next() { go(idx + 1); }
   function prev() { go(idx - 1); }
