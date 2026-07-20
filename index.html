@@ -3097,6 +3097,13 @@ function applyDataUpdate(fcstResult, dsrResult) {
 
   if (fcstResult) {
     const { hlFcst, casesFcst, skuBrandFcst, skuItemFcst } = fcstResult;
+    // 지역/TTL HL·Cases를 직접 업데이트(레거시 풀 형식)했는지 여부.
+    // 새 축약 형식은 hlFcst/casesFcst가 비어 이 경로가 실행되지 않으므로,
+    // 아래 SKU 합계 재계산 경로가 last_week_fcst 롤오버를 대신 수행해야 한다.
+    const regionsUpdatedDirect = Object.keys(hlFcst).length > 0;
+    // 재계산 경로의 preserveLastWk: 직접 경로가 이미 last_week_fcst를 롤오버했으면(레거시) 유지,
+    // 아니면(새 형식) 일반 주간 업데이트처럼 롤오버(isSameWeek 재업로드만 보존).
+    const recalcPreserveLastWk = regionsUpdatedDirect || isSameWeek;
     // 신규 SKU 자동 마이그레이션: FCST에 등장한 SKU가 D.sku_detail에 없으면 적절한 브랜드에 자동 추가
     const _newSkus = _upEnsureSkusExist(skuItemFcst, D.sku_detail);
     if (_newSkus.length > 0) console.log('[SKU 자동 추가]', _newSkus);
@@ -3211,14 +3218,14 @@ function applyDataUpdate(fcstResult, dsrResult) {
       const regionCases = _upRound4((D.sku_detail[tabKey] || []).reduce((s, b) => s + (b.data?.this_week_fcst || 0), 0));
       if (regionCases <= 0) continue;
       const regionHL = _upRound4(regionCases * 0.0792);
-      _upUpdateFcstEntry(hlSum[hlKey],    regionHL,    'mtd_actual', true, monthChanged);
-      if (casesSum[hlKey]) _upUpdateFcstEntry(casesSum[hlKey], regionCases, 'mtd_actual', true, monthChanged);
+      _upUpdateFcstEntry(hlSum[hlKey],    regionHL,    'mtd_actual', recalcPreserveLastWk, monthChanged);
+      if (casesSum[hlKey]) _upUpdateFcstEntry(casesSum[hlKey], regionCases, 'mtd_actual', recalcPreserveLastWk, monthChanged);
       _ttlHL    += regionHL;
       _ttlCases += regionCases;
     }
     // TTL / BEER TTL: 루프에서 직접 누적한 값 사용 (hlSum[r] 재독 X)
-    if (hlSum['TTL']         && _ttlHL    > 0) _upUpdateFcstEntry(hlSum['TTL'],         _upRound4(_ttlHL),    'mtd_actual', true, monthChanged);
-    if (casesSum['BEER TTL'] && _ttlCases > 0) _upUpdateFcstEntry(casesSum['BEER TTL'], _upRound4(_ttlCases), 'mtd_actual', true, monthChanged);
+    if (hlSum['TTL']         && _ttlHL    > 0) _upUpdateFcstEntry(hlSum['TTL'],         _upRound4(_ttlHL),    'mtd_actual', recalcPreserveLastWk, monthChanged);
+    if (casesSum['BEER TTL'] && _ttlCases > 0) _upUpdateFcstEntry(casesSum['BEER TTL'], _upRound4(_ttlCases), 'mtd_actual', recalcPreserveLastWk, monthChanged);
     D.last_fcst_month = fcstMonth;  // 직전 FCST 적용 월 기록 (다음 월 변경 판단 기준)
   }
 
