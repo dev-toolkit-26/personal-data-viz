@@ -8680,11 +8680,12 @@ async function startOnTrade() {
       Array.prototype.forEach.call(blocks, function(el) { el.classList.remove('kn-reveal'); });
       return;
     }
-    // stagger()가 없는 빌드여도 죽지 않도록 폴백(순차 delay 수동 계산).
-    // 여기서 예외가 나면 아래 클래스 해제까지 못 가서 슬라이드가 통째로 안 보인다.
-    var _stg;
-    try { _stg = (typeof M.stagger === 'function') ? M.stagger(.07) : function(i) { return i * .07; }; }
-    catch (_) { _stg = function(i) { return i * .07; }; }
+    // stagger()는 motion-dom에만 있고 motion/framer-motion-dom 진입점으로는 재export되지 않는다
+    // (12.42.2 확인). animate는 delay를 delay(index, total)로 호출하므로 직접 계산해서 넘긴다
+    // — 기본 옵션의 stagger(.07)과 결과가 동일하다. 상위 버전에서 노출되면 그걸 우선 사용.
+    var _stg = (typeof M.stagger === 'function')
+      ? M.stagger(.07)
+      : function(i) { return i * .07; };
     var _unarm = function() {
       Array.prototype.forEach.call(blocks, function(el) { el.classList.remove('kn-reveal'); });
     };
@@ -8713,8 +8714,11 @@ async function startOnTrade() {
     });
   }
 
-  // 오버레이가 열릴 때 첫 슬라이드 리빌 (showSummary 스코프에 의존하지 않도록 관찰로 처리)
-  var _knOpen = false;
+  // 오버레이가 열릴 때 첫 슬라이드 리빌 (showSummary 스코프에 의존하지 않도록 관찰로 처리).
+  // 주의: showSummary()는 이 IIFE보다 먼저 실행될 수 있다(_showSummaryOnLoad 경로). 그 경우
+  // 옵저버는 영영 안 터지므로, 등록 시점에 이미 열려 있으면 즉시 한 번 리빌해줘야 한다.
+  var _knOpen = !!(overlay.style.display && overlay.style.display !== 'none');
+  if (_knOpen) setTimeout(function() { revealSlide(idx); }, 80);
   new MutationObserver(function() {
     var vis = overlay.style.display && overlay.style.display !== 'none';
     if (vis && !_knOpen) { _knOpen = true; setTimeout(function() { revealSlide(idx); }, 80); }
