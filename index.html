@@ -822,7 +822,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     </div>
     <button class="kn-side-btn is-active" type="button" data-slide="0"><span class="kn-side-num">01</span><span>Overview</span></button>
     <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Regional</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>SKU</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Stock</span></button>
     <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Summary</span></button>
   </div>
 
@@ -864,11 +864,11 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       </div>
     </section>
 
-    <!-- Slide 3: SKU 특이사항 (브랜드별 AP/FCST/MTD/vs LM/vs LY) -->
+    <!-- Slide 3: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
     <section class="kn-slide" data-slide="2">
       <div class="kn-content">
-        <h2 class="kn-apex">SKU Issues</h2>
-        <div id="sum-sku-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
+        <h2 class="kn-apex">Stock Coverage</h2>
+        <div id="sum-stock-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
@@ -1403,76 +1403,8 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       _setBtnState('idle');
     })();
 
-    // ── Slide 5: 주요 SKU 특이사항 (전체 SKU, 브랜드별 그룹, AP / FCST / vs LM / vs LY) ──
-    // SKU 표기는 FCST Status의 vs LM/LY 섹션과 동일하게 raw sku.sku 사용
-    var skuRoot = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
-    var fcstMonIdx = (meta && meta.month ? meta.month : _UP_FCST_MONTH) - 1;
-    var lastMonIdx = fcstMonIdx - 1;
-    var brandGroups = [];
-    for (var bi = 0; bi < skuRoot.length; bi++) {
-      var b = skuRoot[bi];
-      if (!b || !Array.isArray(b.skus)) continue;
-      var items = [];
-      for (var sj = 0; sj < b.skus.length; sj++) {
-        var s = b.skus[sj];
-        if (!s || !s.data) continue;
-        if (s.data.this_week_fcst == null) continue;
-        items.push({ label: s.sku, data: s.data });
-      }
-      if (items.length > 0) brandGroups.push({ brand: b.brand, items: items });
-    }
-    function _cmpColor(v){ return v == null ? '#6b7280' : v >= 1 ? '#4ade80' : '#f87171'; }
-    function _cmpBg(v){ return v == null ? 'rgba(255,255,255,.08)' : v >= 1 ? 'rgba(74,222,128,.15)' : 'rgba(248,113,113,.15)'; }
-    function _achPill(v, colorFn, bgFn){
-      return v == null ? '' : '<span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;background:' + bgFn(v) + ';color:' + colorFn(v) + ';">' + _fmtPct(v) + '</span>';
-    }
-    function _hlOrDash(v){ return v != null ? _fmtHL(v) + ' HL' : '—'; }
-    // 노트북 폭에서는 라벨 컬럼 200→150px로 좁혀 메트릭 셀 가용폭 확보 (데스크탑은 200px 유지)
-    var GRID_COLS = (window.innerWidth <= 1440) ? '150px repeat(5, 1fr)' : '200px repeat(5, 1fr)';
-    var skuTableHtml = '';
-    if (brandGroups.length > 0) {
-      var headerRow = '<div style="display:grid;grid-template-columns:' + GRID_COLS + ';gap:10px;font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:10px 0 10px 14px;border-bottom:1px solid rgba(255,255,255,.22);position:sticky;top:0;z-index:5;background:rgba(8,10,14,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 2px 8px rgba(0,0,0,.35);">'
-        + '<span>SKU</span><span style="justify-self:center;">AP</span><span style="justify-self:center;">FCST</span><span style="justify-self:center;">MTD</span><span style="justify-self:center;">vs LM</span><span style="justify-self:center;">vs LY</span>'
-        + '</div>';
-      skuTableHtml = headerRow
-        + brandGroups.map(function(g){
-            var rows = g.items.map(function(it){
-              var d = it.data;
-              // SKU Detail tab과 동일한 HL 변환:
-              //   AP는 standard c/s (HL × 12.6263) → ÷12.6263 ≈ ×0.0792
-              //   FCST/MTD/act_monthly/ly_month는 physical QTY → ×hl_factor (default 0.0792)
-              var factor = (d.hl_factor != null) ? d.hl_factor : 0.0792;
-              var rawAP   = (Array.isArray(d.ap_monthly) && d.ap_monthly[fcstMonIdx] != null) ? d.ap_monthly[fcstMonIdx] : d.ap;
-              var apHL    = (rawAP != null) ? rawAP * 0.0792 : null;
-              var fcstHL  = (d.this_week_fcst != null) ? d.this_week_fcst * factor : null;
-              var mtdHL   = (d.mtd != null) ? d.mtd * factor : null;
-              var lmRaw   = (Array.isArray(d.act_monthly) && lastMonIdx >= 0) ? d.act_monthly[lastMonIdx] : null;
-              var lmHL    = (lmRaw != null) ? lmRaw * factor : null;
-              var lyHL    = (d.ly_month != null) ? d.ly_month * factor : null;
-              var apFcstAch = (apHL && apHL > 0 && fcstHL != null)  ? fcstHL / apHL  : null;
-              var mtdAch    = (fcstHL && fcstHL > 0 && mtdHL != null) ? mtdHL / fcstHL : null;
-              var lmAch     = (lmHL && lmHL > 0 && fcstHL != null)  ? fcstHL / lmHL  : null;
-              var lyAch     = (lyHL && lyHL > 0 && fcstHL != null)  ? fcstHL / lyHL  : null;
-              // 셀 구조: HL+pill을 한 묶음으로 셀 가로 중앙에 정렬 (헤더 justify-self:center와 일치)
-              var _cellStyle = 'display:flex;justify-content:center;align-items:baseline;';
-              var _numStyle = 'color:#fff;white-space:nowrap;';
-              return '<div style="display:grid;grid-template-columns:' + GRID_COLS + ';gap:10px;align-items:baseline;font-size:12px;line-height:1.75;padding:2px 0 2px 14px;">'
-                + '<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + it.label + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(apHL) + '</span></span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(fcstHL) + '</span>' + _achPill(apFcstAch, _achColor, _achBadgeBg) + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(mtdHL) + '</span>' + _achPill(mtdAch, _achColor, _achBadgeBg) + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(lmHL) + '</span>' + _achPill(lmAch, _cmpColor, _cmpBg) + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(lyHL) + '</span>' + _achPill(lyAch, _cmpColor, _cmpBg) + '</span>'
-                + '</div>';
-            }).join('');
-            return '<div style="margin-bottom:6px;">'
-              + '<div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,.78);letter-spacing:1px;margin:8px 0 3px;text-transform:uppercase;">── ' + g.brand + ' ──</div>'
-              + rows
-              + '</div>';
-          }).join('');
-    }
-    var skuCardEl = document.getElementById('sum-sku-card');
-    if (skuCardEl) skuCardEl.innerHTML = skuTableHtml;
+    // ── Slide 3: 재고 수급 — 비동기(Off 스냅샷 조회)라 렌더만 걸어두고 진행 ──
+    renderSumStock();
 
     // ── Region 도넛은 MTD Diagnosis 행에 통합됨(renderSumMtdDiag) ──
     // 기존 독립 도넛 그리드는 FCST/AP HL을 진단 행의 칩과 중복 표시했으므로 제거.
@@ -2202,6 +2134,17 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
           <input type="file" id="rev-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'rev-btn-label','REV')">
         </label>
         <span id="rev-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+      </div>
+
+      <!-- Daily Stock -->
+      <div style="margin-bottom:28px;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">재고 (Daily Stock)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Filename: Daily stock MM.DD.xlsx &nbsp;·&nbsp; 기준일은 파일명에서 인식</div>
+        <label class="upload-file-btn" id="stock-btn-label" style="display:inline-flex;" title="Daily stock MM.DD.xlsx">
+          Select File
+          <input type="file" id="stock-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'stock-btn-label','STOCK')">
+        </label>
+        <span id="stock-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
       </div>
 
       <!-- Apply / Reset -->
@@ -3409,6 +3352,7 @@ function _upOnFileSelect(input, labelId, prefix) {
                 : labelId === 'rev-btn-label'   ? 'rev-filename'
                 : labelId === 'ap-btn-label'    ? 'ap-filename'
                 : labelId === 'rofo-btn-label'  ? 'rofo-filename'
+                : labelId === 'stock-btn-label' ? 'stock-filename'
                 : 'dsr-filename';
   const fnSpan = document.getElementById(fnSpanId);
   if (input.files && input.files[0]) {
@@ -3696,12 +3640,14 @@ async function handleUpload() {
   const fcstInput = document.getElementById('fcst-file-input');
   const dsrInput  = document.getElementById('dsr-file-input');
   const revInput  = document.getElementById('rev-file-input');
+  const stockInput= document.getElementById('stock-file-input');
   const statusEl  = document.getElementById('upload-status');
   const applyBtn  = document.getElementById('upload-apply-btn');
   const fcstFile  = fcstInput.files[0];
   const dsrFile   = dsrInput.files[0];
   const revFile   = revInput ? revInput.files[0] : null;
-  if (!fcstFile && !dsrFile && !revFile) {
+  const stockFile = stockInput ? stockInput.files[0] : null;
+  if (!fcstFile && !dsrFile && !revFile && !stockFile) {
     statusEl.textContent = 'Please select a file first.'; statusEl.style.color = 'var(--negative)'; return;
   }
   applyBtn.disabled = true;
@@ -3712,6 +3658,13 @@ async function handleUpload() {
     if (fcstFile) { statusEl.textContent = 'Processing FCST...'; fcstResult = await parseFcstExcel(fcstFile); }
     if (dsrFile)  { statusEl.textContent = 'Processing DSR...';  const _dsrFcstMon = fcstResult?.meta?.wkMeta?.month || null; dsrResult = await parseDsrExcel(dsrFile, _dsrFcstMon); }
     if (revFile)  { statusEl.textContent = 'Processing Revenue...'; const revResult = await parseRevenueExcel(revFile); applyRevenueData(revResult); }
+    if (stockFile) {
+      statusEl.textContent = 'Processing 재고...';
+      const st = await parseStockExcel(stockFile);
+      DASHBOARD_DATA.stock = st;
+      _stockOffCache = null;                       // FCST가 같이 올라왔을 수 있으므로 Off 수요 캐시 무효화
+      if (st.unmapped.length) console.warn('재고: 매핑 없는 제품코드', st.unmapped);
+    }
     applyDataUpdate(fcstResult, dsrResult);
     _upReRenderAll();
     const wkLabel = (DASHBOARD_DATA.wk_meta || {}).label || '';
@@ -3731,6 +3684,261 @@ async function handleUpload() {
     statusEl.textContent = `Error: ${err.message}`;
     statusEl.style.color = 'var(--negative)';
   } finally { applyBtn.disabled = false; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  재고 수급(Stock Coverage) — Daily stock 파일 → 쇼트 리스크 산출
+//  · 재고는 전국 단일 풀이라 채널·지역으로 쪼개지 않는다. SKU 단위로만 본다.
+//  · 수요는 On+Off 합산. 한쪽만 보면 "우리 쪽은 안전"으로 보여 쇼트를 놓친다.
+//  · 단위: QTY(물리 단위) 원본 저장, 화면은 HL. c/s(=HL/0.0792)와 혼동 금지.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// 제품코드 → [대시보드 SKU, 케이스당 HL, 규격채널, (수출향)]
+const STOCK_SKU_MAP = {
+  512357:['BI ORI 440 Can',0.1056,'OFF'],
+  124662:['ED WHE 500 Can',0.12,'OFF'],
+  124544:['HE 0.0 330 Can',0.0792,'OFF'],
+  512270:['HE 0.0 330 Can',0.0792,'OFF'],
+  124572:['HE 0.0 500 Can',0.12,'OFF'],
+  512687:['HE 0.0 500 Can',0.12,'OFF'],
+  512272:['HE ORI 330 Can',0.0792,'OFF'],
+  512469:['HE ORI 330 Can',0.0792,'OFF'],
+  512519:['HE ORI 500 Can',0.12,'OFF'],
+  512568:['HE ORI 500 Can',0.12,'OFF'],
+  512869:['HE ORI 500 Can',0.12,'OFF'],
+  512906:['HE ORI 500 Can',0.12,'OFF'],
+  122228:['HE ORI 5000 Keg',0.1,'OFF'],
+  152604:['HE ORI 5000 Keg',0.1,'OFF'],
+  511526:['HE ORI 5000 Keg',0.1,'OFF'],
+  124242:['HE ORI 710 Can',0.0852,'OFF'],
+  512433:['HE SLV 250 Can',0.06,'OFF'],
+  512694:['HE SLV 250 Can',0.06,'OFF'],
+  124950:['HE SLV 330 Can',0.0792,'OFF'],
+  124955:['HE SLV 500 Can',0.12,'OFF'],
+  512696:['PA HEL 500 Can',0.12,'OFF'],
+  512916:['PA HEL 500 Can',0.12,'OFF'],
+  512699:['PA WHE 500 Can',0.12,'OFF'],
+  512700:['PA WHE 500 Can',0.12,'OFF'],
+  512904:['PA WHE 500 Can',0.12,'OFF'],
+  512853:['PA XXX 500 Can',0.12,'OFF'],
+  512814:['SU ORI 1000 Can',0.06,'OFF'],
+  512430:['SU ORI 500 Can',0.12,'OFF'],
+  512886:['SU ORI 618 Can',0.07416,'OFF'],
+  123417:['TI ORI 330 Can',0.0792,'OFF'],
+  125377:['TI ORI 500 Can',0.12,'OFF'],
+  511994:['TI ORI 500 Can',0.12,'OFF'],
+  511588:['TI PML 500 Can',0.12,'OFF'],
+  152917:['TI RAD 330 Can',0.0792,'OFF'],
+  512871:['TI RAD 330 Can',0.0792,'OFF','EXPORT'],
+  152576:['TI RAD 500 Can',0.12,'OFF'],
+  511100:['TI RAD 500 Can',0.12,'OFF'],
+  152916:['TI RGR 500 Can',0.12,'OFF'],
+  512044:['BI ORI 330 Bottle',0.0792,'ON'],
+  512724:['BI ORI 330 Bottle',0.0792,'ON'],
+  512588:['DE ORI 330 Bottle',0.0792,'ON'],
+  512845:['DE ORI 330 Bottle',0.0792,'ON'],
+  124548:['HE 0.0 330 Bottle',0.0792,'ON'],
+  511128:['HE ORI 20000 Air Keg',0.2,'ON'],
+  121916:['HE ORI 330 Bottle',0.0792,'ON'],
+  511990:['HE ORI 330 Bottle',0.0792,'ON'],
+  122536:['HE ORI 8000 Blade',0.08,'ON'],
+  124954:['HE SLV 330 Bottle',0.0792,'ON'],
+  512701:['PA WHE 20000 Keg',0.2,'ON'],
+  512491:['SU ORI 500 Bottle',0.06,'ON'],
+  512493:['SU ORI 500 Bottle',0.06,'ON'],
+  511621:['TI ORI 330 Bottle',0.0792,'ON'],
+  511815:['TI ORI 330 Bottle',0.0792,'ON'],
+  152577:['TI ORI 640 Bottle',0.0768,'ON'],
+  152643:['TI ORI 640 Bottle',0.0768,'ON'],
+};
+// 출고 가능 최소 잔여 유통기한 — 재고파일의 주요판매채널(제품 규격) 기준.
+//   OFF(캔/유통) 180일 = CVS 6개월 룰. 오프 채널별 세분화는 추후 반영 예정.
+//   ON (병/생/케그) 90일 = 3개월.
+const STOCK_SHELF_MIN = { OFF: 180, ON: 90 };
+// 특수 SKU(채널 전용 에디션·대용량)는 일반 출고룰을 적용하지 않는다.
+const STOCK_SHELF_EXEMPT = new Set(['SU ORI 1000 Can', 'SU ORI 618 Can']);
+// 판매 불가 제품유형 — 출고보류는 유통기한 이슈로 잡힌 것이라 가용재고에서 뺀다.
+const STOCK_NON_SELLABLE = new Set(['비매품', '시음주', '쉬링크', '출고보류', '유통기한임박']);
+// 8L Blade 단종 — On MTD가 음수(반품만 발생)라 판정에서 제외.
+const STOCK_DELISTED = new Set(['HE ORI 8000 Blade', 'HE SLV 8000 Blade', 'ED WHE 8000 Blade', 'TI ORI 8000 Blade']);
+const STOCK_CS_HL = 0.0792;   // c/s 환산 기준 (330ml x 24)
+
+// ── 파싱 ───────────────────────────────────────────────────────────────────────
+// 시트 컬럼: 주요판매채널 / 제품코드 / 제품명 / 유통일자 / 제품유형 / Total(QTY)
+// 로트(유통기한×제품유형) 단위 원본을 그대로 저장한다 — 유통기한 기준이 바뀌어도
+// 재업로드 없이 재계산되어야 하므로 SKU 집계본으로 줄이지 않는다.
+async function parseStockExcel(file) {
+  const buf = await _upReadBuffer(file);
+  const wb  = XLSX.read(buf, { type: 'array' });
+  const ws  = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false });
+  const lots = [], unmapped = new Set();
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r[1] == null || r[1] === '') continue;
+    const code = parseInt(r[1], 10);
+    const qty  = Number(r[5]);
+    if (!isFinite(code) || !isFinite(qty)) continue;
+    if (!STOCK_SKU_MAP[code]) { unmapped.add(code + ' ' + (r[2] || '')); continue; }
+    lots.push({ code, ch: String(r[0] || '').trim(), exp: _stockNormDate(r[3]),
+                type: r[4] ? String(r[4]).trim() : '', qty });
+  }
+  if (!lots.length) throw new Error('재고 행을 찾지 못했습니다. 시트 형식을 확인하세요.');
+  return { as_of: _stockAsOfFromName(file.name), file: file.name, lots,
+           unmapped: [...unmapped] };
+}
+// 'Daily stock 07.21.xlsx' → '2026-07-21'. 인식 실패 시 오늘 날짜.
+function _stockAsOfFromName(name) {
+  const m = String(name || '').match(/(\d{1,2})[.\-_](\d{1,2})/);
+  const now = new Date();
+  if (!m) return now.toISOString().slice(0, 10);
+  const mm = String(parseInt(m[1], 10)).padStart(2, '0');
+  const dd = String(parseInt(m[2], 10)).padStart(2, '0');
+  return now.getFullYear() + '-' + mm + '-' + dd;
+}
+// 유통일자 → 'YYYY-MM-DD'. 엑셀 시리얼/문자열 모두 수용.
+function _stockNormDate(v) {
+  if (v == null) return '';
+  if (typeof v === 'number' || /^\d+(\.\d+)?$/.test(String(v))) {
+    const d = XLSX.SSF.parse_date_code(Number(v));
+    if (d) return d.y + '-' + String(d.m).padStart(2, '0') + '-' + String(d.d).padStart(2, '0');
+  }
+  const s = String(v).trim().replace(/[./]/g, '-');
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  return m ? m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0') : '';
+}
+
+// ── Off 수요 (재고 판정은 On+Off 합산이라 Off 스냅샷이 필요) ──────────────────
+let _stockOffCache = null;
+async function _stockOffDemand() {
+  if (_stockOffCache) return _stockOffCache;
+  const { data } = await _supabase.from('off_dashboard_snapshots').select('data').eq('id', 1).single();
+  const out = {};
+  const hl = {}; for (const k in STOCK_SKU_MAP) hl[STOCK_SKU_MAP[k][0]] = STOCK_SKU_MAP[k][1];
+  const i = (_upGetFcstMonth() || 7) - 1;
+  const arr = (r, k) => { const v = r[k]; const a = (v && v.value) || v || []; return a; };
+  for (const r of ((data && data.data && data.data.rows) || [])) {
+    const sku = (window.OffIngest ? OffIngest.normalizeOffSku(r.sku, r.acct) : r.sku);
+    const f = hl[sku];
+    if (!f) continue;                                  // 재고에 없는 SKU는 판정 대상 아님
+    const o = out[sku] || (out[sku] = { fcst: 0, mtd: 0, next: 0 });
+    o.fcst += Math.max(arr(r, 'fcst_m')[i] || 0, 0) / f;
+    o.mtd  += Math.max(arr(r, 'act_q_m')[i] || 0, 0);
+    o.next += Math.max(arr(r, 'rofo_m')[i + 1] || 0, 0) / f;
+  }
+  _stockOffCache = out;
+  return out;
+}
+
+// ── 산출 ───────────────────────────────────────────────────────────────────────
+// 가용재고 = 잔여 유통기한 >= 규격기준 & 판매가능 유형 & 국내향
+// 수요     = max(당월 FCST, MTD 런레이트)  — FCST가 낮게 잡히면 쇼트가 가려지므로 큰 쪽
+// 상태     = 쇼트(당월 잔여수요 > 가용) / 주의(커버 < 1) / 정상
+function _stockCompute(stock, offDem) {
+  const asOf = new Date(stock.as_of + 'T00:00:00');
+  const dim  = new Date(asOf.getFullYear(), asOf.getMonth() + 1, 0).getDate();
+  const elapsed = Math.max(asOf.getDate(), 1);
+  const sup = {};
+  for (const lot of stock.lots) {
+    const m = STOCK_SKU_MAP[lot.code]; if (!m) continue;
+    const sku = m[0];
+    const s = sup[sku] || (sup[sku] = { hl: m[1], total: 0, avail: 0, near: 0, blocked: 0 });
+    s.total += lot.qty;
+    const days = lot.exp ? Math.round((new Date(lot.exp + 'T00:00:00') - asOf) / 86400000) : 9999;
+    if (STOCK_NON_SELLABLE.has(lot.type) || m[3] === 'EXPORT') s.blocked += lot.qty;
+    else if (!STOCK_SHELF_EXEMPT.has(sku) && days < STOCK_SHELF_MIN[m[2] === 'ON' ? 'ON' : 'OFF']) s.near += lot.qty;
+    else s.avail += lot.qty;
+  }
+  const dem = {};
+  const add = (sku, f, mt, nx) => {
+    const o = dem[sku] || (dem[sku] = { fcst: 0, mtd: 0, next: 0 });
+    o.fcst += f; o.mtd += mt; o.next += nx;
+  };
+  const i = (_upGetFcstMonth() || 7) - 1;
+  for (const b of ((DASHBOARD_DATA.sku_detail || {})['On Trade Total'] || [])) {
+    for (const s of (b.skus || [])) {
+      const d = s.data || {};
+      add(s.sku, Math.max(d.this_week_fcst || 0, 0), Math.max(d.mtd || 0, 0),
+          Math.max((d.rofo_monthly || [])[i + 1] || 0, 0));
+    }
+  }
+  for (const sku in (offDem || {})) add(sku, offDem[sku].fcst, offDem[sku].mtd, offDem[sku].next);
+
+  const rows = [];
+  for (const sku in sup) {
+    if (STOCK_DELISTED.has(sku)) continue;
+    const s = sup[sku], d = dem[sku] || { fcst: 0, mtd: 0, next: 0 };
+    const use  = Math.max(d.fcst, d.mtd / elapsed * dim);
+    const rest = Math.max(use - d.mtd, 0);
+    const cover = use ? s.avail / use : null;
+    rows.push({
+      sku, hl: s.hl, avail: s.avail, near: s.near, blocked: s.blocked, total: s.total,
+      use, rest, cover, gap: Math.max(rest - s.avail, 0),
+      days: use ? s.avail / (use / dim) : null,
+      status: rest > s.avail ? 'short' : (cover != null && cover < 1) ? 'watch' : 'ok'
+    });
+  }
+  rows.sort((a, b) => (a.cover == null) - (b.cover == null) || (a.cover - b.cover));
+  return rows;
+}
+
+// ── 슬라이드 렌더 ──────────────────────────────────────────────────────────────
+async function renderSumStock() {
+  const el = document.getElementById('sum-stock-card');
+  if (!el) return;
+  const stock = DASHBOARD_DATA.stock;
+  if (!stock || !stock.lots || !stock.lots.length) {
+    el.innerHTML = '<div style="color:rgba(255,255,255,.55);font-size:13px;padding:8px 0;">'
+      + '재고 파일이 아직 올라오지 않았습니다. Data Update 탭에서 <strong>Daily stock</strong> 파일을 업로드하세요.</div>';
+    return;
+  }
+  let offDem = null;
+  try { offDem = await _stockOffDemand(); }
+  catch (e) { console.warn('Off 수요 로드 실패 — On 수요만으로 판정합니다:', e); }
+  const rows = _stockCompute(stock, offDem);
+  const nS = rows.filter(r => r.status === 'short').length;
+  const nW = rows.filter(r => r.status === 'watch').length;
+  const nO = rows.filter(r => r.status === 'ok').length;
+  const C = { short: '#f87171', watch: '#fbbf24', ok: '#4ade80' };
+  const fHL = v => (v == null || !isFinite(v)) ? '—'
+    : Math.round(v).toLocaleString('ko-KR') + ' <span style="color:rgba(255,255,255,.4);font-size:9.5px;">HL</span>';
+
+  const chip = (c, label, n) => '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:14px;'
+    + 'background:rgba(255,255,255,.06);border:1px solid ' + c + '55;font-size:11.5px;font-weight:600;color:#fff;">'
+    + '<span style="width:7px;height:7px;border-radius:50%;background:' + c + ';"></span>' + label + ' ' + n + '</span>';
+
+  const GC = (window.innerWidth <= 1440) ? '96px 1fr 92px 64px' : '110px 1fr 110px 72px';
+  let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chip(C.short, '쇼트', nS) + chip(C.watch, '주의', nW) + chip(C.ok, '정상', nO) + '</div>'
+    + '<span style="font-size:11px;color:rgba(255,255,255,.5);">기준일 ' + stock.as_of
+    + (offDem ? '' : ' · <span style="color:#fbbf24;">Off 수요 미반영</span>') + '</span></div>';
+
+  html += '<div style="display:grid;grid-template-columns:' + GC + ';gap:10px;font-size:10px;color:rgba(255,255,255,.7);'
+    + 'text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:8px 0 8px 4px;border-bottom:1px solid rgba(255,255,255,.22);">'
+    + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span><span style="justify-self:end;">커버</span></div>';
+
+  const risky = rows.filter(r => r.status !== 'ok');
+  html += risky.map(r => {
+    const c = C[r.status];
+    const badge = r.status === 'short'
+      ? '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.18);color:' + c + ';white-space:nowrap;">−'
+        + Math.round(r.gap * r.hl).toLocaleString('ko-KR') + ' HL</span>'
+      : '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>';
+    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:10px;align-items:baseline;font-size:12px;line-height:1.85;padding:2px 0 2px 4px;">'
+      + '<span>' + badge + '</span>'
+      + '<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
+      + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
+      + '<span style="justify-self:end;color:' + c + ';font-weight:700;">' + (r.cover == null ? '—' : r.cover.toFixed(2)) + '</span>'
+      + '</div>';
+  }).join('');
+
+  if (!risky.length) html += '<div style="color:#4ade80;font-size:12.5px;padding:10px 4px;">전 SKU 커버 1개월 이상 — 쇼트 위험 없음</div>';
+  if (nO) html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.12);'
+    + 'font-size:11.5px;color:rgba(255,255,255,.5);padding-left:4px;">정상 ' + nO + '개 SKU (커버 1.0개월 이상)</div>';
+  html += '<div style="margin-top:10px;font-size:10.5px;color:rgba(255,255,255,.38);line-height:1.6;padding-left:4px;">'
+    + '가용재고 = 출고 가능 잔여 유통기한(캔 180일·병/생 90일) 충족분, 출고보류·비매품·수출향 제외 · '
+    + '커버 = 가용재고 ÷ 당월 수요(On+Off 합산, max(FCST, MTD 런레이트)) · 입고 예정 미반영</div>';
+  el.innerHTML = html;
 }
 
 // ── Supabase 배포 ────────────────────────────────────────────────────────────────

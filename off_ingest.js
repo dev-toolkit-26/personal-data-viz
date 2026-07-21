@@ -54,6 +54,37 @@
     'DutyFree':'DF','Duty Free':'DF','DF':'DF','dutyfree':'DF','duty free':'DF'
   };
 
+  // ── SKU 코드 정규화 ────────────────────────────────────────────────
+  // 구(舊) 양식이 쓰는 폐기된 SKU 코드 → 현행 코드.
+  // 파울라너: 6월 FCST 양식이 구명(PA ORI/PA XXX)을 써서 '실적=신규명 / FCST=구명'으로
+  //   행이 갈라졌고 그 결과 파울라너 FCST가 대시보드에서 통째로 누락됐다(2026-07 발견·복구).
+  //   근거: 7월 FCST 원본의 `SEOWON PA HEL=42.0`이 스냅샷엔 `Seowon PA XXX=42.0`로 적재됨.
+  // 원본 파일 양식이 계정마다 섞여 있어 업로드 시점에 흡수한다.
+  const _OFF_SKU_ALIAS = {
+    'PA ORI 500 CAN': 'PA WHE 500 Can',      // 파울라너 바이스비어 뮌헨 위트비어
+    'PA XXX 500 CAN': 'PA HEL 500 Can',      // 파울라너 헬 뮌헨 라거
+    'PA ORI 20000 KEG': 'PA WHE 20000 Keg',  // 파울라너 바이스비어 20L 케그
+    // 설화 6x1L 캔. FCST 템플릿에 1L 줄이 없어 현업이 'Keg' 줄에 적어 왔다(설화 케그 제품은 없음).
+    'SU ORI 1000 KEG': 'SU ORI 1000 Can'
+  };
+  // 계정을 봐야만 판정되는 오적재 — 같은 코드가 다른 계정에선 정상이라 무조건 치환하면 안 된다.
+  // GS25의 'SU ORI 500 Bottle'은 설화 12x618ml GS25 Edition. 템플릿에 618ml 줄이 없어 빈 병 줄에 적힌 것.
+  //   (On-Trade의 SU ORI 500 Bottle은 진짜 유흥병이므로 계정 한정 규칙이어야 한다. 현업 확인 완료 2026-07.)
+  //   ※ 템플릿 계수도 0.06으로 잘못 박혀 있어 물량이 약 19% 과소 계상됨(실제 12x618ml = 0.07416).
+  //     계수 교정은 템플릿 수정으로 처리하고 여기서 임의 배수하지 않는다.
+  const _OFF_SKU_ALIAS_BY_ACCT = {
+    'GS25': { 'SU ORI 500 BOTTLE': 'SU ORI 618 Can' }
+  };
+  // 공백 정리 + 별칭 치환. 매칭은 대문자·공백정규화 기준이라 원본 대소문자 흔들림에 안전.
+  // acct를 주면 계정 한정 규칙을 먼저 적용한다(생략 시 공통 규칙만).
+  function normalizeOffSku(sku, acct) {
+    if (sku == null) return sku;
+    const s = String(sku).trim().replace(/\s+/g, ' ');
+    const u = s.toUpperCase();
+    const byAcct = acct && _OFF_SKU_ALIAS_BY_ACCT[acct];
+    return (byAcct && byAcct[u]) || _OFF_SKU_ALIAS[u] || s;
+  }
+
   // 헤더 텍스트로 컬럼 찾기 (대소문자/공백 무시)
   function _offFindColByHeader(sh, range, ...candidates) {
     const norm = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, '');
@@ -90,11 +121,12 @@
       total++;
       const seg = cSeg >= 0 ? _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSeg })]) : null;
       const grp = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cGrp })]);
-      const sku = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSku })]);
-      if (!grp || !sku) { skipped++; continue; }
+      const skuRaw = _offCellStr(sh[XLSX.utils.encode_cell({ r: R, c: cSku })]);
+      if (!grp || !skuRaw) { skipped++; continue; }
       const chKey = (seg && _OFF_TR_CH_MAP[seg]) || _OFF_GRP_CH[grp];   // Segment 미인식(E-com·Military 등)이면 Group으로 폴백
       const acKey = _OFF_TR_AC_MAP[grp];
       if (!chKey || !acKey) { skipped++; continue; }  // On-Trade 지역 행 등은 여기서 스킵
+      const sku = normalizeOffSku(skuRaw, acKey);     // 계정 한정 규칙이 있으므로 acKey 확정 후 정규화
       let mi = -1, year = expectedYear || 2026;
       if (cDate >= 0) {
         const dCell = sh[XLSX.utils.encode_cell({ r: R, c: cDate })];
@@ -128,7 +160,7 @@
       const hlN = _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cHl })]);
       const qtN = cQty >= 0 ? _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cQty })]) : 0;
       const nvN = cNsv >= 0 ? _offCellNum(sh[XLSX.utils.encode_cell({ r: R, c: cNsv })]) : 0;
-      const k = chKey + '|' + acKey + '|' + sku.trim();
+      const k = chKey + '|' + acKey + '|' + sku;   // sku는 normalizeOffSku로 이미 trim·별칭 처리됨
       if (!aggHl[k]) { aggHl[k] = Array(12).fill(0); aggQt[k] = Array(12).fill(0); aggNv[k] = Array(12).fill(0); }
       aggHl[k][mi] += hlN;
       aggQt[k][mi] += qtN;
@@ -221,7 +253,7 @@
     for (let r = hr + 1; r <= range.e.r; r++) {
       const team = gs(r, cTeam), ch = gs(r, cCh);
       const brand = cBrand != null ? gs(r, cBrand) : '';
-      const sku = cSku != null ? gs(r, cSku) : '';
+      const sku = cSku != null ? normalizeOffSku(gs(r, cSku)) : '';
       if (!sku || sku === '0') continue;
       if (!brand || brand === 'TOTAL' || brand === 'Brand') continue;    // 합계/헤더행 제외
       if (ch && /total/i.test(ch)) continue;                              // "CVS Total" 등 소계 제외
@@ -332,7 +364,8 @@
   global.OffIngest = {
     parseDsrWorkbook, applyDsrToRows, parseVolumeRofo,
     parseDsrOrderPattern, applyOrderPatternToPattern,
-    _OFF_TR_CH_MAP, _OFF_TR_AC_MAP, _OFF_GRP_CH, _VOL_CH_MAP,
+    normalizeOffSku,
+    _OFF_TR_CH_MAP, _OFF_TR_AC_MAP, _OFF_GRP_CH, _VOL_CH_MAP, _OFF_SKU_ALIAS, _OFF_SKU_ALIAS_BY_ACCT,
     _offFindColByHeader, _offCellStr, _offCellNum
   };
 })(typeof window !== 'undefined' ? window : this);

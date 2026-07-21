@@ -1,0 +1,552 @@
+{
+ "122228": {
+  "name": "하이네켄 2x5L 케그 (8 7120000 25649)",
+  "channel": "OFF",
+  "sku": "HE ORI 5000 Keg",
+  "units_per_case": 2,
+  "ml": 5000,
+  "hl_per_case": 0.1,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "152604": {
+  "name": "하이네켄 2x5L 케그 코스트코 (8 712000 025649)",
+  "channel": "OFF",
+  "sku": "HE ORI 5000 Keg",
+  "units_per_case": 2,
+  "ml": 5000,
+  "hl_per_case": 0.1,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511526": {
+  "name": "하이네켄 2x5L 케그 이마트 트레이더스 (8 7120000 25649)",
+  "channel": "OFF",
+  "sku": "HE ORI 5000 Keg",
+  "units_per_case": 2,
+  "ml": 5000,
+  "hl_per_case": 0.1,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124242": {
+  "name": "하이네켄 710ml 12캔 (8 712000 052973)",
+  "channel": "OFF",
+  "sku": "HE ORI 710 Can",
+  "units_per_case": 12,
+  "ml": 710,
+  "hl_per_case": 0.0852,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512519": {
+  "name": "하이네켄 500ml 6x4캔 (8 934822 470135)",
+  "channel": "OFF",
+  "sku": "HE ORI 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512568": {
+  "name": "하이네켄 500ml 3x8캔 코스트코(8 809311 393496)",
+  "channel": "OFF",
+  "sku": "HE ORI 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512869": {
+  "name": "하이네켄 500ml 6X4캔 미니글라스 2입 패키지",
+  "channel": "OFF",
+  "sku": "HE ORI 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512906": {
+  "name": "하이네켄 500ml 3x8캔 미니 쿨러백 패키지 3입",
+  "channel": "OFF",
+  "sku": "HE ORI 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512272": {
+  "name": "하이네켄 330ml 4x6캔 (893 4822 470111)",
+  "channel": "OFF",
+  "sku": "HE ORI 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512469": {
+  "name": "하이네켄 330ml 2x12캔 트레이더스 (8 809311 393328)",
+  "channel": "OFF",
+  "sku": "HE ORI 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124572": {
+  "name": "하이네켄 0.0 500ml 4x6캔 (8 712000 056896)",
+  "channel": "OFF",
+  "sku": "HE 0.0 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512687": {
+  "name": "하이네켄 0.0 500ml 4X6캔 트레이더스 (8 809311 393571)",
+  "channel": "OFF",
+  "sku": "HE 0.0 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124544": {
+  "name": "하이네켄 0.0 330ml 4x6캔 (8 712000 055721)",
+  "channel": "OFF",
+  "sku": "HE 0.0 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512270": {
+  "name": "하이네켄 0.0 330ml 2x12캔 코스트코 (8 809311 393335)",
+  "channel": "OFF",
+  "sku": "HE 0.0 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124955": {
+  "name": "하이네켄 실버 500ml 6x4캔 (8 712000 057190)",
+  "channel": "OFF",
+  "sku": "HE SLV 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124950": {
+  "name": "하이네켄 실버 330ml 4x6캔 (8 712000 057169)",
+  "channel": "OFF",
+  "sku": "HE SLV 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512433": {
+  "name": "하이네켄 실버 250ml 4x6캔 (8 934822 491277)",
+  "channel": "OFF",
+  "sku": "HE SLV 250 Can",
+  "units_per_case": 24,
+  "ml": 250,
+  "hl_per_case": 0.06,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512694": {
+  "name": "하이네켄 실버 250ml 2x12캔 트레이더스 (8 809311 393564)",
+  "channel": "OFF",
+  "sku": "HE SLV 250 Can",
+  "units_per_case": 24,
+  "ml": 250,
+  "hl_per_case": 0.06,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "125377": {
+  "name": "타이거 500ml 6x4캔 (8 809311 399818)",
+  "channel": "OFF",
+  "sku": "TI ORI 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511994": {
+  "name": "타이거 500ml 4x6캔 트레이더스 (8 809311 393199)",
+  "channel": "OFF",
+  "sku": "TI ORI 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "123417": {
+  "name": "타이거 330ml 4x6캔 (8 809311 399795)",
+  "channel": "OFF",
+  "sku": "TI ORI 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "152576": {
+  "name": "타이거 라들러 레몬 500ml 6x4캔 APBS (8 888017 220046)",
+  "channel": "OFF",
+  "sku": "TI RAD 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511100": {
+  "name": "타이거 라들러 레몬 500ml 4x6캔 코스트코 APBS (8888017 220046)",
+  "channel": "OFF",
+  "sku": "TI RAD 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "152917": {
+  "name": "타이거 라들러 레몬 330ml 4x6캔 APBS (8 888017 200192)",
+  "channel": "OFF",
+  "sku": "TI RAD 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512871": {
+  "name": "타이거 라들러 레몬 330ml 4x6캔 베트남(8 934822 520113)",
+  "channel": "OFF",
+  "sku": "TI RAD 330 Can",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": "EXPORT"
+ },
+ "152916": {
+  "name": "타이거 라들러 자몽 500ml 6x4캔 APBS (8 888017 200185)",
+  "channel": "OFF",
+  "sku": "TI RGR 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511588": {
+  "name": "타이거 라들러 포멜로 500ml 6x4캔 APBS (8 888017 200215)",
+  "channel": "OFF",
+  "sku": "TI PML 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124662": {
+  "name": "에델바이스 위트 500ml 6x4캔 (8 809311 399184)",
+  "channel": "OFF",
+  "sku": "ED WHE 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512357": {
+  "name": "비라모레띠 440ml 6x4캔 (5 035766 064442)",
+  "channel": "OFF",
+  "sku": "BI ORI 440 Can",
+  "units_per_case": 24,
+  "ml": 440,
+  "hl_per_case": 0.1056,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512430": {
+  "name": "설화 500ml 6x4캔 (6 949352 256632)",
+  "channel": "OFF",
+  "sku": "SU ORI 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512814": {
+  "name": "설화 6x1L 캔 (6 949352 269489)",
+  "channel": "OFF",
+  "sku": "SU ORI 1000 Can",
+  "units_per_case": 6,
+  "ml": 1000,
+  "hl_per_case": 0.06,
+  "in_dashboard": false,
+  "note": "NEW"
+ },
+ "512886": {
+  "name": "설화 12x618ml 캔 GS25 Edition (6 949352 270041)",
+  "channel": "OFF",
+  "sku": "SU ORI 618 Can",
+  "units_per_case": 12,
+  "ml": 618,
+  "hl_per_case": 0.07416,
+  "in_dashboard": false,
+  "note": "NEW"
+ },
+ "512696": {
+  "name": "파울라너 헬 뮌헨 라거 500ml 6x4캔 (4 066600 211822)",
+  "channel": "OFF",
+  "sku": "PA HEL 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512916": {
+  "name": "파울라너 뮌헨 헬 라거 500ml 6x4캔 FCB (4 066600 811022)",
+  "channel": "OFF",
+  "sku": "PA HEL 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512700": {
+  "name": "파울라너 바이스비어 뮌헨 위트비어 500ml 6x4캔 (4 066600 292821)",
+  "channel": "OFF",
+  "sku": "PA WHE 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512699": {
+  "name": "파울라너 바이스비어 뮌헨 위트비어 500ml 6x4캔 스티커링 (4 066600 292821)",
+  "channel": "OFF",
+  "sku": "PA WHE 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512904": {
+  "name": "파울라너 위트비어 500ml 3x8캔 코스트코",
+  "channel": "OFF",
+  "sku": "PA WHE 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512853": {
+  "name": "파울라너 바이스비어 0,0 500ml 24캔(4 066600 192510)",
+  "channel": "OFF",
+  "sku": "PA XXX 500 Can",
+  "units_per_case": 24,
+  "ml": 500,
+  "hl_per_case": 0.12,
+  "in_dashboard": false,
+  "note": "CHECK"
+ },
+ "121916": {
+  "name": "하이네켄 330ml 24병 유흥 (8 7120009 00663)",
+  "channel": "ON",
+  "sku": "HE ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511990": {
+  "name": "하이네켄 330ml 4x6병 가정용 (전환) (8 712000 900663)",
+  "channel": "ON",
+  "sku": "HE ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "122536": {
+  "name": "하이네켄 8L 블레이드 (8 712000 051990)",
+  "channel": "ON",
+  "sku": "HE ORI 8000 Blade",
+  "units_per_case": 1,
+  "ml": 8000,
+  "hl_per_case": 0.08,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511128": {
+  "name": "하이네켄 20L 브루락 (8 712000 038434)",
+  "channel": "ON",
+  "sku": "HE ORI 20000 Air Keg",
+  "units_per_case": 1,
+  "ml": 20000,
+  "hl_per_case": 0.2,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124548": {
+  "name": "하이네켄 0.0 330ml 4x6병 (8 712000 055738)",
+  "channel": "ON",
+  "sku": "HE 0.0 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "124954": {
+  "name": "하이네켄 실버 330ml 24병 유흥 (8 712000 057220)",
+  "channel": "ON",
+  "sku": "HE SLV 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "152577": {
+  "name": "타이거 640ml 12병 유흥 APBS (0 86428 20064 2)",
+  "channel": "ON",
+  "sku": "TI ORI 640 Bottle",
+  "units_per_case": 12,
+  "ml": 640,
+  "hl_per_case": 0.0768,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "152643": {
+  "name": "타이거 640ml 12병 가정용 APBS (0 86428 20064 2)",
+  "channel": "ON",
+  "sku": "TI ORI 640 Bottle",
+  "units_per_case": 12,
+  "ml": 640,
+  "hl_per_case": 0.0768,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511621": {
+  "name": "타이거 330ml 24병 유흥 APBS (8 888017 210603)",
+  "channel": "ON",
+  "sku": "TI ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "511815": {
+  "name": "타이거 330ml 24병 가정용 APBS (8 888017 210603)",
+  "channel": "ON",
+  "sku": "TI ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512044": {
+  "name": "비라모레띠 330ml 24병 유흥 General (8 006890 692914)",
+  "channel": "ON",
+  "sku": "BI ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512724": {
+  "name": "비라모레띠 330ml 24병 가정용 (8 006890 692914)",
+  "channel": "ON",
+  "sku": "BI ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512491": {
+  "name": "설화 500ml 12병 가정용 (6 949352 256618)",
+  "channel": "ON",
+  "sku": "SU ORI 500 Bottle",
+  "units_per_case": 12,
+  "ml": 500,
+  "hl_per_case": 0.06,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512493": {
+  "name": "설화 500ml 12병 유흥 (6 949352 256618)",
+  "channel": "ON",
+  "sku": "SU ORI 500 Bottle",
+  "units_per_case": 12,
+  "ml": 500,
+  "hl_per_case": 0.06,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512588": {
+  "name": "데스페라도스 330ml 24병 유흥 New (31559300 06015)",
+  "channel": "ON",
+  "sku": "DE ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512845": {
+  "name": "데스페라도스 오리지널 330ml 가정병 New (3 1559300 06015)",
+  "channel": "ON",
+  "sku": "DE ORI 330 Bottle",
+  "units_per_case": 24,
+  "ml": 330,
+  "hl_per_case": 0.0792,
+  "in_dashboard": true,
+  "note": ""
+ },
+ "512701": {
+  "name": "파울라너 바이스비어 뮌헨 위트비어 20L 케그 (4 066600 999263)",
+  "channel": "ON",
+  "sku": "PA WHE 20000 Keg",
+  "units_per_case": 1,
+  "ml": 20000,
+  "hl_per_case": 0.2,
+  "in_dashboard": true,
+  "note": ""
+ }
+}

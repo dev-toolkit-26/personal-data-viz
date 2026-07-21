@@ -22,6 +22,8 @@
 <script src="tts-dictionary.js"></script>
 <!-- Off-Trade 베이스 데이터 (FCST 25Y/AP/RoFo from Account Volume 취합본). RoFo만 매달 갱신. -->
 <script src="off_seed.js"></script>
+<!-- SKU 코드 정규화(구 양식 별칭 흡수) 공용 모듈. On(index.html)과 동일 파일을 공유한다. -->
+<script src="../off_ingest.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════════
 //  Off-Trade 데이터 레이어
@@ -8604,9 +8606,13 @@ function _offNormalizeBrandName(s){
 // AP 시스템과 DSR/RoFo가 사용하는 Paulaner SKU 코드 불일치 정정 (DSR 기준으로 통일)
 //   PA HEL 500 Can → PA XXX 500 Can
 //   PA WHE 500 Can → PA ORI 500 Can
+// 표시용 SKU명 통일 — 방향은 '구명 → 현행명'. off_ingest.js의 _OFF_SKU_ALIAS와 같은 방향이어야 한다.
+// (구 양식이 쓰던 PA ORI/PA XXX가 살아있는 off_seed.js 폴백 시드나 옛 스냅샷을 앞으로 접어준다.
+//  2026-07 이전에는 이 맵이 반대 방향이라 폐기된 이름이 화면에 표시됐음.)
 const _OFF_SKU_NAME_MAP = {
-  'PA HEL 500 Can': 'PA XXX 500 Can',
-  'PA WHE 500 Can': 'PA ORI 500 Can'
+  'PA ORI 500 Can': 'PA WHE 500 Can',
+  'PA XXX 500 Can': 'PA HEL 500 Can',
+  'PA ORI 20000 Keg': 'PA WHE 20000 Keg'
 };
 function _offNormalizeSku(s){
   const raw = (s.sku || '').trim();
@@ -9676,12 +9682,13 @@ function parseDsrWorkbook(wb, expectedYear){
     total++;
     const seg = cSeg >= 0 ? _offCellStr(sh[XLSX.utils.encode_cell({r:R, c:cSeg})]) : null;
     const grp = _offCellStr(sh[XLSX.utils.encode_cell({r:R, c:cGrp})]);
-    const sku = _offCellStr(sh[XLSX.utils.encode_cell({r:R, c:cSku})]);
-    if(!grp || !sku){ skipped++; continue; }
+    const skuRaw = _offCellStr(sh[XLSX.utils.encode_cell({r:R, c:cSku})]);
+    if(!grp || !skuRaw){ skipped++; continue; }
     // 채널: Segment 컬럼 우선, 미인식(E-com·Military·DF 등)/없으면 Group으로 역추론
     const chKey = (seg && _OFF_TR_CH_MAP[seg]) || _OFF_GRP_CH[grp];
     const acKey = _OFF_TR_AC_MAP[grp];
     if(!chKey || !acKey){ skipped++; continue; }
+    const sku = _offNormSku(skuRaw, acKey);   // 계정 한정 규칙이 있으므로 acKey 확정 후 정규화
     // 월/연도 결정
     let mi = -1, year = expectedYear || 2026;
     if(cDate >= 0){
@@ -9716,7 +9723,7 @@ function parseDsrWorkbook(wb, expectedYear){
     const hlN = _offCellNum(sh[XLSX.utils.encode_cell({r:R, c:cHl})]);
     const qtN = cQty >= 0 ? _offCellNum(sh[XLSX.utils.encode_cell({r:R, c:cQty})]) : 0;
     const nvN = cNsv >= 0 ? _offCellNum(sh[XLSX.utils.encode_cell({r:R, c:cNsv})]) : 0;
-    const k = chKey + '|' + acKey + '|' + sku.trim();
+    const k = chKey + '|' + acKey + '|' + sku;   // _offNormSku로 trim·별칭 처리 완료
     if(!aggHl[k]){ aggHl[k] = Array(12).fill(0); aggQt[k] = Array(12).fill(0); aggNv[k] = Array(12).fill(0); }
     aggHl[k][mi] += hlN;
     aggQt[k][mi] += qtN;
@@ -9948,6 +9955,13 @@ function _detectWeeklyWorkbook(wb){
 }
 // 다중시트 주간 FCST 파서: 시트 이름=계정, 시트별 B1=월, 행5+ Brand(A)/SKU(B)/1W~5W(C~G).
 // 주차 값은 HL 단위로 직접 입력 (계수 변환 없음). → 표의 W1~W5(HL 기준)와 단위 일치.
+// SKU 코드 정규화 — 구 양식 별칭(파울라너 PA ORI/PA XXX 등)을 현행 코드로 흡수.
+// off_ingest.js가 유일한 매핑 출처. 모듈이 안 뜨면 별칭이 조용히 통과해 FCST가 갈라지므로 명시적으로 실패시킨다.
+function _offNormSku(v, acct){
+  if(!window.OffIngest || !window.OffIngest.normalizeOffSku) throw new Error('off_ingest.js 로드 안 됨 — SKU 정규화 불가');
+  return window.OffIngest.normalizeOffSku(v, acct);
+}
+
 function parseFcstWeeklyWorkbook(wb, fileName){
   const updates = [], skipped = [];
   for(const sn of wb.SheetNames){
@@ -9968,7 +9982,7 @@ function parseFcstWeeklyWorkbook(wb, fileName){
       const sc = ws[XLSX.utils.encode_cell({r:R,c:1})];         // B = sku
       if(bc && bc.v != null && bc.v !== ''){ curBrand = String(bc.v).trim(); }
       if(!sc || sc.v == null || sc.v === '') continue;
-      const sku = String(sc.v).trim(); if(!sku) continue;
+      const sku = _offNormSku(sc.v, resolved.acct); if(!sku) continue;
       const weeks = []; let any = false;
       for(let C = 2; C <= 6; C++){                              // C~G = 1W~5W (HL 직접 입력)
         const n = Number(ws[XLSX.utils.encode_cell({r:R,c:C})]?.v);
