@@ -350,6 +350,10 @@ thead th { background: var(--primary); color: #fff; padding: 6px 8px; text-align
 /* FCST Summary: 초록 헤더 고정(스크롤 내려도 보임) + 드릴다운 Brand 경계 강화 */
 #tbl-fcst thead th { position: sticky; top: 0; z-index: 3; }
 #tbl-fcst tbody tr.fcst-drill-brand td { border-top: 2px solid #94a3b8; background: #eef2f7; }
+/* 브랜드▸SKU 표: 브랜드 행을 상단 표의 채널 행처럼 음영(.td-brand) + 굵은 경계선으로 구분 */
+#tbl-fcst-brand thead th { position: sticky; top: 0; z-index: 3; }
+#tbl-fcst-brand tbody tr[data-lvl="0"] td { border-top: 2px solid #205527; }
+#tbl-fcst-brand tbody tr[data-lvl="1"] td { border-top: 1px solid #dbe3ec; }
 
 /* ── P&L Detail Table: sticky header + first two columns ── */
 #tbl-rev-pl thead th { position: sticky; top: 0; z-index: 3; }
@@ -5479,19 +5483,22 @@ function renderFcstBrandTable(){
     .filter(x=>x.vis>0.001).sort((a,b)=>b.k-a.k);
 
   // 레벨별 표기: 0=브랜드 1=SKU 2=채널 3=거래처
+  // lvl 0(브랜드)은 상단 표의 채널 행과 동일하게 .td-brand(초록 음영+굵게)를 씌워
+  // 브랜드 경계를 시각적으로 끊는다. 경계선은 CSS의 tr[data-lvl] 규칙이 담당.
   const LV = [
-    { pad:14, wrap:l=>`<b style="color:#475569">${l}</b>`,                     style:'font-weight:600;background:#fafbfd;' },
-    { pad:40, wrap:l=>`<span style="color:#64748b">· ${l}</span>`,             style:'background:#fbfcfe;font-size:11px;' },
-    { pad:68, wrap:l=>`<span style="color:#7c8798">└ ${l}</span>`,             style:'background:#f7f9fc;font-size:11px;' },
-    { pad:94, wrap:l=>`<span style="color:#94a3b8">· ${l}</span>`,             style:'background:#fafcfe;font-size:10.5px;' },
+    { pad:14, wrap:l=>l,                                           style:'',                             cls:'td-brand' },
+    { pad:40, wrap:l=>`<span style="color:#475569">· ${l}</span>`, style:'background:#fbfcfe;font-size:11px;font-weight:600;' },
+    { pad:68, wrap:l=>`<span style="color:#7c8798">└ ${l}</span>`, style:'background:#f7f9fc;font-size:11px;' },
+    { pad:94, wrap:l=>`<span style="color:#94a3b8">· ${l}</span>`, style:'background:#fafcfe;font-size:10.5px;' },
   ];
   // path로 부모/자식을 잇는다. 접을 때는 후손 전체를 함께 숨겨야 하므로 prefix 매칭이 가능한 형태.
   const emit = (label, o, lvl, path, parentPath, hasChild) => {
     const L = LV[lvl];
+    const tdc = L.cls ? ` class="${L.cls}"` : '';
     const c = hasChild ? caret : '<span style="display:inline-block;width:12px;"></span> ';
-    parts.push(`<tr data-path="${path}"${parentPath?` data-parent-path="${parentPath}"`:''}${hasChild?' data-haschild="1"':''}`
+    parts.push(`<tr data-path="${path}" data-lvl="${lvl}"${parentPath?` data-parent-path="${parentPath}"`:''}${hasChild?' data-haschild="1"':''}`
       + ` style="${L.style}${hasChild?'cursor:pointer;':''}${lvl>0?'display:none;':''}">`
-      + `<td style="padding-left:${L.pad}px;">${c}${L.wrap(label)}</td>${cells(o,'')}</tr>`);
+      + `<td${tdc} style="padding-left:${L.pad}px;">${c}${L.wrap(label)}</td>${cells(o, L.cls||'')}</tr>`);
   };
 
   const brandArr = _entries(brands);
