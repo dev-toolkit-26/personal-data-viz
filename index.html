@@ -3849,37 +3849,42 @@ function _stockCompute(stock, offDem) {
     else if (!STOCK_SHELF_EXEMPT.has(sku) && days < STOCK_SHELF_MIN[m[2] === 'ON' ? 'ON' : 'OFF']) s.near += lot.qty;
     else s.avail += lot.qty;
   }
+  // 수요는 On/Off를 나눠 담는다 — 합계만 보면 "어느 쪽 수요가 큰지"가 사라져
+  // 왜 쇼트인지 설명이 안 된다(재고는 하나인데 수요는 두 채널에서 온다).
   const dem = {};
-  const add = (sku, f, mt, nx) => {
-    const o = dem[sku] || (dem[sku] = { fcst: 0, mtd: 0, next: 0 });
-    o.fcst += f; o.mtd += mt; o.next += nx;
+  const add = (src, sku, f, mt, nx) => {
+    const o = dem[sku] || (dem[sku] = { on: 0, off: 0, mtd: 0, next: 0 });
+    o[src] += f; o.mtd += mt; o.next += nx;
   };
   const i = (_upGetFcstMonth() || 7) - 1;
   for (const b of ((DASHBOARD_DATA.sku_detail || {})['On Trade Total'] || [])) {
     for (const s of (b.skus || [])) {
       const d = s.data || {};
-      add(s.sku, Math.max(d.this_week_fcst || 0, 0), Math.max(d.mtd || 0, 0),
+      add('on', s.sku, Math.max(d.this_week_fcst || 0, 0), Math.max(d.mtd || 0, 0),
           Math.max((d.rofo_monthly || [])[i + 1] || 0, 0));
     }
   }
-  for (const sku in (offDem || {})) add(sku, offDem[sku].fcst, offDem[sku].mtd, offDem[sku].next);
+  for (const sku in (offDem || {})) add('off', sku, offDem[sku].fcst, offDem[sku].mtd, offDem[sku].next);
 
   const rows = [];
   for (const sku in sup) {
     if (STOCK_DELISTED.has(sku)) continue;
-    const s = sup[sku], d = dem[sku] || { fcst: 0, mtd: 0, next: 0 };
-    const use  = Math.max(d.fcst, d.mtd / elapsed * dim);
-    const rest = Math.max(use - d.mtd, 0);
+    const s = sup[sku], d = dem[sku] || { on: 0, off: 0, mtd: 0, next: 0 };
+    const fcst = d.on + d.off;
+    const rr   = d.mtd / elapsed * dim;          // MTD 런레이트를 월 환산
+    const use  = Math.max(fcst, rr);             // 큰 쪽 채택 — FCST 하향이 쇼트를 가리므로
+    const rest = Math.max(use - d.mtd, 0);       // 당월 남은 수요
     const cover = use ? s.avail / use : null;
     rows.push({
       sku, hl: s.hl, avail: s.avail, near: s.near, blocked: s.blocked, total: s.total,
+      fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, basis: rr > fcst ? 'rr' : 'fcst',
       use, rest, cover, gap: Math.max(rest - s.avail, 0),
       days: use ? s.avail / (use / dim) : null,
       status: rest > s.avail ? 'short' : (cover != null && cover < 1) ? 'watch' : 'ok'
     });
   }
   rows.sort((a, b) => (a.cover == null) - (b.cover == null) || (a.cover - b.cover));
-  return rows;
+  return { rows, elapsed, dim };
 }
 
 // ── 슬라이드 렌더 ──────────────────────────────────────────────────────────────
@@ -3895,7 +3900,7 @@ async function renderSumStock() {
   let offDem = null;
   try { offDem = await _stockOffDemand(); }
   catch (e) { console.warn('Off 수요 로드 실패 — On 수요만으로 판정합니다:', e); }
-  const rows = _stockCompute(stock, offDem);
+  const { rows, elapsed: elapsedDays, dim: daysInMonth } = _stockCompute(stock, offDem);
   const nS = rows.filter(r => r.status === 'short').length;
   const nW = rows.filter(r => r.status === 'watch').length;
   const nO = rows.filter(r => r.status === 'ok').length;
@@ -3907,37 +3912,81 @@ async function renderSumStock() {
     + 'background:rgba(255,255,255,.06);border:1px solid ' + c + '55;font-size:11.5px;font-weight:600;color:#fff;">'
     + '<span style="width:7px;height:7px;border-radius:50%;background:' + c + ';"></span>' + label + ' ' + n + '</span>';
 
-  const GC = (window.innerWidth <= 1440) ? '96px 1fr 92px 64px' : '110px 1fr 110px 72px';
-  let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;">'
+  const GC = (window.innerWidth <= 1440)
+    ? '84px minmax(0,1fr) 74px 66px 66px 82px 48px'
+    : '96px minmax(0,1fr) 88px 78px 78px 96px 56px';
+  const HD = 'font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;';
+
+  let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chip(C.short, '쇼트', nS) + chip(C.watch, '주의', nW) + chip(C.ok, '정상', nO) + '</div>'
     + '<span style="font-size:11px;color:rgba(255,255,255,.5);">기준일 ' + stock.as_of
     + (offDem ? '' : ' · <span style="color:#fbbf24;">Off 수요 미반영</span>') + '</span></div>';
 
-  html += '<div style="display:grid;grid-template-columns:' + GC + ';gap:10px;font-size:10px;color:rgba(255,255,255,.7);'
-    + 'text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:8px 0 8px 4px;border-bottom:1px solid rgba(255,255,255,.22);">'
-    + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span><span style="justify-self:end;">커버</span></div>';
+  html += '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;' + HD
+    + 'padding:8px 0 8px 4px;border-bottom:1px solid rgba(255,255,255,.22);">'
+    + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
+    + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
+    + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">커버</span></div>';
 
   const risky = rows.filter(r => r.status !== 'ok');
   html += risky.map(r => {
     const c = C[r.status];
     const badge = r.status === 'short'
-      ? '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.18);color:' + c + ';white-space:nowrap;">−'
+      ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.18);color:' + c + ';white-space:nowrap;">−'
         + Math.round(r.gap * r.hl).toLocaleString('ko-KR') + ' HL</span>'
-      : '<span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>';
-    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:10px;align-items:baseline;font-size:12px;line-height:1.85;padding:2px 0 2px 4px;">'
+      : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>';
+    // 런레이트가 FCST를 넘어 채택된 경우 표시 — FCST만 믿으면 이 물량이 안 보인다
+    const useMark = r.basis === 'rr'
+      ? '<span style="color:#fbbf24;font-size:9px;margin-left:3px;" title="MTD 런레이트가 FCST보다 커서 런레이트 채택">RR</span>' : '';
+    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;line-height:1.8;padding:2px 0 2px 4px;">'
       + '<span>' + badge + '</span>'
       + '<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
       + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
+      + '<span style="justify-self:end;color:rgba(255,255,255,.62);white-space:nowrap;">' + fHL(r.fcstOn * r.hl) + '</span>'
+      + '<span style="justify-self:end;color:rgba(255,255,255,.62);white-space:nowrap;">' + fHL(r.fcstOff * r.hl) + '</span>'
+      + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fHL(r.use * r.hl) + useMark + '</span>'
       + '<span style="justify-self:end;color:' + c + ';font-weight:700;">' + (r.cover == null ? '—' : r.cover.toFixed(2)) + '</span>'
       + '</div>';
   }).join('');
 
   if (!risky.length) html += '<div style="color:#4ade80;font-size:12.5px;padding:10px 4px;">전 SKU 커버 1개월 이상 — 쇼트 위험 없음</div>';
-  if (nO) html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.12);'
+  if (nO) html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.12);'
     + 'font-size:11.5px;color:rgba(255,255,255,.5);padding-left:4px;">정상 ' + nO + '개 SKU (커버 1.0개월 이상)</div>';
-  html += '<div style="margin-top:10px;font-size:10.5px;color:rgba(255,255,255,.38);line-height:1.6;padding-left:4px;">'
-    + '가용재고 = 출고 가능 잔여 유통기한(캔 180일·병/생 90일) 충족분, 출고보류·비매품·수출향 제외 · '
-    + '커버 = 가용재고 ÷ 당월 수요(On+Off 합산, max(FCST, MTD 런레이트)) · 입고 예정 미반영</div>';
+
+  // ── 산출 과정 — 가장 위험한 SKU 하나를 끝까지 풀어 보여준다 ──────────────────
+  // 임박·보류 차감이 실제로 일어나는 SKU를 우선 고른다 — 차감이 0이면 STEP 1이 설명이 안 된다.
+  const ex = risky.reduce((a, r) =>
+    ((r.near + r.blocked) * r.hl > (a.near + a.blocked) * a.hl ? r : a), risky[0]) || rows[0];
+  const stepBox = (n, title, body) =>
+    '<div style="flex:1 1 190px;min-width:0;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.09);'
+    + 'border-left:2px solid rgba(255,255,255,.28);padding:8px 11px;">'
+    + '<div style="font-size:9.5px;color:rgba(255,255,255,.45);letter-spacing:.6px;margin-bottom:3px;">STEP ' + n + ' · ' + title + '</div>'
+    + '<div style="font-size:11px;color:rgba(255,255,255,.88);line-height:1.6;">' + body + '</div></div>';
+  const W = v => Math.round(v * ex.hl).toLocaleString('ko-KR');
+  const wht = t => '<span style="color:#fff;font-weight:600;">' + t + '</span>';
+
+  if (ex) {
+    html += '<div style="margin-top:14px;padding-top:11px;border-top:1px solid rgba(255,255,255,.16);">'
+      + '<div style="' + HD + 'margin-bottom:8px;">산출 과정 — ' + ex.sku + ' <span style="color:rgba(255,255,255,.4);font-weight:400;text-transform:none;letter-spacing:0;">(단위 HL)</span></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      + stepBox(1, '가용재고', '총재고 ' + W(ex.total) + ' − 유통기한 임박 ' + W(ex.near)
+          + ' − 출고보류·수출향 ' + W(ex.blocked) + ' = ' + wht(W(ex.avail)))
+      + stepBox(2, '수요 합산', 'On FCST ' + W(ex.fcstOn) + ' + Off FCST ' + W(ex.fcstOff)
+          + ' = ' + wht(W(ex.fcst)))
+      + stepBox(3, '런레이트 대조', 'MTD ' + W(ex.mtd) + ' ÷ ' + elapsedDays + '일 × ' + daysInMonth + '일 = ' + W(ex.rr)
+          + '<br>→ 큰 쪽 채택 ' + wht(W(ex.use)) + (ex.basis === 'rr' ? ' <span style="color:#fbbf24;">(런레이트)</span>' : ' <span style="color:rgba(255,255,255,.5);">(FCST)</span>'))
+      + stepBox(4, '커버 · 판정', '가용 ' + W(ex.avail) + ' ÷ 수요 ' + W(ex.use) + ' = ' + wht(ex.cover == null ? '—' : ex.cover.toFixed(2)) + '개월'
+          + '<br>잔여수요 ' + W(ex.rest) + (ex.status === 'short' ? ' > ' : ' ≤ ') + '가용 ' + W(ex.avail)
+          + ' → <span style="color:' + C[ex.status] + ';font-weight:700;">'
+          + (ex.status === 'short' ? '쇼트' : ex.status === 'watch' ? '주의' : '정상') + '</span>')
+      + '</div></div>';
+  }
+
+  html += '<div style="margin-top:10px;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.65;padding-left:4px;">'
+    + '재고는 전국 단일 풀이라 채널·지역으로 나누지 않고 SKU 단위로 본다. 수요는 On+Off 합산 — 한쪽만 보면 상대 채널 수요가 빠져 안전해 보인다. · '
+    + '출고 가능 잔여 유통기한: 캔 180일(CVS 6개월 룰) / 병·생·케그 90일. 설화 1L·618ml은 특수 SKU라 면제 · '
+    + '<span style="color:#fbbf24;">RR</span> = MTD 런레이트가 FCST보다 커서 채택된 SKU (FCST만 보면 가려지는 물량) · '
+    + '입고(수입 도착) 예정은 미반영 — 커버는 추가 입고가 없다고 가정한 소진 기간</div>';
   el.innerHTML = html;
 }
 
