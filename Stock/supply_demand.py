@@ -27,6 +27,8 @@ SHELF_MIN = {"OFF": 180, "ON": 90}
 # 유통기한 출고룰 면제 SKU — 특수 SKU(채널 전용 에디션·대용량)라 일반 룰을 적용하지 않는다.
 SHELF_EXEMPT = {"SU ORI 1000 Can",    # 설화 6x1L 캔
                 "SU ORI 618 Can"}     # 설화 12x618ml GS25 Edition
+# 재고를 별도 운영해 데일리스탁에 안 잡히는 채널 (면세만 별도, E-com·Military는 같은 창고)
+EXCL_CH = {"DF"}
 CS_HL = 0.0792                 # c/s 환산 기준 (330ml x 24 = 0.0792 HL)
 NON_SELLABLE = {"비매품", "시음주", "쉬링크", "출고보류", "유통기한임박"}
 DELISTED = {"HE ORI 8000 Blade", "HE SLV 8000 Blade",
@@ -107,6 +109,8 @@ def demand():
             o["next"] += max((d.get("rofo_monthly") or [0] * 12)[i + 1] or 0, 0)
 
     for r in snap("off_dashboard_snapshots", "off.json")["data"]["rows"]:
+        if r.get("ch") in EXCL_CH:
+            continue
         sku = _alias(r["sku"], r.get("acct"))
         f = HLF.get(sku)
         if not f:

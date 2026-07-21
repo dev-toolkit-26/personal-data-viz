@@ -3720,7 +3720,7 @@ const STOCK_SKU_MAP = {
   512699:['PA WHE 500 Can',0.12,'OFF'],
   512700:['PA WHE 500 Can',0.12,'OFF'],
   512904:['PA WHE 500 Can',0.12,'OFF'],
-  512853:['PA XXX 500 Can',0.12,'OFF'],
+  512853:['PA 0.0 500 Can',0.12,'OFF'],   // 파울라너 바이스비어 0,0 — 무알콜. PA XXX는 일반 헬의 구명이라 쓰면 합산된다
   512814:['SU ORI 1000 Can',0.06,'OFF'],
   512430:['SU ORI 500 Can',0.12,'OFF'],
   512886:['SU ORI 618 Can',0.07416,'OFF'],
@@ -3765,6 +3765,9 @@ const STOCK_CS_HL = 0.0792;   // c/s 환산 기준 (330ml x 24)
 // 이 대시보드에서 먼저 보여줄 규격채널. Off 대시보드로 이식할 땐 'OFF'로 바꾼다.
 // (ON/OFF SKU는 서로 겹치지 않는다 — 병/생/케그 11종 vs 캔/유통 23종)
 const STOCK_PRIMARY_CH = 'ON';
+// 재고를 별도로 운영해 데일리스탁에 안 잡히는 채널 — 수요 집계에서 뺀다.
+// (면세만 별도. E-com·Military는 같은 창고에서 나가므로 포함한다.)
+const STOCK_EXCL_CH = new Set(['DF']);
 
 // ── 파싱 ───────────────────────────────────────────────────────────────────────
 // 시트 컬럼: 주요판매채널 / 제품코드 / 제품명 / 유통일자 / 제품유형 / Total(QTY)
@@ -3821,6 +3824,7 @@ async function _stockOffDemand() {
   const i = (_upGetFcstMonth() || 7) - 1;
   const arr = (r, k) => { const v = r[k]; const a = (v && v.value) || v || []; return a; };
   for (const r of ((data && data.data && data.data.rows) || [])) {
+    if (STOCK_EXCL_CH.has(r.ch)) continue;             // 별도 재고 채널 — 수요만 얹히면 쇼트가 부풀려진다
     const sku = (window.OffIngest ? OffIngest.normalizeOffSku(r.sku, r.acct) : r.sku);
     const f = hl[sku];
     if (!f) continue;                                  // 재고에 없는 SKU는 판정 대상 아님
@@ -3949,7 +3953,8 @@ async function renderSumStock() {
       : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(74,222,128,.12);color:' + c + ';">정상</span>';
     // 런레이트가 FCST를 넘어 채택된 경우 표시 — FCST만 믿으면 이 물량이 안 보인다
     const useMark = r.basis === 'rr'
-      ? '<span style="color:#fbbf24;font-size:9px;margin-left:3px;" title="MTD 런레이트가 FCST보다 커서 런레이트 채택">RR</span>' : '';
+      ? '<span style="color:#fbbf24;font-size:9px;margin-left:3px;font-weight:700;"'
+        + ' title="실제 판매 속도(런레이트)가 FCST보다 빨라 런레이트를 수요로 채택">런</span>' : '';
     return '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;line-height:1.75;padding:1px 0 1px 4px;">'
       + '<span>' + badge + '</span>'
       + '<span style="color:' + (r.status === 'ok' ? 'rgba(255,255,255,.72)' : '#fff') + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
@@ -3961,7 +3966,13 @@ async function renderSumStock() {
       + '</div>';
   };
 
-  html += '<div style="max-height:min(46vh,360px);overflow-y:auto;padding-right:4px;">';
+  html += '<div style="font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:8px;padding-left:2px;">'
+    + '채택수요 = 당월 FCST와 <strong style="color:rgba(255,255,255,.75);font-weight:600;">런레이트</strong>'
+    + '(MTD ÷ 경과일 × 월일수 = 지금 판매 속도의 월 환산) 중 <strong style="color:rgba(255,255,255,.75);font-weight:600;">큰 쪽</strong>. '
+    + '<span style="color:#fbbf24;font-weight:700;">런</span> = 실제 판매가 FCST보다 빨라 런레이트가 채택된 SKU'
+    + '</div>';
+
+  html += '<div style="max-height:min(44vh,344px);overflow-y:auto;padding-right:4px;">';
   for (const ch of order) {
     const grp = rows.filter(r => r.ch === ch);
     if (!grp.length) continue;
@@ -4015,7 +4026,7 @@ async function renderSumStock() {
   html += '<div style="margin-top:10px;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.65;padding-left:4px;">'
     + '재고는 전국 단일 풀이라 채널·지역으로 나누지 않고 SKU 단위로 본다. 수요는 On+Off 합산 — 한쪽만 보면 상대 채널 수요가 빠져 안전해 보인다. · '
     + '출고 가능 잔여 유통기한: 캔 180일(CVS 6개월 룰) / 병·생·케그 90일. 설화 1L·618ml은 특수 SKU라 면제 · '
-    + '<span style="color:#fbbf24;">RR</span> = MTD 런레이트가 FCST보다 커서 채택된 SKU (FCST만 보면 가려지는 물량) · '
+    + 'DF(면세)는 재고를 별도 운영해 데일리스탁에 안 잡히므로 수요에서 제외 · '
     + '입고(수입 도착) 예정은 미반영 — 커버는 추가 입고가 없다고 가정한 소진 기간</div>';
   el.innerHTML = html;
 }

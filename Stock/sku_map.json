@@ -372,12 +372,12 @@
  "512853": {
   "name": "파울라너 바이스비어 0,0 500ml 24캔(4 066600 192510)",
   "channel": "OFF",
-  "sku": "PA XXX 500 Can",
+  "sku": "PA 0.0 500 Can",
   "units_per_case": 24,
   "ml": 500,
   "hl_per_case": 0.12,
   "in_dashboard": false,
-  "note": "CHECK"
+  "note": "NEW"
  },
  "121916": {
   "name": "하이네켄 330ml 24병 유흥 (8 7120009 00663)",
