@@ -1019,6 +1019,19 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     var wd   = DASHBOARD_DATA.wd_progress || {};
     var _sumMonName = _UP_MONTH_NAMES[meta?.month || _UP_FCST_MONTH] || 'Mar';
 
+    // ── Overview 기준선: RoFo ─────────────────────────────────────────────
+    // 아래 _sumBase* 세 값이 Hero/KPI/코멘트의 공통 기준선이며, AP는 참고값으로만 병기한다.
+    // 폴백(→AP)은 해당 월 RoFo가 비어 있을 때의 안전장치. 현행 스냅샷은 1~12월이 모두
+    // 채워져 있어 실제로는 타지 않지만, RoFo 미적용 상태로 되돌아가도 화면이 깨지지 않게 남긴다.
+    var _sumMon     = meta?.month || _UP_FCST_MONTH;
+    var _sumRofo    = ttl.rofo_monthly?.[_sumMon - 1] ?? null;
+    var _sumRofoAch = (_sumRofo != null && _sumRofo > 0 && ttl.this_week_fcst != null)
+      ? ttl.this_week_fcst / _sumRofo : null;
+    var _sumHasRofo  = _sumRofoAch != null;
+    var _sumBaseName = _sumHasRofo ? 'RoFo' : 'AP';
+    var _sumBaseVal  = _sumHasRofo ? _sumRofo    : ttl.ap;
+    var _sumBaseAch  = _sumHasRofo ? _sumRofoAch : ttl.ap_fcst_ach;
+
     // ── helpers ──
     function _fmtHL(v)  { return v == null ? '—' : v.toLocaleString('ko-KR', {maximumFractionDigits:1}); }
     function _fmtPct(v) { return v == null ? '—' : (v*100).toFixed(1) + '%'; }
@@ -1033,7 +1046,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     }
 
     // ── Hero ──
-    var overallStatus = ttl.ap_fcst_ach >= 0.95 ? 'On Track' : ttl.ap_fcst_ach >= 0.90 ? '목표 근접' : '위험';
+    var overallStatus = _sumBaseAch >= 0.95 ? 'On Track' : _sumBaseAch >= 0.90 ? '목표 근접' : '위험';
     document.getElementById('sum-hero-headline').textContent =
       _sumMonName + ' FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL (' + overallStatus + ')';
 
@@ -1041,8 +1054,12 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     // n/f = 카운트업용 원본 수치와 포맷 종류. 표시 텍스트(value)는 그대로 최종값을 넣어두고
     // (motion 미로드 시 그게 그대로 정답), 카운트업은 있을 때만 0→n을 덧씌운다.
     var kpis = [
-      { label: _sumMonName + ' AP 목표', value: _fmtHL(ttl.ap) + ' HL', sub: 'On Trade TTL', v: null, icon: '🎯', n: ttl.ap, f: 'hl', sfx: ' HL' },
-      { label: 'This Wk FCST 달성률', value: _fmtPct(ttl.ap_fcst_ach), sub: 'FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL', v: ttl.ap_fcst_ach, icon: '📊', n: ttl.ap_fcst_ach, f: 'pct' },
+      { label: _sumMonName + ' ' + _sumBaseName + ' 목표', value: _fmtHL(_sumBaseVal) + ' HL',
+        sub: _sumHasRofo ? 'AP ' + _fmtHL(ttl.ap) + ' HL · On Trade TTL' : 'On Trade TTL · RoFo 미적용 월',
+        v: null, icon: '🎯', n: _sumBaseVal, f: 'hl', sfx: ' HL' },
+      { label: 'This Wk FCST 달성률 (' + _sumBaseName + ' 기준)', value: _fmtPct(_sumBaseAch),
+        sub: 'FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL' + (_sumHasRofo ? ' · AP 기준 ' + _fmtPct(ttl.ap_fcst_ach) : ''),
+        v: _sumBaseAch, icon: '📊', n: _sumBaseAch, f: 'pct' },
       { label: 'MTD 실적 달성률', value: _fmtPct(ttl.fcst_mtd_ach), sub: 'MTD ' + _fmtHL(ttl.mtd_actual) + ' HL', v: ttl.fcst_mtd_ach, icon: '📈', n: ttl.fcst_mtd_ach, f: 'pct' },
       { label: '전년 동월 대비 성장률', value: _fmtPctDelta(ttl.fcst_growth_lym), sub: 'LY ' + _fmtHL(ttl.ly_month) + ' HL', v: (ttl.fcst_growth_lym||0) >= 0 ? 1 : 0, icon: (ttl.fcst_growth_lym||0)>=0?'⬆':'⬇', n: ttl.fcst_growth_lym, f: 'pctdelta' },
     ];
@@ -1065,11 +1082,13 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     // ── KPI Comment ──
     var mtdProgressPct = Math.round((wd.pct||0)*100);
     var mtdAchPct = Math.round((ttl.fcst_mtd_ach||0)*100);
-    var fcstAchPct = ((ttl.ap_fcst_ach||0)*100).toFixed(1);
+    var fcstAchPct = ((_sumBaseAch||0)*100).toFixed(1);
+    // AP는 기준선이 RoFo일 때만 참고로 병기한다(폴백 시엔 AP가 곧 기준선이라 중복).
+    var apRefTxt   = _sumHasRofo ? ' (AP 기준 ' + _fmtPct(ttl.ap_fcst_ach) + ')' : '';
     var kpiComment = '';
     var mtdGapPp = mtdAchPct - mtdProgressPct;
     var mtdGapColor = mtdGapPp >= 2 ? '#4ade80' : mtdGapPp >= -5 ? '#fbbf24' : '#f87171';
-    var fcstAchColor = (ttl.ap_fcst_ach||0) >= 0.95 ? '#4ade80' : (ttl.ap_fcst_ach||0) >= 0.9 ? '#fbbf24' : '#f87171';
+    var fcstAchColor = (_sumBaseAch||0) >= 0.95 ? '#4ade80' : (_sumBaseAch||0) >= 0.9 ? '#fbbf24' : '#f87171';
     var lymColor = (ttl.fcst_growth_lym||0) >= 0 ? '#4ade80' : '#f87171';
     var hi = function(v, c){ return '<strong style="color:' + c + ';">' + v + '</strong>'; };
     var wdLine = '📅 총 영업일 ' + hi((wd.total||0) + '일', '#fff') + ' 중 ' + hi((wd.elapsed||0) + '일', '#fff') + ' 경과 (' + hi(mtdProgressPct + '%', '#fff') + '). ';
@@ -1078,18 +1097,21 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       : mtdGapPp >= -5
       ? 'Business Day 경과율(' + hi(mtdProgressPct + '%', '#fff') + ') 대비 MTD Attainment(' + hi(mtdAchPct + '%', mtdGapColor) + ')이 유사한 수준으로, 월말까지 집중 관리 필요. '
       : 'Business Day 경과율(' + hi(mtdProgressPct + '%', '#fff') + ') 대비 MTD Attainment(' + hi(mtdAchPct + '%', mtdGapColor) + ')이 ' + hi(Math.abs(mtdGapPp) + 'pp', mtdGapColor) + ' 뒤처지고 있어 월말까지 집중 관리 필요. ';
-    if (ttl.ap_fcst_ach >= 1.0) {
-      kpiComment = wdLine + '✅ ' + hi(_sumMonName + ' AP 목표 초과 달성', '#4ade80') + ' 예상. '
-        + 'This Wk FCST ' + hi(_fmtHL(ttl.this_week_fcst) + ' HL', '#fff') + ' vs AP(' + _fmtHL(ttl.ap) + ' HL) '
-        + hi(fcstAchPct + '%', fcstAchColor) + '로 목표 초과 달성 중. '
+    // ✅/⚠️ 분기 임계를 KPI 카드 색상(is-good ≥95%)과 일치시킨다.
+    // 95~100% 구간은 '초과 달성'이 아니므로 같은 ✅ 안에서 문구를 나눈다.
+    var _overTgt = _sumBaseAch >= 1.0;
+    if (_sumBaseAch >= 0.95) {
+      kpiComment = wdLine + '✅ ' + hi(_sumMonName + ' ' + _sumBaseName + (_overTgt ? ' 목표 초과 달성' : ' 목표 달성권'), '#4ade80') + ' 예상. '
+        + 'This Wk FCST ' + hi(_fmtHL(ttl.this_week_fcst) + ' HL', '#fff') + ' vs ' + _sumBaseName + '(' + _fmtHL(_sumBaseVal) + ' HL) '
+        + hi(fcstAchPct + '%', fcstAchColor) + apRefTxt + (_overTgt ? '로 목표 초과 달성 중. ' : '로 목표 달성권 유지 중. ')
         + mtdStatusText
         + '전년 동월(' + _fmtHL(ttl.ly_month) + ' HL) 대비 ' + hi(_fmtPctDelta(ttl.fcst_growth_lym), lymColor) + ' 수준으로, '
-        + ((ttl.fcst_growth_lym||0)<0 ? 'YoY 하락세는 우려 사항이나 AP 달성은 유지 가능한 상황.' : 'YoY 성장 모멘텀도 지속되고 있음.');
+        + ((ttl.fcst_growth_lym||0)<0 ? 'YoY 하락세는 우려 사항이나 ' + _sumBaseName + ' 달성은 유지 가능한 상황.' : 'YoY 성장 모멘텀도 지속되고 있음.');
     } else {
-      kpiComment = wdLine + '⚠️ ' + hi('FCST 기준 ' + _sumMonName + ' AP 달성률 ' + fcstAchPct + '%', fcstAchColor) + '로 목표 미달. '
+      kpiComment = wdLine + '⚠️ ' + hi('FCST 기준 ' + _sumMonName + ' ' + _sumBaseName + ' 달성률 ' + fcstAchPct + '%', fcstAchColor) + apRefTxt + '로 목표 미달. '
         + mtdStatusText
         + '전년 동월(' + _fmtHL(ttl.ly_month) + ' HL) 대비 ' + hi(_fmtPctDelta(ttl.fcst_growth_lym), lymColor) + ' 수준으로, '
-        + ((ttl.fcst_growth_lym||0)<0 ? 'YoY 하락세는 우려 사항이나 잔여 영업일 내 집중적인 회복 액션이 필요.' : 'YoY 성장 모멘텀은 유지되고 있으나 AP 달성을 위한 집중 관리 필요.');
+        + ((ttl.fcst_growth_lym||0)<0 ? 'YoY 하락세는 우려 사항이나 잔여 영업일 내 집중적인 회복 액션이 필요.' : 'YoY 성장 모멘텀은 유지되고 있으나 ' + _sumBaseName + ' 달성을 위한 집중 관리 필요.');
     }
 
     document.getElementById('sum-kpi-comment').innerHTML = kpiComment;
@@ -6816,20 +6838,22 @@ function renderSumMTDDiagnosis() {
   const fmtPctDelta = v => v != null ? (v>=0?'+':'')+((v*100).toFixed(1))+'%' : '-';
   const fmtPp       = v => v != null ? (v>=0?'+':'')+((v*100).toFixed(1))+'pp' : '-';
 
+  // 상태 판정 기준선 = FCST 기준 MTD 달성률 vs 영업일 경과율(WD Baseline).
+  // AP 기준(ap_mtd_ach)은 Row2의 'AP Basis' 바에만 남는다.
   function getStatus(d) {
-    const gap = (d.ap_mtd_ach||0) - wdPct;
+    const gap = (d.fcst_mtd_ach||0) - wdPct;
     if (gap >=  0.02) return {label:'On Track', color:'#4ade80', bg:'rgba(74,222,128,.15)',  border:'rgba(74,222,128,.35)'};
     if (gap >= -0.05) return {label:'Moderate', color:'#fbbf24', bg:'rgba(251,191,36,.12)',   border:'rgba(251,191,36,.35)'};
     return               {label:'At Risk', color:'#f87171', bg:'rgba(248,113,113,.12)',  border:'rgba(248,113,113,.35)'};
   }
 
   const ttl       = hl['TTL'];
-  const ttlGap    = ttl.ap_mtd_ach - wdPct;
+  const ttlGap    = (ttl.fcst_mtd_ach||0) - wdPct;
   const bColor    = ttlGap >= 0.02 ? '#4ade80' : ttlGap >= -0.05 ? '#fbbf24' : '#f87171';
   const behindReg = REGIONS.filter(r => hl[r.key] && (hl[r.key].ap_mtd_ach - wdPct) < -0.05).map(r=>r.label);
   const aheadReg  = REGIONS.filter(r => hl[r.key] && (hl[r.key].ap_mtd_ach - wdPct) >= 0.02).map(r=>r.label);
   const diagText  = ttlGap >= 0.02
-    ? `WD Baseline 대비 ${fmtPp(ttlGap)} 앞서는 중 — 현재 페이스 유지 시 AP 달성 가능`
+    ? `WD Baseline 대비 ${fmtPp(ttlGap)} 앞서는 중 — 현재 페이스 유지 시 FCST 달성 가능`
     : ttlGap >= -0.05
     ? `WD Baseline 대비 ${fmtPp(ttlGap)} 수준 — 이번 주 추가 성과 필요`
     : `WD Baseline 대비 ${fmtPp(ttlGap)} 뒤처짐 — 집중 모니터링 및 즉각적인 액션 필요`;
@@ -6841,8 +6865,8 @@ function renderSumMTDDiagnosis() {
     <div style="background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-left:3px solid ${bColor};border-radius:8px;padding:11px 18px;margin-bottom:14px;display:grid;grid-template-columns:auto 1fr;gap:4px 20px;font-size:13px;line-height:1.6;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);">
       <span style="color:rgba(255,255,255,.75);white-space:nowrap;">📅 영업일 진행률</span>
       <span style="color:rgba(255,255,255,.75);"><strong style="color:#fff;">${wd.elapsed}일 / ${wd.total}일 (${fmtPct(wdPct)})</strong> 경과 — 현 시점 MTD 기대 달성률 기준선</span>
-      <span style="color:rgba(255,255,255,.75);white-space:nowrap;">📈 TTL MTD 실적</span>
-      <span style="color:rgba(255,255,255,.75);"><strong style="color:${bColor};">${fmtPct(ttl.ap_mtd_ach)}</strong> (vs WD <strong style="color:${bColor};">${fmtPp(ttlGap)}</strong>) — ${diagText}</span>
+      <span style="color:rgba(255,255,255,.75);white-space:nowrap;">📈 TTL MTD 실적 (FCST 기준)</span>
+      <span style="color:rgba(255,255,255,.75);"><strong style="color:${bColor};">${fmtPct(ttl.fcst_mtd_ach)}</strong> (vs WD <strong style="color:${bColor};">${fmtPp(ttlGap)}</strong>) — ${diagText}</span>
     </div>`;
 
   // ─── Rows (vertical stack of 5 regions) ────────────
@@ -6851,13 +6875,13 @@ function renderSumMTDDiagnosis() {
   REGIONS.forEach(r => {
     const d = hl[r.key]; if (!d) return;
     const st          = getStatus(d);
-    const gap         = d.ap_mtd_ach - wdPct;
+    const gap         = (d.fcst_mtd_ach||0) - wdPct;   // 상태 칩 · 우측 vs WD 표시의 공통 기준
     const expectedMTD = d.ap * wdPct;
     const gapHL       = d.mtd_actual - expectedMTD;
     const mtdBarW     = Math.min(d.ap_mtd_ach * 100, 100).toFixed(1);
     const fcstBarW    = Math.min((d.fcst_mtd_ach||0) * 100, 100).toFixed(1);
     const wdBarW      = Math.min(wdPct * 100, 100).toFixed(1);
-    const fcstGap     = (d.fcst_mtd_ach||0) - wdPct;
+    const fcstGap     = gap;   // Row2 FCST 바 색상도 같은 기준
     const fcstBarColor= fcstGap >= 0.02 ? '#4ade80' : fcstGap >= -0.05 ? '#60a5fa' : '#f87171';
     const fcstColor   = d.ap_fcst_ach >= 1.0 ? '#4ade80' : d.ap_fcst_ach >= 0.9 ? '#fbbf24' : '#f87171';
     const gapHLColor  = gapHL >= 0 ? '#4ade80' : '#f87171';
