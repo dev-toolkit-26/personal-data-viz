@@ -3974,7 +3974,8 @@ async function renderSumStock() {
       + '</div>';
   };
 
-  html += '<div style="max-height:min(48vh,376px);overflow-y:auto;padding-right:2px;">';
+  // 안쪽에 스크롤 박스를 두지 않는다. 카드는 내용만큼 늘어나고 스크롤은 .kn-slide가 맡는다.
+  // (중첩 스크롤이면 어디를 굴려야 할지 모호하고, 박스 안 목록이 잘려 보인다)
   for (const ch of order) {
     const grp = rows.filter(r => r.ch === ch);
     if (!grp.length) continue;
@@ -4007,7 +4008,6 @@ async function renderSumStock() {
       + grp.map(rowHtml).join('')
       + '</div>';
   }
-  html += '</div>';
 
   // ── 산출 과정 — 가장 위험한 SKU 하나를 끝까지 풀어 보여준다 ──────────────────
   // 임박·보류 차감이 실제로 일어나는 SKU를 우선 고른다 — 차감이 0이면 STEP 1이 설명이 안 된다.
