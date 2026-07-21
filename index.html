@@ -3762,6 +3762,9 @@ const STOCK_NON_SELLABLE = new Set(['비매품', '시음주', '쉬링크', '출�
 // 8L Blade 단종 — On MTD가 음수(반품만 발생)라 판정에서 제외.
 const STOCK_DELISTED = new Set(['HE ORI 8000 Blade', 'HE SLV 8000 Blade', 'ED WHE 8000 Blade', 'TI ORI 8000 Blade']);
 const STOCK_CS_HL = 0.0792;   // c/s 환산 기준 (330ml x 24)
+// 이 대시보드에서 먼저 보여줄 규격채널. Off 대시보드로 이식할 땐 'OFF'로 바꾼다.
+// (ON/OFF SKU는 서로 겹치지 않는다 — 병/생/케그 11종 vs 캔/유통 23종)
+const STOCK_PRIMARY_CH = 'ON';
 
 // ── 파싱 ───────────────────────────────────────────────────────────────────────
 // 시트 컬럼: 주요판매채널 / 제품코드 / 제품명 / 유통일자 / 제품유형 / Total(QTY)
@@ -3842,7 +3845,7 @@ function _stockCompute(stock, offDem) {
   for (const lot of stock.lots) {
     const m = STOCK_SKU_MAP[lot.code]; if (!m) continue;
     const sku = m[0];
-    const s = sup[sku] || (sup[sku] = { hl: m[1], total: 0, avail: 0, near: 0, blocked: 0 });
+    const s = sup[sku] || (sup[sku] = { hl: m[1], ch: m[2], total: 0, avail: 0, near: 0, blocked: 0 });
     s.total += lot.qty;
     const days = lot.exp ? Math.round((new Date(lot.exp + 'T00:00:00') - asOf) / 86400000) : 9999;
     if (STOCK_NON_SELLABLE.has(lot.type) || m[3] === 'EXPORT') s.blocked += lot.qty;
@@ -3876,14 +3879,16 @@ function _stockCompute(stock, offDem) {
     const rest = Math.max(use - d.mtd, 0);       // 당월 남은 수요
     const cover = use ? s.avail / use : null;
     rows.push({
-      sku, hl: s.hl, avail: s.avail, near: s.near, blocked: s.blocked, total: s.total,
+      sku, hl: s.hl, ch: s.ch, avail: s.avail, near: s.near, blocked: s.blocked, total: s.total,
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, basis: rr > fcst ? 'rr' : 'fcst',
       use, rest, cover, gap: Math.max(rest - s.avail, 0),
       days: use ? s.avail / (use / dim) : null,
       status: rest > s.avail ? 'short' : (cover != null && cover < 1) ? 'watch' : 'ok'
     });
   }
-  rows.sort((a, b) => (a.cover == null) - (b.cover == null) || (a.cover - b.cover));
+  rows.sort((a, b) =>
+    (a.ch === STOCK_PRIMARY_CH ? 0 : 1) - (b.ch === STOCK_PRIMARY_CH ? 0 : 1)
+    || (a.cover == null) - (b.cover == null) || (a.cover - b.cover));
   return { rows, elapsed, dim };
 }
 
@@ -3922,39 +3927,64 @@ async function renderSumStock() {
     + '<span style="font-size:11px;color:rgba(255,255,255,.5);">기준일 ' + stock.as_of
     + (offDem ? '' : ' · <span style="color:#fbbf24;">Off 수요 미반영</span>') + '</span></div>';
 
-  html += '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;' + HD
-    + 'padding:8px 0 8px 4px;border-bottom:1px solid rgba(255,255,255,.22);">'
+  // 규격채널 구획 — 재고는 전국 단일 풀이지만 제품 규격(병/생 vs 캔)은 갈리므로
+  // 이 대시보드 담당 규격을 위에 두고, 상대 규격도 같이 보여준다(놓치는 SKU가 없도록).
+  const CH_LABEL = { ON: 'ON · 병 · 생 · 케그', OFF: 'OFF · 캔 · 유통' };
+  const CH_COLOR = { ON: '#60a5fa', OFF: '#c084fc' };
+  const order = [STOCK_PRIMARY_CH, STOCK_PRIMARY_CH === 'ON' ? 'OFF' : 'ON'];
+
+  const headerRow = () => '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;' + HD
+    + 'padding:6px 0 6px 4px;border-bottom:1px solid rgba(255,255,255,.22);">'
     + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
     + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
     + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">커버</span></div>';
 
-  const risky = rows.filter(r => r.status !== 'ok');
-  html += risky.map(r => {
+  const rowHtml = r => {
     const c = C[r.status];
     const badge = r.status === 'short'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.18);color:' + c + ';white-space:nowrap;">−'
         + Math.round(r.gap * r.hl).toLocaleString('ko-KR') + ' HL</span>'
-      : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>';
+      : r.status === 'watch'
+      ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>'
+      : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(74,222,128,.12);color:' + c + ';">정상</span>';
     // 런레이트가 FCST를 넘어 채택된 경우 표시 — FCST만 믿으면 이 물량이 안 보인다
     const useMark = r.basis === 'rr'
       ? '<span style="color:#fbbf24;font-size:9px;margin-left:3px;" title="MTD 런레이트가 FCST보다 커서 런레이트 채택">RR</span>' : '';
-    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;line-height:1.8;padding:2px 0 2px 4px;">'
+    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;line-height:1.75;padding:1px 0 1px 4px;">'
       + '<span>' + badge + '</span>'
-      + '<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
-      + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
-      + '<span style="justify-self:end;color:rgba(255,255,255,.62);white-space:nowrap;">' + fHL(r.fcstOn * r.hl) + '</span>'
-      + '<span style="justify-self:end;color:rgba(255,255,255,.62);white-space:nowrap;">' + fHL(r.fcstOff * r.hl) + '</span>'
-      + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fHL(r.use * r.hl) + useMark + '</span>'
+      + '<span style="color:' + (r.status === 'ok' ? 'rgba(255,255,255,.72)' : '#fff') + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
+      + '<span style="justify-self:end;color:' + (r.status === 'ok' ? 'rgba(255,255,255,.72)' : '#fff') + ';white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
+      + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + fHL(r.fcstOn * r.hl) + '</span>'
+      + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + fHL(r.fcstOff * r.hl) + '</span>'
+      + '<span style="justify-self:end;color:' + (r.status === 'ok' ? 'rgba(255,255,255,.72)' : '#fff') + ';white-space:nowrap;">' + fHL(r.use * r.hl) + useMark + '</span>'
       + '<span style="justify-self:end;color:' + c + ';font-weight:700;">' + (r.cover == null ? '—' : r.cover.toFixed(2)) + '</span>'
       + '</div>';
-  }).join('');
+  };
 
-  if (!risky.length) html += '<div style="color:#4ade80;font-size:12.5px;padding:10px 4px;">전 SKU 커버 1개월 이상 — 쇼트 위험 없음</div>';
-  if (nO) html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.12);'
-    + 'font-size:11.5px;color:rgba(255,255,255,.5);padding-left:4px;">정상 ' + nO + '개 SKU (커버 1.0개월 이상)</div>';
+  html += '<div style="max-height:min(46vh,360px);overflow-y:auto;padding-right:4px;">';
+  for (const ch of order) {
+    const grp = rows.filter(r => r.ch === ch);
+    if (!grp.length) continue;
+    const nsG = grp.filter(r => r.status === 'short').length;
+    const nwG = grp.filter(r => r.status === 'watch').length;
+    const isPrimary = ch === STOCK_PRIMARY_CH;
+    html += '<div style="display:flex;align-items:center;gap:9px;margin:' + (ch === order[0] ? '2px' : '14px') + ' 0 4px;">'
+      + '<span style="padding:2px 9px;border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.5px;'
+      + 'background:' + CH_COLOR[ch] + (isPrimary ? '2e' : '18') + ';color:' + CH_COLOR[ch] + ';'
+      + 'border:1px solid ' + CH_COLOR[ch] + (isPrimary ? '66' : '33') + ';">' + CH_LABEL[ch] + '</span>'
+      + '<span style="font-size:10.5px;color:rgba(255,255,255,.45);">' + grp.length + '개 SKU'
+      + (nsG ? ' · <span style="color:' + C.short + ';">쇼트 ' + nsG + '</span>' : '')
+      + (nwG ? ' · <span style="color:' + C.watch + ';">주의 ' + nwG + '</span>' : '')
+      + (!nsG && !nwG ? ' · <span style="color:' + C.ok + ';">이상 없음</span>' : '') + '</span>'
+      + (isPrimary ? '' : '<span style="font-size:10px;color:rgba(255,255,255,.32);">참고</span>')
+      + '</div>'
+      + headerRow() + grp.map(rowHtml).join('');
+  }
+  html += '</div>';
 
   // ── 산출 과정 — 가장 위험한 SKU 하나를 끝까지 풀어 보여준다 ──────────────────
   // 임박·보류 차감이 실제로 일어나는 SKU를 우선 고른다 — 차감이 0이면 STEP 1이 설명이 안 된다.
+  const risky = rows.filter(r => r.status !== 'ok');
   const ex = risky.reduce((a, r) =>
     ((r.near + r.blocked) * r.hl > (a.near + a.blocked) * a.hl ? r : a), risky[0]) || rows[0];
   const stepBox = (n, title, body) =>
