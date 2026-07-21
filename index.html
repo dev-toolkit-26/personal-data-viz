@@ -424,8 +424,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .kn-bg { position:absolute; inset:0; background:var(--kn-bg); background-attachment:fixed; }
 .kn-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(1100px 600px at 50% 8%, rgba(74,222,128,.06), transparent 60%); animation:knBgDrift 24s ease-in-out infinite alternate; pointer-events:none; }
 @keyframes knBgDrift { 0%{transform:translate3d(-1.5%,-1%,0)} 100%{transform:translate3d(1.5%,1.5%,0)} }
-.kn-track { position:absolute; inset:0; display:flex; width:500%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
-.kn-slide { flex:0 0 20%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
+/* 슬라이드 4장: width = 100% × 4, flex-basis = 100% / 4 (go()의 idx*25와 함께 움직임) */
+.kn-track { position:absolute; inset:0; display:flex; width:400%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
+.kn-slide { flex:0 0 25%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
 .kn-slide.is-active { opacity:1; }
 .kn-slide > .kn-content { width:86%; max-width:1240px; }
 .kn-card { background:var(--kn-card); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); border:1px solid var(--kn-border); border-radius:16px; box-shadow:0 18px 50px rgba(0,0,0,.34); position:relative; }
@@ -820,31 +821,26 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <button class="kn-side-btn" type="button" onclick="window.open('kpi.html','_blank')"><span class="kn-side-num">↗</span><span>KPI</span></button>
     </div>
     <button class="kn-side-btn is-active" type="button" data-slide="0"><span class="kn-side-num">01</span><span>Overview</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Trend</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Regional</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Diagnosis</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="4"><span class="kn-side-num">05</span><span>SKU</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Regional</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>SKU</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Summary</span></button>
   </div>
 
   <div class="kn-track" id="kn-track">
 
-    <!-- Slide 1: Hero + KPI -->
+    <!-- Slide 1: Overview + Trend — "지금 어디에 있고, 어떻게 왔나" -->
     <section class="kn-slide is-active" data-slide="0">
       <div class="kn-content">
         <h1 id="sum-hero-headline" class="kn-apex" style="margin-bottom:28px;"></h1>
         <div class="kn-section-label" style="margin-top:8px;">Key Performance Indicators</div>
         <div id="sum-kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;"></div>
         <div id="sum-kpi-comment" class="kn-card" style="border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
-        <div id="sum-overview-narrative" class="kn-card" style="margin-top:18px;border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.88);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
-      </div>
-    </section>
 
-    <!-- Slide 2: Monthly Trend -->
-    <section class="kn-slide" data-slide="1">
-      <div class="kn-content">
-        <h2 class="kn-apex">Monthly Trend</h2>
-        <div class="kn-card" style="padding:24px;">
-          <div class="kn-chart-reveal" style="position:relative;height:300px;"><canvas id="sum-chartD"></canvas></div>
+        <!-- 접힌 영역: 스크롤 진입 시 리빌 -->
+        <div class="kn-section-label" style="margin-top:30px;">Monthly Trend</div>
+        <div class="kn-card kn-sec" data-sec="trend" style="padding:24px;">
+          <!-- clip-path 와이프 대신 캔버스 래퍼를 Motion으로 페이드인 -->
+          <div id="sum-chartD-wrap" style="position:relative;height:300px;"><canvas id="sum-chartD"></canvas></div>
           <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,.12);padding-top:16px;">
             <div class="kn-section-label" style="margin-bottom:10px;color:#4ade80;letter-spacing:1.5px;">Analysis</div>
             <div id="sum-chartD-comment" style="color:rgba(255,255,255,.82);font-size:12.5px;line-height:1.85;font-weight:300;"></div>
@@ -853,13 +849,13 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       </div>
     </section>
 
-    <!-- Slide 3: Regional Breakdown -->
-    <section class="kn-slide" data-slide="2">
-      <div class="kn-content">
-        <h2 class="kn-apex">Regional Breakdown</h2>
-        <div class="kn-card" style="padding:24px 26px;">
-          <div id="sum-region-donuts" style="display:grid;grid-template-columns:repeat(5,1fr);gap:18px;padding:8px 0 4px;"></div>
-          <div style="margin-top:18px;border-top:1px solid rgba(255,255,255,.12);padding-top:16px;">
+    <!-- Slide 2: Regional × Diagnosis — 지점 축으로 도넛+진척을 한 행에 통합 -->
+    <section class="kn-slide" data-slide="1">
+      <div class="kn-content" style="max-width:1280px;width:90%;">
+        <h2 class="kn-apex">Regional × Diagnosis</h2>
+        <div class="kn-sec" data-sec="diag">
+          <div id="sum-mtd-diag"></div>
+          <div class="kn-card" style="margin-top:14px;padding:18px 22px;">
             <div class="kn-section-label" style="margin-bottom:10px;color:#4ade80;letter-spacing:1.5px;">Analysis</div>
             <div id="sum-chartA-comment" style="color:rgba(255,255,255,.82);font-size:12.5px;line-height:1.85;font-weight:300;"></div>
             <div id="sum-region-badges" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
@@ -868,19 +864,19 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       </div>
     </section>
 
-    <!-- Slide 4: MTD Progress Diagnosis -->
-    <section class="kn-slide" data-slide="3">
-      <div class="kn-content" style="max-width:1280px;width:90%;">
-        <h2 class="kn-apex">MTD Progress Diagnosis</h2>
-        <div id="sum-mtd-diag"></div>
+    <!-- Slide 3: SKU 특이사항 (브랜드별 AP/FCST/MTD/vs LM/vs LY) -->
+    <section class="kn-slide" data-slide="2">
+      <div class="kn-content">
+        <h2 class="kn-apex">SKU Issues</h2>
+        <div id="sum-sku-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
-    <!-- Slide 5: SKU 특이사항 (브랜드별 AP/FCST/MTD/vs LM/vs LY) -->
-    <section class="kn-slide" data-slide="4">
+    <!-- Slide 4: Monthly Summary (TTS 내러티브) — 클로징 -->
+    <section class="kn-slide" data-slide="3">
       <div class="kn-content">
-        <h2 class="kn-apex">SKU</h2>
-        <div id="sum-sku-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
+        <h2 class="kn-apex">Monthly Summary</h2>
+        <div id="sum-overview-narrative" class="kn-card" style="border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.88);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
@@ -895,7 +891,6 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     <button class="kn-dot"            type="button" data-slide="1" aria-label="Slide 2"></button>
     <button class="kn-dot"            type="button" data-slide="2" aria-label="Slide 3"></button>
     <button class="kn-dot"            type="button" data-slide="3" aria-label="Slide 4"></button>
-    <button class="kn-dot"            type="button" data-slide="4" aria-label="Slide 5"></button>
   </div>
 </div>
 
@@ -1457,36 +1452,10 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     var skuCardEl = document.getElementById('sum-sku-card');
     if (skuCardEl) skuCardEl.innerHTML = skuTableHtml;
 
-    // ── Region Donuts (replaces former Chart A bar chart) ──
+    // ── Region 도넛은 MTD Diagnosis 행에 통합됨(renderSumMtdDiag) ──
+    // 기존 독립 도넛 그리드는 FCST/AP HL을 진단 행의 칩과 중복 표시했으므로 제거.
     var regions = _UP_DASH_REGIONS.filter(function(k){ return hl[k]; });
     Chart.defaults.color = 'rgba(255,255,255,.82)';
-
-    var R = 48, C = 2 * Math.PI * R;
-    document.getElementById('sum-region-donuts').innerHTML = regions.map(function(k) {
-      var d = hl[k];
-      var ach = d.ap_fcst_ach || 0;
-      var pct = Math.min(ach * 100, 100);
-      var pctRound = Math.round(ach * 100);
-      var ac = _achColor(ach);
-      var targetOffset = C - (C * pct / 100);
-      return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">'
-        + '<div style="position:relative;width:118px;height:118px;">'
-        +   '<svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">'
-        +     '<circle cx="59" cy="59" r="' + R + '" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/>'
-        +     '<circle class="kn-donut-arc" cx="59" cy="59" r="' + R + '" fill="none" stroke="' + ac + '"'
-        +       ' stroke-width="14" stroke-linecap="round" stroke-dasharray="' + C + '"'
-        +       ' stroke-dashoffset="' + C + '" data-target-offset="' + targetOffset + '" data-full-offset="' + C + '"'
-        +       ' style="transition: stroke-dashoffset 1.2s cubic-bezier(.65,.05,.36,1);"/>'
-        +   '</svg>'
-        +   '<div style="position:absolute;inset:14px;background:rgba(0,0,0,.78);border-radius:50%;display:flex;align-items:center;justify-content:center;">'
-        +     '<div style="font-size:26px;font-weight:700;color:' + ac + ';line-height:1;">' + pctRound + '%</div>'
-        +   '</div>'
-        + '</div>'
-        + '<div style="font-size:13px;font-weight:700;color:#fff;text-align:center;white-space:nowrap;">' + k + '</div>'
-        + '<div style="font-size:12px;color:rgba(255,255,255,.7);text-align:center;">FCST <strong style="color:#fff;">' + _fmtHL(d.this_week_fcst) + '</strong> HL</div>'
-        + '<div style="font-size:11px;color:rgba(255,255,255,.45);text-align:center;">AP ' + _fmtHL(d.ap) + ' HL</div>'
-        + '</div>';
-    }).join('');
 
     // ── Chart A Analysis Comment ──
     var overFcst = regions.filter(function(k){ return hl[k].ap_fcst_ach >= 1.0; });
@@ -1533,6 +1502,8 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        // 차트 자체는 즉시 그리고, 등장 연출은 캔버스 래퍼를 Motion으로 페이드인해서 처리한다.
+        // (선을 점 단위로 이어 그리면 추이 차트에서는 어색하다)
         animation: false,
         plugins: {
           legend: { position: 'top', labels: { color: 'rgba(255,255,255,.6)', font: { size: 11 }, boxWidth: 12 } }
@@ -6891,8 +6862,28 @@ function renderSumMTDDiagnosis() {
     const fcstColor   = d.ap_fcst_ach >= 1.0 ? '#4ade80' : d.ap_fcst_ach >= 0.9 ? '#fbbf24' : '#f87171';
     const gapHLColor  = gapHL >= 0 ? '#4ade80' : '#f87171';
 
+    // 지역 도넛(FCST 달성률)을 행 좌측에 통합 — 옛 Regional 슬라이드의 고유 정보는 이 값 하나였다
+    const dR = 26, dC = 2 * Math.PI * dR;
+    const dOff = dC * (1 - Math.min(d.ap_fcst_ach || 0, 1));
+
     html += `
-      <div style="background:rgba(0,0,0,.5);border:1px solid ${st.border};border-left:3px solid ${st.color};border-radius:8px;padding:11px 18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);display:flex;flex-direction:column;gap:7px;">
+      <div style="background:rgba(0,0,0,.5);border:1px solid ${st.border};border-left:3px solid ${st.color};border-radius:8px;padding:11px 18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);display:grid;grid-template-columns:66px 1fr;gap:16px;align-items:center;">
+
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div style="position:relative;width:64px;height:64px;">
+            <svg width="64" height="64" viewBox="0 0 64 64" style="transform:rotate(-90deg);">
+              <circle cx="32" cy="32" r="${dR}" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="7"/>
+              <circle class="kn-donut-arc" cx="32" cy="32" r="${dR}" fill="none" stroke="${fcstColor}"
+                      stroke-width="7" stroke-linecap="round" stroke-dasharray="${dC}" stroke-dashoffset="${dC}"
+                      data-target-offset="${dOff}" data-full-offset="${dC}"
+                      style="transition:stroke-dashoffset 1.2s cubic-bezier(.65,.05,.36,1);"/>
+            </svg>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${fcstColor};">${Math.round((d.ap_fcst_ach||0)*100)}%</div>
+          </div>
+          <div style="font-size:8.5px;letter-spacing:.4px;color:rgba(255,255,255,.45);white-space:nowrap;">FCST 달성</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:7px;min-width:0;">
 
         <!-- Row 1: region · status · MTD · vs WD (fixed grid for vertical alignment) -->
         <div style="display:grid;grid-template-columns:140px 130px 1fr 200px;align-items:center;gap:16px;font-size:13.5px;white-space:nowrap;">
@@ -6939,6 +6930,7 @@ function renderSumMTDDiagnosis() {
               <div style="color:${fcstColor};font-weight:700;font-size:12px;">${fmt1(d.this_week_fcst)} <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></div>
             </div>
           </div>
+        </div>
         </div>
       </div>`;
   });
@@ -8656,9 +8648,14 @@ async function startOnTrade() {
   // .kn-reveal은 html.kn-motion일 때만 opacity:0이 되므로(=motion 로드 성공 시에만),
   // 미리 전 슬라이드에 발라둬도 라이브러리가 없으면 아무 일도 일어나지 않는다.
   var _knReduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  // 전체 블록(=감출 대상)과, 슬라이드 착지 시 바로 등장시킬 '접히지 않은' 블록을 구분한다.
+  // [data-sec]는 스크롤로 내려가야 보이는 영역이라 착지 시점에 재생하면 사용자가 못 본다
+  // → armSections()의 inView가 등장까지 함께 책임진다.
   function _knBlocks(slide) { return slide ? slide.querySelectorAll('.kn-content > *') : []; }
+  function _knLoose(slide)  { return slide ? slide.querySelectorAll('.kn-content > *:not([data-sec])') : []; }
   function _knArm(slide) {
     Array.prototype.forEach.call(_knBlocks(slide), function(el) { el.classList.add('kn-reveal'); });
+    // [data-sec] 섹션도 여기서 함께 감춰지고, 재생은 armSections()의 inView가 맡는다.
   }
   slides.forEach(_knArm);
 
@@ -8674,7 +8671,7 @@ async function startOnTrade() {
     var slide = slides[slideIdx];
     var M = window.__motion;
     if (!slide) return;
-    var blocks = _knBlocks(slide);
+    var blocks = _knLoose(slide);   // 접힌 섹션은 제외 — inView가 맡는다
     // motion 없거나 reduced-motion이면 즉시 확정 상태로 되돌리고 끝 (텍스트는 이미 최종값)
     if (!M || _knReduce) {
       Array.prototype.forEach.call(blocks, function(el) { el.classList.remove('kn-reveal'); });
@@ -8684,16 +8681,16 @@ async function startOnTrade() {
     // (12.42.2 확인). animate는 delay를 delay(index, total)로 호출하므로 직접 계산해서 넘긴다
     // — 기본 옵션의 stagger(.07)과 결과가 동일하다. 상위 버전에서 노출되면 그걸 우선 사용.
     var _stg = (typeof M.stagger === 'function')
-      ? M.stagger(.07)
-      : function(i) { return i * .07; };
+      ? M.stagger(.085)
+      : function(i) { return i * .085; };
     var _unarm = function() {
       Array.prototype.forEach.call(blocks, function(el) { el.classList.remove('kn-reveal'); });
     };
     // motion API가 예상과 다르면(버전 차이 등) 애니메이션을 포기하고 무조건 보이게 만든다.
     try {
       M.animate(blocks,
-        { opacity: [0, 1], y: [14, 0] },
-        { duration: .5, delay: _stg, ease: [.22, 1, .36, 1] }
+        { opacity: [0, 1], y: [28, 0], scale: [.965, 1] },
+        { type: 'spring', stiffness: 190, damping: 20, delay: _stg }
       ).finished.then(_unarm).catch(_unarm);
     } catch (e) {
       console.warn('[motion] reveal 실패 — 정적 표시로 대체', e);
@@ -8707,7 +8704,7 @@ async function startOnTrade() {
       var settle = function() { el.textContent = _knFmtCount(to, kind, sfx); };   // 반올림 오차 없이 정확한 최종값으로 마감
       try {
         M.animate(0, to, {
-          duration: .9, ease: [.22, 1, .36, 1],
+          duration: 1.3, ease: [.22, 1, .36, 1],
           onUpdate: function(v) { el.textContent = _knFmtCount(v, kind, sfx); }
         }).finished.then(settle).catch(settle);
       } catch (e) { settle(); }
@@ -8725,43 +8722,81 @@ async function startOnTrade() {
     else if (!vis && _knOpen) { _knOpen = false; slides.forEach(_knArm); }   // 재진입 시 다시 재생
   }).observe(overlay, { attributes: true, attributeFilter: ['style'] });
 
-  function triggerAnim(slideIdx) {
-    if (slideIdx === 1) {
-      try { if (typeof _sumChartD !== 'undefined' && _sumChartD) _sumChartD.resize(); } catch(_) {}
-      var wrap = document.querySelector('.kn-chart-reveal');
-      if (wrap) {
-        wrap.style.transition = 'none';
-        wrap.classList.remove('is-on');
-        void wrap.getBoundingClientRect();
-        wrap.style.transition = '';
-        wrap.classList.add('is-on');
-      }
-    }
-    if (slideIdx === 2) {
-      var arcs = document.querySelectorAll('.kn-donut-arc');
-      arcs.forEach(function(a){
-        a.style.transition = 'none';
-        a.style.strokeDashoffset = a.dataset.fullOffset;
-        void a.getBoundingClientRect();
-        a.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(.65,.05,.36,1)';
-        a.style.strokeDashoffset = a.dataset.targetOffset;
-      });
-    }
-    if (slideIdx === 3) {
-      var bars = document.querySelectorAll('.kn-bar-fill');
-      bars.forEach(function(b){
-        var t = b.dataset.targetW;
-        b.style.transition = 'none';
-        b.style.width = '0';
-        void b.getBoundingClientRect();
-        b.style.transition = 'width 1s cubic-bezier(.65,.05,.36,1)';
-        b.style.width = t;
-      });
-    }
+  // ── 섹션 단위 재생 ──────────────────────────────────────────
+  // 슬라이드 번호 분기에서 [data-sec] 이름 기반으로 전환. 슬라이드를 합치면서
+  // 번호가 바뀌어도(5장→4장) 여기는 손댈 필요가 없다.
+  function _playChart() {
+    try { if (typeof _sumChartD !== 'undefined' && _sumChartD) _sumChartD.resize(); } catch (_) {}
+    var wrap = document.getElementById('sum-chartD-wrap');
+    if (!wrap) return;
+    var M = M0();
+    if (!M || _knReduce) { wrap.style.opacity = ''; return; }
+    try {
+      M.animate(wrap, { opacity: [0, 1], y: [14, 0] }, { duration: .6, ease: [.22, 1, .36, 1] });
+    } catch (e) { wrap.style.opacity = ''; }
   }
+  function _playDonuts() {
+    document.querySelectorAll('.kn-donut-arc').forEach(function(a){
+      a.style.transition = 'none';
+      a.style.strokeDashoffset = a.dataset.fullOffset;
+      void a.getBoundingClientRect();
+      a.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(.65,.05,.36,1)';
+      a.style.strokeDashoffset = a.dataset.targetOffset;
+    });
+  }
+  function _playBars() {
+    document.querySelectorAll('.kn-bar-fill').forEach(function(b){
+      var t = b.dataset.targetW;
+      b.style.transition = 'none';
+      b.style.width = '0';
+      void b.getBoundingClientRect();
+      b.style.transition = 'width 1s cubic-bezier(.65,.05,.36,1)';
+      b.style.width = t;
+    });
+  }
+  var _SEC_PLAY = {
+    trend: _playChart,
+    diag:  function(){ _playDonuts(); _playBars(); },
+  };
+
+  // 접힌 영역은 슬라이드 착지가 아니라 '뷰포트 진입' 시점에 재생한다.
+  // 슬라이드가 가로로 빠지면 뷰포트를 벗어나므로, 재방문 시 자연히 다시 재생된다.
+  var _knSecStops = new WeakMap();
+  function armSections(slide) {
+    if (!slide) return;
+    slide.querySelectorAll('[data-sec]').forEach(function(sec) {
+      // 슬라이드 재진입마다 관찰자를 새로 건다. 이전 것은 반드시 해제해야 쌓이지 않는다.
+      var prev = _knSecStops.get(sec);
+      if (prev) { try { prev(); } catch (_) {} _knSecStops.delete(sec); }
+
+      var fn  = _SEC_PLAY[sec.dataset.sec] || function(){};
+      // 섹션 본체의 등장 + 내부 차트/도넛/바 재생을 한 시점에 묶는다
+      var run = function() {
+        var M = M0();
+        var done = function(){ sec.classList.remove('kn-reveal'); };
+        if (!M || _knReduce) { done(); fn(); return; }
+        try {
+          M.animate(sec, { opacity: [0, 1], y: [28, 0], scale: [.975, 1] },
+                    { type: 'spring', stiffness: 190, damping: 20 })
+           .finished.then(done).catch(done);
+        } catch (e) { done(); }
+        fn();
+      };
+
+      var M = M0();
+      if (!M || _knReduce) { run(); return; }
+      // 새로 만든 IntersectionObserver는 '이미 보이는' 요소에 대해 즉시 콜백을 발화한다.
+      // → 재방문 시 재생이 보장된다(inView의 재발화 동작에 기대지 않음).
+      try { _knSecStops.set(sec, M.inView(sec, run, { amount: .2 })); }
+      catch (e) { run(); }
+    });
+  }
+  function M0() { return window.__motion; }
+
+  function triggerAnim(slideIdx) { armSections(slides[slideIdx]); }
   function go(n) {
     idx = (n + total) % total;
-    track.style.transform = 'translateX(-' + (idx * 20) + '%)';
+    track.style.transform = 'translateX(-' + (idx * 25) + '%)';   // 4장 → 25% 단위
     slides.forEach(function(s, i){ s.classList.toggle('is-active', i === idx); });
     dots.forEach(function(d, i){ d.classList.toggle('is-active', i === idx); });
     sideBtns.forEach(function(b, i){ b.classList.toggle('is-active', i === idx); });
