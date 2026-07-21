@@ -2196,11 +2196,11 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
     <!-- FCST Summary — 브랜드 ▸ SKU (섹션 접기/펼치기 + 브랜드행 드릴다운) -->
     <div class="section-title" id="fcst-brand-title" style="cursor:pointer;user-select:none;" title="클릭하면 접기/펼치기">
-      <span id="fcst-brand-caret" style="display:inline-block;width:14px;color:#94a3b8;font-size:11px;">▸</span><span id="fcst-brand-label">FCST Summary — 브랜드 ▸ SKU (HL)</span>
+      <span id="fcst-brand-caret" style="display:inline-block;width:14px;color:#94a3b8;font-size:11px;">▾</span><span id="fcst-brand-label">FCST Summary — 브랜드 ▸ SKU (HL)</span>
     </div>
-    <div id="fcst-brand-wrap" style="display:none;">
+    <div id="fcst-brand-wrap">
       <div class="table-wrap" style="overflow:visible;"><table id="tbl-fcst-brand"></table></div>
-      <div class="fc-note" style="margin-top:10px;color:#94a3b8;font-size:11px;">ⓘ 브랜드 행을 클릭하면 아래로 SKU 상세가 펼쳐집니다. 집계 범위는 <b>Off TTL(코어 채널)</b> 기준이므로 합계가 위 표의 Off TTL 행과 일치합니다. (별도 채널 E-com·DF·Military 제외)</div>
+      <div class="fc-note" style="margin-top:10px;color:#94a3b8;font-size:11px;">ⓘ 행을 클릭하면 <b>브랜드 ▸ SKU ▸ 채널 ▸ 거래처</b> 순서로 한 단계씩 펼쳐집니다(위 표의 역방향 뷰). 집계 범위는 <b>Off TTL(코어 채널)</b> 기준이므로 합계가 위 표의 Off TTL 행과 일치합니다. (별도 채널 E-com·DF·Military 제외)</div>
     </div>
   </div>
 
@@ -5426,21 +5426,26 @@ function renderFcstBrandTable(){
   const accs = [];
   for(const cc of OFF.channels){ if(!_offInTtl(cc)) continue; for(const a of cc.accounts) accs.push({ch:cc.key, node:a}); }
 
+  // 브랜드 ▸ SKU ▸ 채널 ▸ 거래처 4단 집계 (기존 표의 정확한 역방향 뷰)
+  const _mk  = () => ({rofo:_z12(),fcst:_z12(),act:_z12(),ly:_z12(),w:[0,0,0,0,0]});
+  const _sub = (m, k, childKey) => { let v = m.get(k); if(!v){ v = _mk(); if(childKey) v[childKey] = new Map(); m.set(k, v); } return v; };
   const brands = new Map();
-  const ttl = {rofo:_z12(),fcst:_z12(),act:_z12(),ly:_z12(),w:[0,0,0,0,0]};
+  const ttl = _mk();
   for(const {ch, node} of accs){
     const accW = pat?.weekly_fcst?.[ch]?.[node.name]?.[wkMonth] || null;   // 계정 주간(W1~W5)
     let accMon = 0; for(const s of (node.skus||[])) accMon += (s.fcst_m?.[wkMonth] || 0);   // share 분모
     for(const s of (node.skus||[])){
       const brand = _offNormalizeBrandName(s) || s.brand || '—';
       const skuName = _offNormalizeSku(s);
-      let bg = brands.get(brand); if(!bg){ bg={rofo:_z12(),fcst:_z12(),act:_z12(),ly:_z12(),w:[0,0,0,0,0],skus:new Map()}; brands.set(brand,bg); }
-      let sg = bg.skus.get(skuName); if(!sg){ sg={rofo:_z12(),fcst:_z12(),act:_z12(),ly:_z12(),w:[0,0,0,0,0]}; bg.skus.set(skuName,sg); }
-      _add12(sg.rofo,s.rofo_m);_add12(sg.fcst,s.fcst_m);_add12(sg.act,s.act_m);_add12(sg.ly,s.ly_m);
-      _add12(bg.rofo,s.rofo_m);_add12(bg.fcst,s.fcst_m);_add12(bg.act,s.act_m);_add12(bg.ly,s.ly_m);
-      _add12(ttl.rofo,s.rofo_m);_add12(ttl.fcst,s.fcst_m);_add12(ttl.act,s.act_m);_add12(ttl.ly,s.ly_m);
+      const bg = _sub(brands,   brand,   'skus');
+      const sg = _sub(bg.skus,  skuName, 'chs');
+      const cg = _sub(sg.chs,   ch,      'accts');
+      const ag = _sub(cg.accts, node.name, null);
+      for(const t of [ag, cg, sg, bg, ttl]){
+        _add12(t.rofo,s.rofo_m);_add12(t.fcst,s.fcst_m);_add12(t.act,s.act_m);_add12(t.ly,s.ly_m);
+      }
       const share = accMon>0 ? (s.fcst_m?.[wkMonth] || 0)/accMon : 0;   // 계정 주간을 SKU FCST 비중으로 안분
-      if(accW) for(let w=0;w<5;w++){ const v=(accW[w]||0)*share; sg.w[w]+=v; bg.w[w]+=v; ttl.w[w]+=v; }
+      if(accW) for(let w=0;w<5;w++){ const v=(accW[w]||0)*share; for(const t of [ag,cg,sg,bg,ttl]) t.w[w]+=v; }
     }
   }
 
@@ -5468,20 +5473,43 @@ function renderFcstBrandTable(){
   // fcst+act만 보면 단종 브랜드(LY만: Desperados)나 RoFo만 있는 항목이 빠져
   // 합계가 TTL과 어긋난다. 정렬은 당해 규모(fcst+act) 기준 유지.
   const _vis = o => sumArr(o.fcst)+sumArr(o.act)+sumArr(o.ly)+sumArr(o.rofo);
-  const brandArr = Array.from(brands.entries())
-    .map(([brand,bg])=>({brand,bg,k:sumArr(bg.fcst)+sumArr(bg.act),vis:_vis(bg)}))
+  // 자식 Map을 규모순으로 정렬 + 값 없는 항목 제외
+  const _entries = m => Array.from(m.entries())
+    .map(([name,o])=>({name,o,k:sumArr(o.fcst)+sumArr(o.act),vis:_vis(o)}))
     .filter(x=>x.vis>0.001).sort((a,b)=>b.k-a.k);
-  brandArr.forEach(({brand,bg}, bi) => {
-    const bid = 'fb' + bi;   // 브랜드명에 공백·특수문자가 있어 인덱스로 안전한 id 생성
-    parts.push(`<tr class="fcst-drillable" data-drill="${bid}" style="cursor:pointer;font-weight:600;background:#fafbfd;">
-      <td style="padding-left:14px;"><b style="color:#475569">${caret}${brand}</b></td>${cells(bg,'')}</tr>`);
-    const skuArr = Array.from(bg.skus.entries())
-      .map(([name,sg])=>({name,sg,k:sumArr(sg.fcst)+sumArr(sg.act),vis:_vis(sg)}))
-      .filter(x=>x.vis>0.001).sort((a,b)=>b.k-a.k);
-    for(const {name,sg} of skuArr){
-      parts.push(`<tr class="fcst-drill-child" data-parent="${bid}" style="display:none;background:#fbfcfe;font-size:11px;">
-        <td style="padding-left:44px;"><span style="color:#64748b">· ${name}</span></td>${cells(sg,'')}</tr>`);
-    }
+
+  // 레벨별 표기: 0=브랜드 1=SKU 2=채널 3=거래처
+  const LV = [
+    { pad:14, wrap:l=>`<b style="color:#475569">${l}</b>`,                     style:'font-weight:600;background:#fafbfd;' },
+    { pad:40, wrap:l=>`<span style="color:#64748b">· ${l}</span>`,             style:'background:#fbfcfe;font-size:11px;' },
+    { pad:68, wrap:l=>`<span style="color:#7c8798">└ ${l}</span>`,             style:'background:#f7f9fc;font-size:11px;' },
+    { pad:94, wrap:l=>`<span style="color:#94a3b8">· ${l}</span>`,             style:'background:#fafcfe;font-size:10.5px;' },
+  ];
+  // path로 부모/자식을 잇는다. 접을 때는 후손 전체를 함께 숨겨야 하므로 prefix 매칭이 가능한 형태.
+  const emit = (label, o, lvl, path, parentPath, hasChild) => {
+    const L = LV[lvl];
+    const c = hasChild ? caret : '<span style="display:inline-block;width:12px;"></span> ';
+    parts.push(`<tr data-path="${path}"${parentPath?` data-parent-path="${parentPath}"`:''}${hasChild?' data-haschild="1"':''}`
+      + ` style="${L.style}${hasChild?'cursor:pointer;':''}${lvl>0?'display:none;':''}">`
+      + `<td style="padding-left:${L.pad}px;">${c}${L.wrap(label)}</td>${cells(o,'')}</tr>`);
+  };
+
+  const brandArr = _entries(brands);
+  brandArr.forEach(({name:brand, o:bg}, bi) => {
+    const bp = 'b'+bi;
+    const skuArr = _entries(bg.skus);
+    emit(brand, bg, 0, bp, null, skuArr.length>0);
+    skuArr.forEach(({name:sku, o:sg}, si) => {
+      const sp = bp+'.s'+si;
+      const chArr = _entries(sg.chs);
+      emit(sku, sg, 1, sp, bp, chArr.length>0);
+      chArr.forEach(({name:ch, o:cg}, ci) => {
+        const cp = sp+'.c'+ci;
+        const acArr = _entries(cg.accts);
+        emit(ch, cg, 2, cp, sp, acArr.length>0);
+        acArr.forEach(({name:acct, o:ag}, ai) => emit(acct, ag, 3, cp+'.a'+ai, cp, false));
+      });
+    });
   });
 
   const head = `<thead><tr>
@@ -5503,19 +5531,31 @@ function renderFcstBrandTable(){
     ? `<tbody>${parts.join('')}</tbody>`
     : `<tbody><tr><td colspan="13" style="text-align:center;padding:24px;color:#94a3b8">데이터 없음</td></tr></tbody>`);
 
-  // 브랜드 행 클릭 → SKU 토글 (innerHTML 갱신돼도 유지되도록 위임 리스너 1회만)
+  // 다단계 토글: 직계 자식만 펼치고, 접을 때는 후손 전체를 숨기며 캐럿도 초기화한다.
+  // (후손을 안 접으면 다시 펼쳤을 때 손자 이하가 펼쳐진 채로 튀어나온다)
   if(!tbl._drillWired){
     tbl._drillWired = true;
     tbl.addEventListener('click', function(e){
-      const row = e.target.closest('tr.fcst-drillable'); if(!row) return;
-      const id = row.getAttribute('data-drill'); if(!id) return;
-      const kids = tbl.querySelectorAll('tr.fcst-drill-child[data-parent="' + id + '"]');
-      let willShow = null;
-      kids.forEach(function(k){ if(willShow === null) willShow = (k.style.display === 'none'); k.style.display = willShow ? '' : 'none'; });
+      const row = e.target.closest('tr[data-haschild]'); if(!row) return;
+      const path = row.getAttribute('data-path'); if(!path) return;
+      const kids = tbl.querySelectorAll('tr[data-parent-path="' + path + '"]');
+      if(!kids.length) return;
+      const willShow = (kids[0].style.display === 'none');
+      if(willShow){
+        kids.forEach(function(k){ k.style.display = ''; });
+      } else {
+        tbl.querySelectorAll('tr[data-path]').forEach(function(r){
+          const p = r.getAttribute('data-path');
+          if(p !== path && p.indexOf(path + '.') === 0){
+            r.style.display = 'none';
+            const cc = r.querySelector('.drill-caret'); if(cc) cc.textContent = '▸';
+          }
+        });
+      }
       const c = row.querySelector('.drill-caret'); if(c) c.textContent = willShow ? '▾' : '▸';
     });
   }
-  // 섹션 접기/펼치기 (기본 접힘 — 기존 화면을 밀지 않는다)
+  // 섹션 접기/펼치기 (기본은 펼침 — 브랜드 행이 바로 보이도록 고정)
   const secTitle = document.getElementById('fcst-brand-title');
   if(secTitle && !secTitle._wired){
     secTitle._wired = true;
