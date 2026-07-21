@@ -3849,12 +3849,16 @@ function _stockCompute(stock, offDem) {
   for (const lot of stock.lots) {
     const m = STOCK_SKU_MAP[lot.code]; if (!m) continue;
     const sku = m[0];
-    const s = sup[sku] || (sup[sku] = { hl: m[1], ch: m[2], total: 0, avail: 0, near: 0, blocked: 0 });
+    const s = sup[sku] || (sup[sku] = { hl: m[1], ch: m[2], total: 0, avail: 0, near: 0, blocked: 0, lots: [] });
     s.total += lot.qty;
     const days = lot.exp ? Math.round((new Date(lot.exp + 'T00:00:00') - asOf) / 86400000) : 9999;
-    if (STOCK_NON_SELLABLE.has(lot.type) || m[3] === 'EXPORT') s.blocked += lot.qty;
-    else if (!STOCK_SHELF_EXEMPT.has(sku) && days < STOCK_SHELF_MIN[m[2] === 'ON' ? 'ON' : 'OFF']) s.near += lot.qty;
-    else s.avail += lot.qty;
+    const limit = STOCK_SHELF_MIN[m[2] === 'ON' ? 'ON' : 'OFF'];
+    let state;
+    if (STOCK_NON_SELLABLE.has(lot.type) || m[3] === 'EXPORT') { s.blocked += lot.qty; state = 'blocked'; }
+    else if (!STOCK_SHELF_EXEMPT.has(sku) && days < limit) { s.near += lot.qty; state = 'near'; }
+    else { s.avail += lot.qty; state = 'avail'; }
+    s.lots.push({ exp: lot.exp, type: lot.type, qty: lot.qty, days, state, limit,
+                  exempt: STOCK_SHELF_EXEMPT.has(sku) });
   }
   // 수요는 On/Off를 나눠 담는다 — 합계만 보면 "어느 쪽 수요가 큰지"가 사라져
   // 왜 쇼트인지 설명이 안 된다(재고는 하나인데 수요는 두 채널에서 온다).
@@ -3884,6 +3888,7 @@ function _stockCompute(stock, offDem) {
     const cover = use ? s.avail / use : null;
     rows.push({
       sku, hl: s.hl, ch: s.ch, avail: s.avail, near: s.near, blocked: s.blocked, total: s.total,
+      lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, basis: rr > fcst ? 'rr' : 'fcst',
       use, rest, cover, gap: Math.max(rest - s.avail, 0),
       days: use ? s.avail / (use / dim) : null,
@@ -3896,6 +3901,17 @@ function _stockCompute(stock, offDem) {
     || (a.status === 'nofcst') - (b.status === 'nofcst')
     || (a.days == null) - (b.days == null) || (a.days - b.days));
   return { rows, elapsed, dim };
+}
+
+// SKU 행 클릭 → 유통기한(로트)별 재고 펼치기
+function _stockToggleLot(id, ev) {
+  if (ev) ev.stopPropagation();
+  const el = document.getElementById(id);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  const c = document.getElementById(id + '-c');
+  if (c) c.textContent = open ? '▸' : '▾';
 }
 
 // ── 슬라이드 렌더 ──────────────────────────────────────────────────────────────
@@ -3944,7 +3960,41 @@ async function renderSumStock() {
   const CH_COLOR = { ON: '#60a5fa', OFF: '#c084fc' };
   const order = [STOCK_PRIMARY_CH, STOCK_PRIMARY_CH === 'ON' ? 'OFF' : 'ON'];
 
-  const rowHtml = r => {
+  // 로트 상세 — 유통일자 오름차순. 임박/차단 로트에 표시를 달아 어느 물량이
+  // 왜 가용에서 빠졌는지 행을 펼치면 바로 확인된다.
+  const lotHtml = r => {
+    const LC = { avail: C.ok, near: C.watch, blocked: 'rgba(255,255,255,.45)' };
+    const LG = '78px 52px minmax(0,1fr) 84px 92px';
+    let h = '<div style="padding:6px 10px 8px 10px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
+      + '<div style="display:grid;grid-template-columns:' + LG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
+      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>유통일자</span><span style="justify-self:end;">잔여</span>'
+      + '<span style="padding-left:8px;">제품유형</span><span style="justify-self:end;">수량</span>'
+      + '<span style="justify-self:end;">상태</span></div>';
+    h += r.lots.map(l => {
+      const c = LC[l.state];
+      const tag = l.state === 'near'
+        ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:700;background:rgba(251,191,36,.18);color:' + c + ';white-space:nowrap;">임박 · 출고불가</span>'
+        : l.state === 'blocked'
+        ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:600;background:rgba(255,255,255,.07);color:' + c + ';white-space:nowrap;">' + (l.type || '차단') + '</span>'
+        : '<span style="font-size:9.5px;color:' + c + ';">가용</span>';
+      return '<div style="display:grid;grid-template-columns:' + LG + ';gap:8px;align-items:baseline;font-size:11px;'
+        + 'line-height:1.7;padding:0 0 0 2px;' + (l.state === 'near' ? 'background:rgba(251,191,36,.05);' : '') + '">'
+        + '<span style="color:' + (l.state === 'avail' ? 'rgba(255,255,255,.75)' : c) + ';">' + (l.exp || '—') + '</span>'
+        + '<span style="justify-self:end;color:' + (l.state === 'near' ? c : 'rgba(255,255,255,.5)') + ';">' + l.days + '일</span>'
+        + '<span style="padding-left:8px;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (l.type || '') + '</span>'
+        + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fHL(l.qty * r.hl) + '</span>'
+        + '<span style="justify-self:end;">' + tag + '</span></div>';
+    }).join('');
+    const lim = r.lots[0];
+    h += '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;">'
+      + (lim && lim.exempt ? '특수 SKU — 유통기한 출고룰 면제'
+         : '잔여 ' + (lim ? lim.limit : '') + '일 미만은 출고 불가라 가용재고에서 제외')
+      + ' · 총재고 ' + Math.round(r.total * r.hl).toLocaleString('ko-KR') + ' HL 중 가용 '
+      + Math.round(r.avail * r.hl).toLocaleString('ko-KR') + ' HL</div></div>';
+    return h;
+  };
+
+  const rowHtml = (r, i) => {
     const c = C[r.status];
     const badge = r.status === 'short'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.18);color:' + c + ';white-space:nowrap;">−'
@@ -3962,16 +4012,25 @@ async function renderSumStock() {
     const none = r.status === 'nofcst';
     const dash = '<span style="color:rgba(255,255,255,.25);">—</span>';
     const dim  = r.status === 'ok' || none ? 'rgba(255,255,255,.72)' : '#fff';
-    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;'
+    const lid = '_stocklot' + i;
+    // 임박 물량이 있으면 SKU 옆에 표시 — 펼치지 않아도 "가용이 왜 적은지" 단서가 보인다
+    const nearTag = r.near
+      ? '<span style="margin-left:6px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(251,191,36,.16);color:' + C.watch + ';white-space:nowrap;">임박 '
+        + Math.round(r.near * r.hl).toLocaleString('ko-KR') + '</span>' : '';
+    return '<div onclick="_stockToggleLot(&quot;' + lid + '&quot;, event)" title="클릭 — 유통기한별 재고 펼치기"'
+      + ' style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;cursor:pointer;'
       + 'line-height:1.75;padding:2px 10px;border-top:1px solid rgba(255,255,255,.05);">'
       + '<span>' + badge + '</span>'
-      + '<span style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
+      + '<span style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+      + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
+      + r.sku + nearTag + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
       + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + (none ? dash : fHL(r.fcstOn * r.hl)) + '</span>'
       + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + (none ? dash : fHL(r.fcstOff * r.hl)) + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fHL(r.use * r.hl) + useMark) + '</span>'
       + '<span style="justify-self:end;color:' + (none ? 'rgba(255,255,255,.25)' : c) + ';font-weight:700;white-space:nowrap;">' + (none ? '—' : fD(r.days)) + '</span>'
-      + '</div>';
+      + '</div>'
+      + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>';
   };
 
   // 안쪽에 스크롤 박스를 두지 않는다. 카드는 내용만큼 늘어나고 스크롤은 .kn-slide가 맡는다.
@@ -4005,7 +4064,7 @@ async function renderSumStock() {
       + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
       + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">Days</span></div>'
       + '</div>'
-      + grp.map(rowHtml).join('')
+      + grp.map(r => rowHtml(r, rows.indexOf(r))).join('')
       + '</div>';
   }
 
