@@ -2193,6 +2193,15 @@ td:first-child, td:nth-child(2) { text-align: left; }
       · <b>별도 채널</b>(E-com·DF·Military): 취합본에 SKU가 없어 <b>P07(01. 2026 Volume)</b>의 채널 RoFo를 사용하고, SKU RoFo도 P07 SKU 단위로 반영(<b>SKU 합 = 채널 총계</b>). 단일 거래처라 어카운트 = 채널 동일값.<br>
       · RoFo는 <b>롤링 예측</b>이라 마감월은 실적이, 미래월(예: 7월)은 예측치가 반영됩니다.
     </div>
+
+    <!-- FCST Summary — 브랜드 ▸ SKU (섹션 접기/펼치기 + 브랜드행 드릴다운) -->
+    <div class="section-title" id="fcst-brand-title" style="cursor:pointer;user-select:none;" title="클릭하면 접기/펼치기">
+      <span id="fcst-brand-caret" style="display:inline-block;width:14px;color:#94a3b8;font-size:11px;">▸</span><span id="fcst-brand-label">FCST Summary — 브랜드 ▸ SKU (HL)</span>
+    </div>
+    <div id="fcst-brand-wrap" style="display:none;">
+      <div class="table-wrap" style="overflow:visible;"><table id="tbl-fcst-brand"></table></div>
+      <div class="fc-note" style="margin-top:10px;color:#94a3b8;font-size:11px;">ⓘ 브랜드 행을 클릭하면 아래로 SKU 상세가 펼쳐집니다. 집계 범위는 <b>Off TTL(코어 채널)</b> 기준이므로 합계가 위 표의 Off TTL 행과 일치합니다. (별도 채널 E-com·DF·Military 제외)</div>
+    </div>
   </div>
 
   <!-- Tab: YTD -->
@@ -5056,6 +5065,7 @@ function renderFcstAll(){
   _offUpdateFcstMonthDropdown();
   renderFcstChartC();
   renderFcstTable();
+  renderFcstBrandTable();
   // (구) renderFcstSkuVsLmLy() 카드 섹션 → 표 행 클릭 드릴다운(Brand▸SKU)으로 대체
 }
 
@@ -5265,13 +5275,19 @@ function renderFcstTable(){
         <td style="text-align:right"><span class="${_offGrCls(yoy)}">${_offFmtGr(yoy)}</span></td>
       </tr>`;
     };
-    const brandArr = Array.from(brands.entries()).map(([brand,bg])=>({brand,bg,k:sumArr(bg.fcst)+sumArr(bg.act)}))
-      .filter(x=>x.k>0.001).sort((a,b)=>b.k-a.k);
+    // 표시 여부는 4개 지표(RoFo·FCST·Actual·LY) 중 하나라도 값이 있으면 true.
+    // fcst+act만 보면 단종 브랜드(LY만: Desperados)나 RoFo만 있는 항목이 빠져
+    // 드릴다운 합계가 부모 행과 어긋난다. 정렬은 당해 규모(fcst+act) 기준 유지.
+    const _vis = o => sumArr(o.fcst)+sumArr(o.act)+sumArr(o.ly)+sumArr(o.rofo);
+    const brandArr = Array.from(brands.entries())
+      .map(([brand,bg])=>({brand,bg,k:sumArr(bg.fcst)+sumArr(bg.act),vis:_vis(bg)}))
+      .filter(x=>x.vis>0.001).sort((a,b)=>b.k-a.k);
     let out='';
     for(const {brand,bg} of brandArr){
       out += rowFor(brand, bg, true);
-      const skuArr = Array.from(bg.skus.entries()).map(([name,sg])=>({name,sg,k:sumArr(sg.fcst)+sumArr(sg.act)}))
-        .filter(x=>x.k>0.001).sort((a,b)=>b.k-a.k);
+      const skuArr = Array.from(bg.skus.entries())
+        .map(([name,sg])=>({name,sg,k:sumArr(sg.fcst)+sumArr(sg.act),vis:_vis(sg)}))
+        .filter(x=>x.vis>0.001).sort((a,b)=>b.k-a.k);
       for(const {name,sg} of skuArr) out += rowFor(name, sg, false);
     }
     return out;
@@ -5394,6 +5410,124 @@ function renderFcstTable(){
   const t = document.getElementById('fcst-table-title');
   const wkMon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][wkMonth] || '';
   if(t) t.textContent = `FCST Summary — 채널 ▸ 거래처 (${period} · 주간 누적: ${wkMon} · HL)`;
+}
+// ── FCST Summary — 브랜드 ▸ SKU ──────────────────────────────────────────
+// 상단 채널▸거래처 표의 행 드릴다운(_fcstDrillChildRows)과 동일한 집계·컬럼을 쓰되,
+// 채널/거래처 축을 걷어내고 브랜드를 1레벨로 올린 독립 표.
+// 범위는 Off TTL(코어 채널)만 — 합계가 위 표의 Off TTL 행과 일치한다.
+function renderFcstBrandTable(){
+  const tbl = document.getElementById('tbl-fcst-brand'); if(!tbl) return;
+  const { period, sumArr, moIdx, am } = _offFcstMonthCtx();
+  const wkMonth = (moIdx == null) ? (am - 1) : moIdx;
+  const pat = window.OFF_SEED?.pattern;
+  const _z12 = () => new Array(12).fill(0);
+  const _add12 = (d, s) => { for(let i=0;i<12;i++) d[i] += (s?.[i] || 0); };
+
+  const accs = [];
+  for(const cc of OFF.channels){ if(!_offInTtl(cc)) continue; for(const a of cc.accounts) accs.push({ch:cc.key, node:a}); }
+
+  const brands = new Map();
+  const ttl = {rofo:_z12(),fcst:_z12(),act:_z12(),ly:_z12(),w:[0,0,0,0,0]};
+  for(const {ch, node} of accs){
+    const accW = pat?.weekly_fcst?.[ch]?.[node.name]?.[wkMonth] || null;   // 계정 주간(W1~W5)
+    let accMon = 0; for(const s of (node.skus||[])) accMon += (s.fcst_m?.[wkMonth] || 0);   // share 분모
+    for(const s of (node.skus||[])){
+      const brand = _offNormalizeBrandName(s) || s.brand || '—';
+      const skuName = _offNormalizeSku(s);
+      let bg = brands.get(brand); if(!bg){ bg={rofo:_z12(),fcst:_z12(),act:_z12(),ly:_z12(),w:[0,0,0,0,0],skus:new Map()}; brands.set(brand,bg); }
+      let sg = bg.skus.get(skuName); if(!sg){ sg={rofo:_z12(),fcst:_z12(),act:_z12(),ly:_z12(),w:[0,0,0,0,0]}; bg.skus.set(skuName,sg); }
+      _add12(sg.rofo,s.rofo_m);_add12(sg.fcst,s.fcst_m);_add12(sg.act,s.act_m);_add12(sg.ly,s.ly_m);
+      _add12(bg.rofo,s.rofo_m);_add12(bg.fcst,s.fcst_m);_add12(bg.act,s.act_m);_add12(bg.ly,s.ly_m);
+      _add12(ttl.rofo,s.rofo_m);_add12(ttl.fcst,s.fcst_m);_add12(ttl.act,s.act_m);_add12(ttl.ly,s.ly_m);
+      const share = accMon>0 ? (s.fcst_m?.[wkMonth] || 0)/accMon : 0;   // 계정 주간을 SKU FCST 비중으로 안분
+      if(accW) for(let w=0;w<5;w++){ const v=(accW[w]||0)*share; sg.w[w]+=v; bg.w[w]+=v; ttl.w[w]+=v; }
+    }
+  }
+
+  const cells = (o, cls) => {
+    const rf=sumArr(o.rofo), fc=sumArr(o.fcst), ac=sumArr(o.act), ly=sumArr(o.ly);
+    const fcRf = rf? fc/rf : null, achRf = rf? ac/rf : null, yoy = ly? fc/ly-1 : null;
+    const anyW = o.w.some(x=>x>0.001);
+    const c = cls ? ` class="${cls}"` : '';
+    const wc = o.w.map(v=>`<td${c} style="text-align:right;font-size:11px;">${anyW?_offFmt(v):'—'}</td>`).join('');
+    return `<td${c} style="text-align:right">${_offFmt(rf)}</td>${wc}`
+      + `<td${c} style="text-align:right">${_offFmt(fc)}</td>`
+      + `<td${c} style="text-align:right"><span class="${_offAchCls(fcRf)}">${_offFmtPct(fcRf)}</span></td>`
+      + `<td${c} style="text-align:right">${_offFmt(ac)}</td>`
+      + `<td${c} style="text-align:right"><span class="${_offAchCls(achRf)}">${_offFmtPct(achRf)}</span></td>`
+      + `<td${c} style="text-align:right">${_offFmt(ly)}</td>`
+      + `<td${c} style="text-align:right"><span class="${_offGrCls(yoy)}">${_offFmtGr(yoy)}</span></td>`;
+  };
+  const caret = '<span class="drill-caret" style="display:inline-block;width:12px;color:#94a3b8;font-size:9px;">▸</span> ';
+
+  const parts = [];
+  parts.push(`<tr class="brand-start" style="background:#eef2f7;font-weight:700;">
+    <td class="td-brand" style="font-weight:800;">Off TTL (코어)</td>${cells(ttl,'td-brand')}</tr>`);
+
+  // 표시 여부는 4개 지표(RoFo·FCST·Actual·LY) 중 하나라도 값이 있으면 true.
+  // fcst+act만 보면 단종 브랜드(LY만: Desperados)나 RoFo만 있는 항목이 빠져
+  // 합계가 TTL과 어긋난다. 정렬은 당해 규모(fcst+act) 기준 유지.
+  const _vis = o => sumArr(o.fcst)+sumArr(o.act)+sumArr(o.ly)+sumArr(o.rofo);
+  const brandArr = Array.from(brands.entries())
+    .map(([brand,bg])=>({brand,bg,k:sumArr(bg.fcst)+sumArr(bg.act),vis:_vis(bg)}))
+    .filter(x=>x.vis>0.001).sort((a,b)=>b.k-a.k);
+  brandArr.forEach(({brand,bg}, bi) => {
+    const bid = 'fb' + bi;   // 브랜드명에 공백·특수문자가 있어 인덱스로 안전한 id 생성
+    parts.push(`<tr class="fcst-drillable" data-drill="${bid}" style="cursor:pointer;font-weight:600;background:#fafbfd;">
+      <td style="padding-left:14px;"><b style="color:#475569">${caret}${brand}</b></td>${cells(bg,'')}</tr>`);
+    const skuArr = Array.from(bg.skus.entries())
+      .map(([name,sg])=>({name,sg,k:sumArr(sg.fcst)+sumArr(sg.act),vis:_vis(sg)}))
+      .filter(x=>x.vis>0.001).sort((a,b)=>b.k-a.k);
+    for(const {name,sg} of skuArr){
+      parts.push(`<tr class="fcst-drill-child" data-parent="${bid}" style="display:none;background:#fbfcfe;font-size:11px;">
+        <td style="padding-left:44px;"><span style="color:#64748b">· ${name}</span></td>${cells(sg,'')}</tr>`);
+    }
+  });
+
+  const head = `<thead><tr>
+    <th style="text-align:left">브랜드 / SKU</th>
+    <th>${period} RoFo</th>
+    <th style="font-size:11px">W1</th>
+    <th style="font-size:11px">W2</th>
+    <th style="font-size:11px">W3</th>
+    <th style="font-size:11px">W4</th>
+    <th style="font-size:11px">W5</th>
+    <th>${period} FCST</th>
+    <th style="background:rgba(227,6,19,0.06);color:#9e1310">FCST/RoFo</th>
+    <th>${period} Actual</th>
+    <th style="background:rgba(32,85,39,0.10);color:#205527">🌟 Actual/RoFo</th>
+    <th>${period} '25</th>
+    <th>YoY(FCST)</th>
+  </tr></thead>`;
+  tbl.innerHTML = head + (brandArr.length
+    ? `<tbody>${parts.join('')}</tbody>`
+    : `<tbody><tr><td colspan="13" style="text-align:center;padding:24px;color:#94a3b8">데이터 없음</td></tr></tbody>`);
+
+  // 브랜드 행 클릭 → SKU 토글 (innerHTML 갱신돼도 유지되도록 위임 리스너 1회만)
+  if(!tbl._drillWired){
+    tbl._drillWired = true;
+    tbl.addEventListener('click', function(e){
+      const row = e.target.closest('tr.fcst-drillable'); if(!row) return;
+      const id = row.getAttribute('data-drill'); if(!id) return;
+      const kids = tbl.querySelectorAll('tr.fcst-drill-child[data-parent="' + id + '"]');
+      let willShow = null;
+      kids.forEach(function(k){ if(willShow === null) willShow = (k.style.display === 'none'); k.style.display = willShow ? '' : 'none'; });
+      const c = row.querySelector('.drill-caret'); if(c) c.textContent = willShow ? '▾' : '▸';
+    });
+  }
+  // 섹션 접기/펼치기 (기본 접힘 — 기존 화면을 밀지 않는다)
+  const secTitle = document.getElementById('fcst-brand-title');
+  if(secTitle && !secTitle._wired){
+    secTitle._wired = true;
+    secTitle.addEventListener('click', function(){
+      const wrap = document.getElementById('fcst-brand-wrap'); if(!wrap) return;
+      const open = wrap.style.display === 'none';
+      wrap.style.display = open ? '' : 'none';
+      const c = document.getElementById('fcst-brand-caret'); if(c) c.textContent = open ? '▾' : '▸';
+    });
+  }
+  const lab = document.getElementById('fcst-brand-label');
+  if(lab) lab.textContent = `FCST Summary — 브랜드 ▸ SKU (${period} · HL)`;
 }
 function renderFcstSkuVsLmLy(){
   const grid = document.getElementById('fcst-sku-vs-lmly'); if(!grid) return;
