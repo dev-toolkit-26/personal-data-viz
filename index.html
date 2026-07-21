@@ -8738,11 +8738,15 @@ async function startOnTrade() {
   // 오버레이가 열릴 때 첫 슬라이드 리빌 (showSummary 스코프에 의존하지 않도록 관찰로 처리).
   // 주의: showSummary()는 이 IIFE보다 먼저 실행될 수 있다(_showSummaryOnLoad 경로). 그 경우
   // 옵저버는 영영 안 터지므로, 등록 시점에 이미 열려 있으면 즉시 한 번 리빌해줘야 한다.
+  // 진입 시엔 go()와 똑같이 '느슨한 블록 리빌 + 섹션 관찰자 등록'을 둘 다 해야 한다.
+  // triggerAnim을 빠뜨리면 [data-sec] 섹션(Monthly Trend 등)은 _knArm으로 감춰진 채
+  // 관찰자가 생기지 않아 스크롤해도 영영 안 나타난다.
+  function _knEnter() { revealSlide(idx); triggerAnim(idx); }
   var _knOpen = !!(overlay.style.display && overlay.style.display !== 'none');
-  if (_knOpen) setTimeout(function() { revealSlide(idx); }, 80);
+  if (_knOpen) setTimeout(_knEnter, 80);
   new MutationObserver(function() {
     var vis = overlay.style.display && overlay.style.display !== 'none';
-    if (vis && !_knOpen) { _knOpen = true; setTimeout(function() { revealSlide(idx); }, 80); }
+    if (vis && !_knOpen) { _knOpen = true; setTimeout(_knEnter, 80); }
     else if (!vis && _knOpen) { _knOpen = false; slides.forEach(_knArm); }   // 재진입 시 다시 재생
   }).observe(overlay, { attributes: true, attributeFilter: ['style'] });
 
@@ -8811,7 +8815,10 @@ async function startOnTrade() {
       if (!M || _knReduce) { run(); return; }
       // 새로 만든 IntersectionObserver는 '이미 보이는' 요소에 대해 즉시 콜백을 발화한다.
       // → 재방문 시 재생이 보장된다(inView의 재발화 동작에 기대지 않음).
-      try { _knSecStops.set(sec, M.inView(sec, run, { amount: .2 })); }
+      // amount:0 = 1px이라도 걸치면 발화. Overview의 Trend는 착지 시 하단에 살짝(~24px)
+      // 걸쳐 있어 즉시 등장하고, 완전히 화면 밖인 섹션만 스크롤 시 등장한다.
+      // (amount:.2였을 때는 783px 섹션의 20%=157px을 채워야 해서 착지 후에도 안 보였다)
+      try { _knSecStops.set(sec, M.inView(sec, run, { amount: 0 })); }
       catch (e) { run(); }
     });
   }
