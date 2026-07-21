@@ -3937,17 +3937,12 @@ async function renderSumStock() {
     + '<span style="font-size:11px;color:rgba(255,255,255,.5);">기준일 ' + stock.as_of
     + (offDem ? '' : ' · <span style="color:#fbbf24;">Off 수요 미반영</span>') + '</span></div>';
 
-  // 규격채널 구획 — 재고는 전국 단일 풀이지만 제품 규격(병/생 vs 캔)은 갈리므로
-  // 이 대시보드 담당 규격을 위에 두고, 상대 규격도 같이 보여준다(놓치는 SKU가 없도록).
+  // 규격채널 박스 — 재고는 전국 단일 풀이지만 제품 규격(병/생 vs 캔)은 갈리므로
+  // ON/OFF를 각각 박스로 세우고 아래로 쭉 나열한다. 컬럼 헤더는 박스 안에서 sticky라
+  // 스크롤을 내려도 지금 보는 행이 어느 박스의 무슨 값인지 유지된다.
   const CH_LABEL = { ON: 'ON · 병 · 생 · 케그', OFF: 'OFF · 캔 · 유통' };
   const CH_COLOR = { ON: '#60a5fa', OFF: '#c084fc' };
   const order = [STOCK_PRIMARY_CH, STOCK_PRIMARY_CH === 'ON' ? 'OFF' : 'ON'];
-
-  const headerRow = () => '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;' + HD
-    + 'padding:6px 0 6px 4px;border-bottom:1px solid rgba(255,255,255,.22);">'
-    + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
-    + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
-    + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">Days</span></div>';
 
   const rowHtml = r => {
     const c = C[r.status];
@@ -3959,52 +3954,58 @@ async function renderSumStock() {
       : r.status === 'nofcst'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(255,255,255,.06);color:' + c + ';white-space:nowrap;" title="FCST·실적에 잡히지 않은 SKU — 판정 근거가 없어 비워둔다. FCST가 반영되면 자동으로 채워진다.">FCST 없음</span>'
       : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(74,222,128,.12);color:' + c + ';">정상</span>';
-    // 수요 근거가 없으면 숫자를 만들어 보여주지 않는다(0 HL은 "0으로 예측했다"는 뜻이 되어버린다)
-    const none = r.status === 'nofcst';
-    const dash = '<span style="color:rgba(255,255,255,.25);">—</span>';
     // 런레이트가 FCST를 넘어 채택된 경우 표시 — FCST만 믿으면 이 물량이 안 보인다
     const useMark = r.basis === 'rr'
       ? '<span style="color:#fbbf24;font-size:9px;margin-left:3px;font-weight:700;"'
         + ' title="실제 판매 속도(런레이트)가 FCST보다 빨라 런레이트를 수요로 채택">런</span>' : '';
-    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;line-height:1.75;padding:1px 0 1px 4px;">'
+    // 수요 근거가 없으면 숫자를 만들어 보여주지 않는다(0 HL은 "0으로 예측했다"는 뜻이 되어버린다)
+    const none = r.status === 'nofcst';
+    const dash = '<span style="color:rgba(255,255,255,.25);">—</span>';
+    const dim  = r.status === 'ok' || none ? 'rgba(255,255,255,.72)' : '#fff';
+    return '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;'
+      + 'line-height:1.75;padding:2px 10px;border-top:1px solid rgba(255,255,255,.05);">'
       + '<span>' + badge + '</span>'
-      + '<span style="color:' + (r.status === 'ok' ? 'rgba(255,255,255,.72)' : '#fff') + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
-      + '<span style="justify-self:end;color:' + (r.status === 'ok' ? 'rgba(255,255,255,.72)' : '#fff') + ';white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
+      + '<span style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + r.sku + '</span>'
+      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
       + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + (none ? dash : fHL(r.fcstOn * r.hl)) + '</span>'
       + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + (none ? dash : fHL(r.fcstOff * r.hl)) + '</span>'
-      + '<span style="justify-self:end;color:' + (r.status === 'ok' ? 'rgba(255,255,255,.72)' : '#fff') + ';white-space:nowrap;">' + (none ? dash : fHL(r.use * r.hl) + useMark) + '</span>'
+      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fHL(r.use * r.hl) + useMark) + '</span>'
       + '<span style="justify-self:end;color:' + (none ? 'rgba(255,255,255,.25)' : c) + ';font-weight:700;white-space:nowrap;">' + (none ? '—' : fD(r.days)) + '</span>'
       + '</div>';
   };
 
-  html += '<div style="font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:8px;padding-left:2px;">'
-    + '채택수요 = 당월 FCST와 <strong style="color:rgba(255,255,255,.75);font-weight:600;">런레이트</strong>'
-    + '(MTD ÷ 경과일 × 월일수 = 지금 판매 속도의 월 환산) 중 <strong style="color:rgba(255,255,255,.75);font-weight:600;">큰 쪽</strong>. '
-    + '<span style="color:#fbbf24;font-weight:700;">런</span> = 실제 판매가 FCST보다 빨라 런레이트가 채택된 SKU · '
-    + '<strong style="color:rgba(255,255,255,.75);font-weight:600;">Days</strong> = 가용재고 ÷ 일평균 수요 '
-    + '(당월 ' + daysInMonth + '일 기준 · 한 달치면 ' + daysInMonth + '일)'
-    + '</div>';
-
-  html += '<div style="max-height:min(42vh,326px);overflow-y:auto;padding-right:4px;">';
+  html += '<div style="max-height:min(48vh,376px);overflow-y:auto;padding-right:2px;">';
   for (const ch of order) {
     const grp = rows.filter(r => r.ch === ch);
     if (!grp.length) continue;
     const nsG = grp.filter(r => r.status === 'short').length;
     const nwG = grp.filter(r => r.status === 'watch').length;
+    const nnG = grp.filter(r => r.status === 'nofcst').length;
     const isPrimary = ch === STOCK_PRIMARY_CH;
-    html += '<div style="display:flex;align-items:center;gap:9px;margin:' + (ch === order[0] ? '2px' : '14px') + ' 0 4px;">'
+    const col = CH_COLOR[ch];
+    html += '<div style="border:1px solid ' + col + (isPrimary ? '44' : '26') + ';border-radius:6px;'
+      + 'background:rgba(0,0,0,.22);margin-bottom:' + (ch === order[0] ? '12px' : '0') + ';">'
+      // 박스 헤더(규격 라벨 + 컬럼명)를 하나로 묶어 sticky — 아래로 내려도 무슨 박스의 무슨 값인지 유지
+      + '<div style="position:sticky;top:0;z-index:2;background:rgba(10,12,16,.97);border-radius:5px 5px 0 0;'
+      + '-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid ' + col + '44;">'
+      + '<div style="display:flex;align-items:center;gap:9px;padding:7px 10px 5px;">'
       + '<span style="padding:2px 9px;border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.5px;'
-      + 'background:' + CH_COLOR[ch] + (isPrimary ? '2e' : '18') + ';color:' + CH_COLOR[ch] + ';'
-      + 'border:1px solid ' + CH_COLOR[ch] + (isPrimary ? '66' : '33') + ';">' + CH_LABEL[ch] + '</span>'
+      + 'background:' + col + (isPrimary ? '2e' : '18') + ';color:' + col + ';border:1px solid ' + col + (isPrimary ? '66' : '33') + ';">'
+      + CH_LABEL[ch] + '</span>'
       + '<span style="font-size:10.5px;color:rgba(255,255,255,.45);">' + grp.length + '개 SKU'
       + (nsG ? ' · <span style="color:' + C.short + ';">쇼트 ' + nsG + '</span>' : '')
       + (nwG ? ' · <span style="color:' + C.watch + ';">주의 ' + nwG + '</span>' : '')
       + (!nsG && !nwG ? ' · <span style="color:' + C.ok + ';">이상 없음</span>' : '')
-      + (grp.filter(r => r.status === 'nofcst').length ? ' · <span style="color:rgba(255,255,255,.4);">FCST 없음 '
-          + grp.filter(r => r.status === 'nofcst').length + '</span>' : '') + '</span>'
-      + (isPrimary ? '' : '<span style="font-size:10px;color:rgba(255,255,255,.32);">참고</span>')
+      + (nnG ? ' · <span style="color:rgba(255,255,255,.4);">FCST 없음 ' + nnG + '</span>' : '') + '</span>'
+      + (isPrimary ? '' : '<span style="font-size:10px;color:rgba(255,255,255,.32);margin-left:auto;">참고</span>')
       + '</div>'
-      + headerRow() + grp.map(rowHtml).join('');
+      + '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;' + HD + 'padding:0 10px 6px;">'
+      + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
+      + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
+      + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">Days</span></div>'
+      + '</div>'
+      + grp.map(rowHtml).join('')
+      + '</div>';
   }
   html += '</div>';
 
