@@ -2147,6 +2147,17 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         <span id="stock-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
       </div>
 
+      <!-- 보세 반입일정 -->
+      <div style="margin-bottom:28px;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">입고 예정 (보세 반입일정)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Filename: 하이네켄보세 반입일정 _YYYYMMDD.xlsx &nbsp;·&nbsp; 여주입고일 미기입 건은 ETA+6일로 계산</div>
+        <label class="upload-file-btn" id="inb-btn-label" style="display:inline-flex;" title="하이네켄보세 반입일정 _YYYYMMDD.xlsx">
+          Select File
+          <input type="file" id="inb-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'inb-btn-label','INB')">
+        </label>
+        <span id="inb-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+      </div>
+
       <!-- Apply / Reset -->
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <button class="upload-apply-btn" id="upload-apply-btn" onclick="handleUpload()">Apply to Dashboard</button>
@@ -3353,6 +3364,7 @@ function _upOnFileSelect(input, labelId, prefix) {
                 : labelId === 'ap-btn-label'    ? 'ap-filename'
                 : labelId === 'rofo-btn-label'  ? 'rofo-filename'
                 : labelId === 'stock-btn-label' ? 'stock-filename'
+                : labelId === 'inb-btn-label'   ? 'inb-filename'
                 : 'dsr-filename';
   const fnSpan = document.getElementById(fnSpanId);
   if (input.files && input.files[0]) {
@@ -3641,13 +3653,15 @@ async function handleUpload() {
   const dsrInput  = document.getElementById('dsr-file-input');
   const revInput  = document.getElementById('rev-file-input');
   const stockInput= document.getElementById('stock-file-input');
+  const inbInput  = document.getElementById('inb-file-input');
   const statusEl  = document.getElementById('upload-status');
   const applyBtn  = document.getElementById('upload-apply-btn');
   const fcstFile  = fcstInput.files[0];
   const dsrFile   = dsrInput.files[0];
   const revFile   = revInput ? revInput.files[0] : null;
   const stockFile = stockInput ? stockInput.files[0] : null;
-  if (!fcstFile && !dsrFile && !revFile && !stockFile) {
+  const inbFile   = inbInput ? inbInput.files[0] : null;
+  if (!fcstFile && !dsrFile && !revFile && !stockFile && !inbFile) {
     statusEl.textContent = 'Please select a file first.'; statusEl.style.color = 'var(--negative)'; return;
   }
   applyBtn.disabled = true;
@@ -3664,6 +3678,12 @@ async function handleUpload() {
       DASHBOARD_DATA.stock = st;
       _stockOffCache = null;                       // FCST가 같이 올라왔을 수 있으므로 Off 수요 캐시 무효화
       if (st.unmapped.length) console.warn('재고: 매핑 없는 제품코드', st.unmapped);
+    }
+    if (inbFile) {
+      statusEl.textContent = 'Processing 입고예정...';
+      const ib = await parseInboundExcel(inbFile);
+      DASHBOARD_DATA.inbound = ib;
+      if (ib.unmapped.length) console.warn('입고예정: 매핑 없는 제품코드', ib.unmapped);
     }
     applyDataUpdate(fcstResult, dsrResult);
     _upReRenderAll();
@@ -3817,7 +3837,12 @@ function _stockNormDate(v) {
   }
   const s = String(v).trim().replace(/[./]/g, '-');
   const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  return m ? m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0') : '';
+  if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+  // M-D-YY / M-D-YYYY (엑셀 표시형식이 문자열로 넘어오는 경우)
+  const u = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/);
+  if (!u) return '';
+  const y = u[3].length === 2 ? (Number(u[3]) >= 70 ? '19' : '20') + u[3] : u[3];
+  return y + '-' + u[1].padStart(2, '0') + '-' + u[2].padStart(2, '0');
 }
 
 // ── Off 수요 (재고 판정은 On+Off 합산이라 Off 스냅샷이 필요) ──────────────────
@@ -3855,10 +3880,20 @@ async function _stockOffDemand() {
 // 가용재고 = 잔여 유통기한 >= 규격기준 & 판매가능 유형 & 국내향
 // 수요     = max(당월 FCST, MTD 런레이트)  — FCST가 낮게 잡히면 쇼트가 가려지므로 큰 쪽
 // 상태     = 쇼트(당월 잔여수요 > 가용) / 주의(커버 < 1) / 정상
-function _stockCompute(stock, offDem) {
+function _stockCompute(stock, offDem, inbound) {
   const asOf = new Date(stock.as_of + 'T00:00:00');
   const dim  = new Date(asOf.getFullYear(), asOf.getMonth() + 1, 0).getDate();
   const elapsed = Math.max(asOf.getDate(), 1);
+  // 입고 예정 — 당월 잔여기간 / 익월로 나눠 담고, 로트는 드릴다운용으로 보관
+  const eom  = new Date(asOf.getFullYear(), asOf.getMonth() + 1, 1).toISOString().slice(0, 10);
+  const eon  = new Date(asOf.getFullYear(), asOf.getMonth() + 2, 1).toISOString().slice(0, 10);
+  const inb  = {};
+  for (const r of ((inbound && inbound.rows) || [])) {
+    if (r.arr <= stock.as_of) continue;                  // 이미 재고에 반영된 분
+    const o = inb[r.sku] || (inb[r.sku] = { cur: 0, next: 0, lots: [] });
+    if (r.arr < eom) o.cur += r.qty; else if (r.arr < eon) o.next += r.qty;
+    o.lots.push(r);
+  }
   const sup = {};
   for (const lot of stock.lots) {
     const m = STOCK_SKU_MAP[lot.code]; if (!m) continue;
@@ -3912,8 +3947,10 @@ function _stockCompute(stock, offDem) {
     add('off', sku, offDem[sku].fcst, offDem[sku].mtd, offDem[sku].next, offDem[sku].fcstHi, offDem[sku].fcstLo);
 
   const rows = [];
-  for (const sku in sup) {
+  for (const sku in Object.assign({}, sup, inb)) {      // 재고 0이어도 입고 예정이 있으면 보여준다
     if (STOCK_DELISTED.has(sku)) continue;
+    if (!sup[sku]) sup[sku] = { hl: (inb[sku].lots[0] || {}).hl || 0.0792,
+      ch: (inb[sku].lots[0] || {}).ch || 'OFF', total: 0, hi: 0, lo: 0, near: 0, blocked: 0, lots: [] };
     const s = sup[sku], d = dem[sku] || { on: 0, off: 0, mtd: 0, next: 0, hi: 0, lo: 0 };
     const fcst = d.on + d.off;
     const rr   = d.mtd / elapsed * dim;          // MTD 런레이트를 월 환산
@@ -3921,6 +3958,8 @@ function _stockCompute(stock, offDem) {
     const rest = Math.max(use - d.mtd, 0);       // 당월 남은 수요
     // 잔여 180~209일 재고(lo)는 6개월 채널에만 나간다. 그 채널 수요를 넘는 몫은
     // 재고가 있어도 갈 곳이 없으므로 가용에서 뺀다(=제한 잉여).
+    const inCur = (inb[sku] && inb[sku].cur) || 0;         // 당월 잔여기간 입고
+    const inNext = (inb[sku] && inb[sku].next) || 0;      // 익월 입고
     const loShare = fcst ? use * (d.lo / fcst) : use;      // 채택수요 중 6개월 채널 몫
     const loUse   = Math.min(s.lo, loShare);
     const avail   = s.hi + loUse;
@@ -3934,10 +3973,15 @@ function _stockCompute(stock, offDem) {
       hi: s.hi, lo: s.lo, loIdle, loShare,
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, basis: rr > fcst ? 'rr' : 'fcst',
-      use, rest, cover, gap: Math.max(rest - avail, 0),
+      use, rest, cover, gap: Math.max(rest - avail - inCur, 0),
+      inCur, inNext, inLots: (inb[sku] && inb[sku].lots) || [],
       days: use ? avail / (use / dim) : null,
       // use=0 은 FCST에도 실적에도 안 잡힌 SKU(행사 반입 등). 정상이 아니라 '판정 불가'다.
-      status: !use ? 'nofcst' : rest > avail ? 'short' : (cover < 1) ? 'watch' : 'ok'
+      // 재고로는 모자라도 당월 입고로 덮이면 '입고대기' — 지금 조치할 쇼트와 구분한다.
+      status: !use ? 'nofcst'
+        : rest > avail + inCur ? 'short'
+        : rest > avail ? 'incoming'
+        : (cover < 1) ? 'watch' : 'ok'
     });
   }
   rows.sort((a, b) =>
@@ -3945,6 +3989,69 @@ function _stockCompute(stock, offDem) {
     || (a.status === 'nofcst') - (b.status === 'nofcst')
     || (a.days == null) - (b.days == null) || (a.days - b.days));
   return { rows, elapsed, dim };
+}
+
+// ── 보세 반입일정(입고 예정) ──────────────────────────────────────────────────
+// 재고 스냅샷만으로는 "곧 들어온다"를 알 수 없어 쇼트가 과다하게 잡힌다.
+// 반입일정의 제품코드는 데일리스탁과 같은 체계라 그대로 붙는다.
+const STOCK_IN_EXCL_CODE = new Set([109872, 122718, 109585]);   // 면세 전용 — 데일리스탁·국내수요와 무관
+// 데일리스탁엔 재고가 없어 sku_map에 없지만 입고 예정에는 잡히는 코드
+const STOCK_IN_EXTRA = {
+  126137: ['DE ORI 330 Bottle', 0.0792, 'ON'],
+  511385: ['PA WHE 330 Bottle', 0.0792, 'ON'],    // 파울라너 위트 330병 — 대시보드에 없는 신규
+  512854: ['PA OKT 500 Can',    0.12,   'OFF'],   // 옥토버페스트 — 신규
+};
+const STOCK_IN_ETA_LEAD = 6;   // 여주입고일이 비면 ETA + 6일 (과거 1,542건 리드타임 중앙값)
+
+// 반입일정 워크북 → {file, cutoff, rows:[{code, sku, hl, ch, arr, qty, exp, eta}]}
+// 워크북에 연도별 시트가 여러 장 있고 과거 이력이 더 크다. 시트를 고르지 않고 전부 읽은 뒤
+// 기준일 이후 도착분만 남긴다 — 과거 시트는 자연히 걸러진다.
+async function parseInboundExcel(file, cutoff) {
+  const buf = await _upReadBuffer(file);
+  const wb  = XLSX.read(buf, { type: 'array' });
+  const cut = cutoff || (DASHBOARD_DATA.stock && DASHBOARD_DATA.stock.as_of)
+              || new Date().toISOString().slice(0, 10);
+  const rows = [], unmapped = new Set(), sheets = [];
+  let excluded = 0, seen = 0;
+  for (const sn of wb.SheetNames) {
+    const ws = wb.Sheets[sn]; if (!ws) continue;
+    // raw:true — 날짜를 엑셀 시리얼로 받는다. 표시형식이 시트마다 달라(1/1/26, 2019/12/09)
+    // 문자열로 받으면 파싱이 깨진다.
+    const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+    let head = -1, c = null;
+    for (let h = 0; h < Math.min(grid.length, 12); h++) {
+      const row = (grid[h] || []).map(x => String(x == null ? '' : x).replace(/\s+/g, ''));
+      const idx = { eta: row.indexOf('ETA'), inn: row.indexOf('여주입고일'),
+                    code: row.indexOf('제품코드'), qty: row.indexOf('박스수량'), exp: row.indexOf('소비기한') };
+      if (idx.code >= 0 && idx.qty >= 0) { head = h; c = idx; break; }
+    }
+    if (head < 0) continue;
+    let kept = 0;
+    for (let i = head + 1; i < grid.length; i++) {
+      const g = grid[i] || [];
+      const code = parseInt(g[c.code], 10), qty = Number(String(g[c.qty] || '').replace(/,/g, ''));
+      if (!isFinite(code) || !isFinite(qty) || !qty) continue;
+      const inn = _stockNormDate(c.inn >= 0 ? g[c.inn] : null);
+      let arr = inn;
+      if (!arr) {                                      // 여주입고일 미기입 → ETA + 리드타임
+        const eta = _stockNormDate(c.eta >= 0 ? g[c.eta] : null);
+        if (!eta) continue;
+        const t = new Date(eta + 'T00:00:00'); t.setDate(t.getDate() + STOCK_IN_ETA_LEAD);
+        arr = t.toISOString().slice(0, 10);
+      }
+      if (arr <= cut) continue;                        // 이미 재고에 반영된 분
+      seen++;
+      if (STOCK_IN_EXCL_CODE.has(code)) { excluded++; continue; }   // 면세 전용
+      const m = STOCK_SKU_MAP[code] || STOCK_IN_EXTRA[code];
+      if (!m) { unmapped.add(code + ' ' + String(g[c.code + 1] || '').slice(0, 40)); continue; }
+      rows.push({ code, sku: m[0], hl: m[1], ch: m[2], arr, qty,
+                  exp: _stockNormDate(c.exp >= 0 ? g[c.exp] : null), eta: !inn });
+      kept++;
+    }
+    if (kept) sheets.push(sn + '(' + kept + ')');
+  }
+  if (!rows.length) throw new Error('기준일(' + cut + ') 이후 반입 건이 없습니다. 시트 형식을 확인하세요.');
+  return { file: file.name, cutoff: cut, sheets, rows, excluded, seen, unmapped: [...unmapped] };
 }
 
 // 표시 단위 — 'hl'(기본) | 'qty'. 재고 원본은 QTY라 QTY가 실물 감각에 맞고,
@@ -3980,12 +4087,13 @@ async function renderSumStock() {
   let offDem = null;
   try { offDem = await _stockOffDemand(); }
   catch (e) { console.warn('Off 수요 로드 실패 — On 수요만으로 판정합니다:', e); }
-  const { rows, elapsed: elapsedDays, dim: daysInMonth } = _stockCompute(stock, offDem);
+  const { rows, elapsed: elapsedDays, dim: daysInMonth } = _stockCompute(stock, offDem, DASHBOARD_DATA.inbound);
   const nS = rows.filter(r => r.status === 'short').length;
   const nW = rows.filter(r => r.status === 'watch').length;
   const nO = rows.filter(r => r.status === 'ok').length;
   const nN = rows.filter(r => r.status === 'nofcst').length;
-  const C = { short: '#f87171', watch: '#fbbf24', ok: '#4ade80', nofcst: 'rgba(255,255,255,.35)' };
+  const nI = rows.filter(r => r.status === 'incoming').length;
+  const C = { short: '#f87171', watch: '#fbbf24', ok: '#4ade80', incoming: '#38bdf8', nofcst: 'rgba(255,255,255,.35)' };
   const fD = v => (v == null || !isFinite(v)) ? '—'
     : Math.round(v).toLocaleString('ko-KR') + '<span style="color:rgba(255,255,255,.4);font-size:9.5px;">일</span>';
   // 아래 값들은 전부 QTY로 계산돼 있다. 화면 단위만 여기서 갈아끼운다.
@@ -4002,12 +4110,13 @@ async function renderSumStock() {
   // SKU를 고정폭으로 묶어 가용재고를 왼쪽으로 당기고, 남는 폭은 드릴다운이 붙는
   // On/Off FCST 두 칸에 넘긴다.
   const GC = (window.innerWidth <= 1440)
-    ? '84px 158px 76px minmax(0,1fr) minmax(0,1fr) 84px 48px'
-    : '96px 178px 90px minmax(0,1fr) minmax(0,1fr) 98px 56px';
+    ? '86px 138px 70px 70px minmax(0,1fr) minmax(0,1fr) 78px 44px'
+    : '96px 158px 82px 82px minmax(0,1fr) minmax(0,1fr) 92px 50px';
   const HD = 'font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;';
 
   let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chip(C.short, '쇼트', nS) + chip(C.watch, '주의', nW) + chip(C.ok, '정상', nO)
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chip(C.short, '쇼트', nS) + (nI ? chip(C.incoming, '입고대기', nI) : '')
+    + chip(C.watch, '주의', nW) + chip(C.ok, '정상', nO)
     + (nN ? chip(C.nofcst, 'FCST 없음', nN) : '') + '</div>'
     + '<span style="font-size:11px;color:rgba(255,255,255,.5);display:inline-flex;align-items:center;gap:10px;">'
     + '<span style="display:inline-flex;border:1px solid rgba(255,255,255,.18);border-radius:5px;overflow:hidden;">'
@@ -4101,6 +4210,34 @@ async function renderSumStock() {
     return h + '</div>';
   };
 
+  // 입고 예정 로트 — 도착일 순. 소비기한이 비어 있으면 룰을 걸 수 없어 그대로 표시만 한다.
+  const inboundHtml = r => {
+    if (!r.inLots.length) return '';
+    const lots = r.inLots.slice().sort((a, b) => a.arr.localeCompare(b.arr));
+    const IG = '82px 34px minmax(0,1fr) 86px 76px';
+    let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
+      + '<div style="font-size:9.5px;color:#38bdf8;letter-spacing:.5px;padding:0 0 4px 2px;">입고 예정 · 당월 잔여 '
+      + nU(r.inCur, r.hl) + ' ' + UL + ' / 익월 ' + nU(r.inNext, r.hl) + ' ' + UL + '</div>'
+      + '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
+      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>도착일</span><span></span><span>소비기한</span>'
+      + '<span style="justify-self:end;">수량</span><span style="justify-self:end;">잔여</span></div>';
+    h += lots.map(l => {
+      const rem = l.exp ? Math.round((new Date(l.exp + 'T00:00:00') - new Date(l.arr + 'T00:00:00')) / 86400000) : null;
+      return '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;align-items:baseline;font-size:11px;'
+        + 'line-height:1.7;padding:0 0 0 2px;">'
+        + '<span style="color:rgba(255,255,255,.78);">' + l.arr + '</span>'
+        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (l.eta ? 'ETA' : '확정') + '</span>'
+        + '<span style="color:rgba(255,255,255,.5);">' + (l.exp || '<span style="color:#fbbf24;">미상</span>') + '</span>'
+        + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
+        + '<span style="justify-self:end;color:' + (rem == null ? 'rgba(255,255,255,.3)'
+          : rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI) ? C.watch : 'rgba(255,255,255,.5)')
+        + ';">' + (rem == null ? '—' : rem + '일') + '</span></div>';
+    }).join('');
+    return h + '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
+      + '여주입고일이 비면 ETA + ' + STOCK_IN_ETA_LEAD + '일로 잡는다(과거 리드타임 중앙값). '
+      + '소비기한 미상은 전량 가용으로 보되 표시만 한다 — 입고 시점 잔여가 210일 미만이면 노란색.</div></div>';
+  };
+
   const rowHtml = (r, i) => {
     const c = C[r.status];
     const badge = r.status === 'short'
@@ -4108,6 +4245,8 @@ async function renderSumStock() {
         + nU(r.gap, r.hl) + ' ' + UL + '</span>'
       : r.status === 'watch'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>'
+      : r.status === 'incoming'
+      ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(56,189,248,.16);color:' + c + ';white-space:nowrap;" title="재고로는 모자라지만 당월 입고 예정으로 덮인다">입고대기</span>'
       : r.status === 'nofcst'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(255,255,255,.06);color:' + c + ';white-space:nowrap;" title="FCST·실적에 잡히지 않은 SKU — 판정 근거가 없어 비워둔다. FCST가 반영되면 자동으로 채워진다.">FCST 없음</span>'
       : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(74,222,128,.12);color:' + c + ';">정상</span>';
@@ -4121,8 +4260,8 @@ async function renderSumStock() {
     const dim  = r.status === 'ok' || none ? 'rgba(255,255,255,.72)' : '#fff';
     const lid = '_stocklot' + i;
     // FCST 셀 — 하위 내역이 있으면 눌러서 펼친다(점선 밑줄로 클릭 가능 표시)
-    const drill = (q, hl, n, id) => '<span style="justify-self:end;white-space:nowrap;'
-      + (n ? 'cursor:pointer;border-bottom:1px dotted rgba(255,255,255,.3);color:rgba(255,255,255,.72);"'
+    const drill = (q, hl, n, id, col) => '<span style="justify-self:end;white-space:nowrap;'
+      + (n ? 'cursor:pointer;border-bottom:1px dotted rgba(255,255,255,.3);color:' + (col || 'rgba(255,255,255,.72)') + ';"'
            + ' onclick="_stockToggleLot(&quot;' + id + '&quot;, event)" title="클릭 — 내역 펼치기'
            : 'color:rgba(255,255,255,.55);"') + '">'
       + (q == null ? dash : fU(q, hl))
@@ -4144,6 +4283,7 @@ async function renderSumStock() {
       + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
       + r.sku + nearTag + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fU(r.avail, r.hl) + '</span>'
+      + drill(r.inCur, r.hl, r.inLots.length, lid + 'in', '#38bdf8')
       + drill(none ? null : r.fcstOn, r.hl, Object.keys(r.byRegion).length, lid + 'on')
       + drill(none ? null : r.fcstOff, r.hl, Object.keys(r.byCh).length, lid + 'off')
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fU(r.use, r.hl) + useMark) + '</span>'
@@ -4151,7 +4291,8 @@ async function renderSumStock() {
       + '</div>'
       + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>'
       + '<div id="' + lid + 'on" style="display:none;">' + breakdown(r, 'on') + '</div>'
-      + '<div id="' + lid + 'off" style="display:none;">' + breakdown(r, 'off') + '</div>';
+      + '<div id="' + lid + 'off" style="display:none;">' + breakdown(r, 'off') + '</div>'
+      + '<div id="' + lid + 'in" style="display:none;">' + inboundHtml(r) + '</div>';
   };
 
   // 안쪽에 스크롤 박스를 두지 않는다. 카드는 내용만큼 늘어나고 스크롤은 .kn-slide가 맡는다.
@@ -4182,6 +4323,7 @@ async function renderSumStock() {
       + '</div>'
       + '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;' + HD + 'padding:0 10px 6px;">'
       + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
+      + '<span style="justify-self:end;">입고예정</span>'
       + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
       + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">Days</span></div>'
       + '</div>'
@@ -4230,7 +4372,9 @@ async function renderSumStock() {
     + '<span style="color:rgba(255,255,255,.55);">FCST 없음</span> = FCST·실적 어디에도 안 잡힌 SKU(행사 반입 등). '
     + '근거가 없어 비워두며 FCST가 반영되면 자동으로 채워진다 · '
     + 'DF(면세)는 재고를 별도 운영해 데일리스탁에 안 잡히므로 수요에서 제외 · '
-    + '입고(수입 도착) 예정은 미반영 — 커버는 추가 입고가 없다고 가정한 소진 기간</div>';
+    + 'Days는 현재 가용재고만으로 버티는 기간(입고 미반영). 입고를 감안한 판정은 상태 배지가 한다 — '
+    + '<span style="color:#38bdf8;">입고대기</span>는 재고로는 모자라나 당월 입고로 덮이는 SKU, '
+    + '<span style="color:#f87171;">쇼트</span>는 입고까지 더해도 모자란 SKU</div>';
   el.innerHTML = html;
 }
 
