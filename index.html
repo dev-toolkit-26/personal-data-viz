@@ -3749,7 +3749,7 @@ const STOCK_SKU_MAP = {
   511994:['TI ORI 500 Can',0.12,'OFF'],
   511588:['TI PML 500 Can',0.12,'OFF'],
   152917:['TI RAD 330 Can',0.0792,'OFF'],
-  512871:['TI RAD 330 Can',0.0792,'OFF','EXPORT'],
+  512871:['TI RAD 330 Can',0.0792,'OFF'],   // 베트남 생산 전환분(EXKR=한국향) — 수출 아님
   152576:['TI RAD 500 Can',0.12,'OFF'],
   511100:['TI RAD 500 Can',0.12,'OFF'],
   152916:['TI RGR 500 Can',0.12,'OFF'],
@@ -3889,8 +3889,8 @@ function _stockCompute(stock, offDem, inbound) {
   const eon  = new Date(asOf.getFullYear(), asOf.getMonth() + 2, 1).toISOString().slice(0, 10);
   const inb  = {};
   for (const r of ((inbound && inbound.rows) || [])) {
-    if (r.arr <= stock.as_of) continue;                  // 이미 재고에 반영된 분
-    const o = inb[r.sku] || (inb[r.sku] = { cur: 0, next: 0, lots: [] });
+    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, cur: 0, next: 0, lots: [], pendLots: [] });
+    if (r.pending) { o.pend += r.qty; o.pendLots.push(r); continue; }   // 입고 완료·통관 대기
     if (r.arr < eom) o.cur += r.qty; else if (r.arr < eon) o.next += r.qty;
     o.lots.push(r);
   }
@@ -3949,8 +3949,9 @@ function _stockCompute(stock, offDem, inbound) {
   const rows = [];
   for (const sku in Object.assign({}, sup, inb)) {      // 재고 0이어도 입고 예정이 있으면 보여준다
     if (STOCK_DELISTED.has(sku)) continue;
-    if (!sup[sku]) sup[sku] = { hl: (inb[sku].lots[0] || {}).hl || 0.0792,
-      ch: (inb[sku].lots[0] || {}).ch || 'OFF', total: 0, hi: 0, lo: 0, near: 0, blocked: 0, lots: [] };
+    if (!sup[sku]) { const any = inb[sku].lots[0] || inb[sku].pendLots[0] || {};
+      sup[sku] = { hl: any.hl || 0.0792, ch: any.ch || 'OFF',
+                   total: 0, hi: 0, lo: 0, near: 0, blocked: 0, lots: [] }; }
     const s = sup[sku], d = dem[sku] || { on: 0, off: 0, mtd: 0, next: 0, hi: 0, lo: 0 };
     const fcst = d.on + d.off;
     const rr   = d.mtd / elapsed * dim;          // MTD 런레이트를 월 환산
@@ -3958,8 +3959,9 @@ function _stockCompute(stock, offDem, inbound) {
     const rest = Math.max(use - d.mtd, 0);       // 당월 남은 수요
     // 잔여 180~209일 재고(lo)는 6개월 채널에만 나간다. 그 채널 수요를 넘는 몫은
     // 재고가 있어도 갈 곳이 없으므로 가용에서 뺀다(=제한 잉여).
-    const inCur = (inb[sku] && inb[sku].cur) || 0;         // 당월 잔여기간 입고
-    const inNext = (inb[sku] && inb[sku].next) || 0;      // 익월 입고
+    const pend  = (inb[sku] && inb[sku].pend) || 0;        // 창고 입고 완료·통관 대기
+    const inCur = (inb[sku] && inb[sku].cur) || 0;        // 당월 잔여기간 통관 예정
+    const inNext = (inb[sku] && inb[sku].next) || 0;      // 익월 통관 예정
     const loShare = fcst ? use * (d.lo / fcst) : use;      // 채택수요 중 6개월 채널 몫
     const loUse   = Math.min(s.lo, loShare);
     const avail   = s.hi + loUse;
@@ -3973,13 +3975,14 @@ function _stockCompute(stock, offDem, inbound) {
       hi: s.hi, lo: s.lo, loIdle, loShare,
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, basis: rr > fcst ? 'rr' : 'fcst',
-      use, rest, cover, gap: Math.max(rest - avail - inCur, 0),
-      inCur, inNext, inLots: (inb[sku] && inb[sku].lots) || [],
+      use, rest, cover, gap: Math.max(rest - avail - pend - inCur, 0),
+      pend, inCur, inNext,
+      inLots: (inb[sku] && inb[sku].lots) || [], pendLots: (inb[sku] && inb[sku].pendLots) || [],
       days: use ? avail / (use / dim) : null,
       // use=0 은 FCST에도 실적에도 안 잡힌 SKU(행사 반입 등). 정상이 아니라 '판정 불가'다.
       // 재고로는 모자라도 당월 입고로 덮이면 '입고대기' — 지금 조치할 쇼트와 구분한다.
       status: !use ? 'nofcst'
-        : rest > avail + inCur ? 'short'
+        : rest > avail + pend + inCur ? 'short'
         : rest > avail ? 'incoming'
         : (cover < 1) ? 'watch' : 'ok'
     });
@@ -3999,9 +4002,14 @@ const STOCK_IN_EXCL_CODE = new Set([109872, 122718, 109585]);   // 면세 전용
 const STOCK_IN_EXTRA = {
   126137: ['DE ORI 330 Bottle', 0.0792, 'ON'],
   511385: ['PA WHE 330 Bottle', 0.0792, 'ON'],    // 파울라너 위트 330병 — 대시보드에 없는 신규
-  512854: ['PA OKT 500 Can',    0.12,   'OFF'],   // 옥토버페스트 — 신규
+  512870: ['TI RAD 500 Can',    0.12,   'OFF'],   // 베트남 생산 전환분(EXKR=한국향)
+  512854: ['PA OKT 500 Can',    0.12,   'OFF'],   // 옥토버페스트 — 1회성 행사 물량, 신규 SKU
+  512860: ['PA OKT 20000 Keg',  0.2,    'ON'],    // 옥토버페스트 케그 — 신규
 };
-const STOCK_IN_ETA_LEAD = 6;   // 여주입고일이 비면 ETA + 6일 (과거 1,542건 리드타임 중앙값)
+// 가용 시점은 '통관 완료' 기준이다. 데일리스탁은 통관분만 담으므로 미통관분은 재고에 없다.
+// 과거 1,437건 중앙값: 여주입고 → 통관 3일, ETA → 통관 12일.
+const STOCK_IN_LEAD_IN  = 3;    // 여주입고일만 있을 때 통관 추정
+const STOCK_IN_LEAD_ETA = 12;   // ETA만 있을 때 통관 추정
 
 // 반입일정 워크북 → {file, cutoff, rows:[{code, sku, hl, ch, arr, qty, exp, eta}]}
 // 워크북에 연도별 시트가 여러 장 있고 과거 이력이 더 크다. 시트를 고르지 않고 전부 읽은 뒤
@@ -4021,7 +4029,7 @@ async function parseInboundExcel(file, cutoff) {
     let head = -1, c = null;
     for (let h = 0; h < Math.min(grid.length, 12); h++) {
       const row = (grid[h] || []).map(x => String(x == null ? '' : x).replace(/\s+/g, ''));
-      const idx = { eta: row.indexOf('ETA'), inn: row.indexOf('여주입고일'),
+      const idx = { eta: row.indexOf('ETA'), inn: row.indexOf('여주입고일'), cus: row.indexOf('통관일자'),
                     code: row.indexOf('제품코드'), qty: row.indexOf('박스수량'), exp: row.indexOf('소비기한') };
       if (idx.code >= 0 && idx.qty >= 0) { head = h; c = idx; break; }
     }
@@ -4032,20 +4040,23 @@ async function parseInboundExcel(file, cutoff) {
       const code = parseInt(g[c.code], 10), qty = Number(String(g[c.qty] || '').replace(/,/g, ''));
       if (!isFinite(code) || !isFinite(qty) || !qty) continue;
       const inn = _stockNormDate(c.inn >= 0 ? g[c.inn] : null);
-      let arr = inn;
-      if (!arr) {                                      // 여주입고일 미기입 → ETA + 리드타임
-        const eta = _stockNormDate(c.eta >= 0 ? g[c.eta] : null);
-        if (!eta) continue;
-        const t = new Date(eta + 'T00:00:00'); t.setDate(t.getDate() + STOCK_IN_ETA_LEAD);
-        arr = t.toISOString().slice(0, 10);
-      }
-      if (arr <= cut) continue;                        // 이미 재고에 반영된 분
+      const cus = _stockNormDate(c.cus >= 0 ? g[c.cus] : null);
+      const eta = _stockNormDate(c.eta >= 0 ? g[c.eta] : null);
+      if (cus && cus <= cut) continue;                  // 통관 완료 → 이미 데일리스탁에 있다
+      // 통관 예정일: 통관일자 > 입고일+3 > ETA+12
+      const plus = (base, d) => { const t = new Date(base + 'T00:00:00'); t.setDate(t.getDate() + d);
+                                  return t.toISOString().slice(0, 10); };
+      const arr = cus || (inn ? plus(inn, STOCK_IN_LEAD_IN) : eta ? plus(eta, STOCK_IN_LEAD_ETA) : null);
+      if (!arr) continue;
+      // 창고에는 들어왔는데 통관이 안 된 물량 — 데일리스탁에 없고 가장 빨리 풀린다
+      const pending = !!inn && inn <= cut;
+      if (!pending && arr <= cut) continue;             // 도착 전인데 날짜가 과거면 이력 행
       seen++;
       if (STOCK_IN_EXCL_CODE.has(code)) { excluded++; continue; }   // 면세 전용
       const m = STOCK_SKU_MAP[code] || STOCK_IN_EXTRA[code];
       if (!m) { unmapped.add(code + ' ' + String(g[c.code + 1] || '').slice(0, 40)); continue; }
-      rows.push({ code, sku: m[0], hl: m[1], ch: m[2], arr, qty,
-                  exp: _stockNormDate(c.exp >= 0 ? g[c.exp] : null), eta: !inn });
+      rows.push({ code, sku: m[0], hl: m[1], ch: m[2], arr, qty, pending, inn,
+                  exp: _stockNormDate(c.exp >= 0 ? g[c.exp] : null), est: !cus });
       kept++;
     }
     if (kept) sheets.push(sn + '(' + kept + ')');
@@ -4109,9 +4120,11 @@ async function renderSumStock() {
 
   // SKU를 고정폭으로 묶어 가용재고를 왼쪽으로 당기고, 남는 폭은 드릴다운이 붙는
   // On/Off FCST 두 칸에 넘긴다.
+  // 공급 3단(가용·통관대기·입고예정)이 붙어 SKU는 남는 폭을 쓴다. 간격을 6px로 좁혀 폭을 번다.
   const GC = (window.innerWidth <= 1440)
-    ? '86px 138px 70px 70px minmax(0,1fr) minmax(0,1fr) 78px 44px'
-    : '96px 158px 82px 82px minmax(0,1fr) minmax(0,1fr) 92px 50px';
+    ? '78px minmax(0,1fr) 62px 62px 62px 70px 70px 72px 40px'
+    : '86px minmax(0,1fr) 70px 70px 70px 78px 78px 80px 46px';
+  const GAP = '6px';
   const HD = 'font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;';
 
   let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
@@ -4210,32 +4223,44 @@ async function renderSumStock() {
     return h + '</div>';
   };
 
-  // 입고 예정 로트 — 도착일 순. 소비기한이 비어 있으면 룰을 걸 수 없어 그대로 표시만 한다.
-  const inboundHtml = r => {
-    if (!r.inLots.length) return '';
-    const lots = r.inLots.slice().sort((a, b) => a.arr.localeCompare(b.arr));
-    const IG = '82px 34px minmax(0,1fr) 86px 76px';
+  // 입고 로트 상세. pend=true면 '통관 대기'(창고 입고 완료·미통관), false면 통관 예정분.
+  // 소비기한이 비어 있으면 룰을 걸 수 없어 그대로 표시만 한다.
+  const inboundHtml = (r, pend) => {
+    const lots = (pend ? r.pendLots : r.inLots).slice()
+      .sort((a, b) => (pend ? (a.inn || '').localeCompare(b.inn || '') : a.arr.localeCompare(b.arr)));
+    if (!lots.length) return '';
+    const col = pend ? '#a78bfa' : '#38bdf8';
+    const IG = '82px 36px minmax(0,1fr) 86px 76px';
     let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
-      + '<div style="font-size:9.5px;color:#38bdf8;letter-spacing:.5px;padding:0 0 4px 2px;">입고 예정 · 당월 잔여 '
-      + nU(r.inCur, r.hl) + ' ' + UL + ' / 익월 ' + nU(r.inNext, r.hl) + ' ' + UL + '</div>'
+      + '<div style="font-size:9.5px;color:' + col + ';letter-spacing:.5px;padding:0 0 4px 2px;">'
+      + (pend ? '통관 대기 · ' + nU(r.pend, r.hl) + ' ' + UL + ' — 창고 입고 완료, 통관 전이라 데일리스탁에 없다'
+              : '통관 예정 · 당월 잔여 ' + nU(r.inCur, r.hl) + ' ' + UL + ' / 익월 ' + nU(r.inNext, r.hl) + ' ' + UL)
+      + '</div>'
       + '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
-      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>도착일</span><span></span><span>소비기한</span>'
-      + '<span style="justify-self:end;">수량</span><span style="justify-self:end;">잔여</span></div>';
+      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>' + (pend ? '입고일' : '통관예정') + '</span><span></span>'
+      + '<span>소비기한</span><span style="justify-self:end;">수량</span>'
+      + '<span style="justify-self:end;">' + (pend ? '대기' : '잔여') + '</span></div>';
+    const asOf = stock.as_of;
     h += lots.map(l => {
-      const rem = l.exp ? Math.round((new Date(l.exp + 'T00:00:00') - new Date(l.arr + 'T00:00:00')) / 86400000) : null;
+      const base = pend ? (l.inn || l.arr) : l.arr;
+      const rem  = l.exp ? Math.round((new Date(l.exp + 'T00:00:00') - new Date(base + 'T00:00:00')) / 86400000) : null;
+      const wait = pend ? Math.round((new Date(asOf + 'T00:00:00') - new Date(base + 'T00:00:00')) / 86400000) : null;
+      const warn = pend ? wait > 30 : rem != null && rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI);
       return '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;align-items:baseline;font-size:11px;'
         + 'line-height:1.7;padding:0 0 0 2px;">'
-        + '<span style="color:rgba(255,255,255,.78);">' + l.arr + '</span>'
-        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (l.eta ? 'ETA' : '확정') + '</span>'
+        + '<span style="color:rgba(255,255,255,.78);">' + base + '</span>'
+        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (pend ? '' : (l.est ? '추정' : '확정')) + '</span>'
         + '<span style="color:rgba(255,255,255,.5);">' + (l.exp || '<span style="color:#fbbf24;">미상</span>') + '</span>'
         + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
-        + '<span style="justify-self:end;color:' + (rem == null ? 'rgba(255,255,255,.3)'
-          : rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI) ? C.watch : 'rgba(255,255,255,.5)')
-        + ';">' + (rem == null ? '—' : rem + '일') + '</span></div>';
+        + '<span style="justify-self:end;color:' + (warn ? C.watch : 'rgba(255,255,255,.5)') + ';">'
+        + (pend ? wait + '일' : rem == null ? '—' : rem + '일') + '</span></div>';
     }).join('');
-    return h + '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
-      + '여주입고일이 비면 ETA + ' + STOCK_IN_ETA_LEAD + '일로 잡는다(과거 리드타임 중앙값). '
-      + '소비기한 미상은 전량 가용으로 보되 표시만 한다 — 입고 시점 잔여가 210일 미만이면 노란색.</div></div>';
+    h += '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
+      + (pend ? '통관되면 바로 가용재고가 된다. 대기 30일 초과는 노란색 — 검사·서류 등으로 묶여 있을 수 있다.'
+              : '통관일자가 없으면 추정: 여주입고일 + ' + STOCK_IN_LEAD_IN + '일, 입고일도 없으면 ETA + '
+                + STOCK_IN_LEAD_ETA + '일(과거 리드타임 중앙값). 소비기한 미상은 전량 가용으로 본다.')
+      + '</div></div>';
+    return h;
   };
 
   const rowHtml = (r, i) => {
@@ -4276,13 +4301,14 @@ async function renderSumStock() {
         + ' title="잔여 7개월 미만이라 CVS·HYPER·SM에 못 나가고, 6개월 채널 수요도 넘어선 물량">채널제한 '
         + nU(r.loIdle, r.hl) + '</span>' : '');
     return '<div onclick="_stockToggleLot(&quot;' + lid + '&quot;, event)" title="클릭 — 유통기한별 재고 펼치기"'
-      + ' style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;cursor:pointer;'
+      + ' style="display:grid;grid-template-columns:' + GC + ';gap:' + GAP + ';align-items:baseline;font-size:12px;cursor:pointer;'
       + 'line-height:1.75;padding:2px 10px;border-top:1px solid rgba(255,255,255,.05);">'
       + '<span>' + badge + '</span>'
       + '<span style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
       + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
       + r.sku + nearTag + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fU(r.avail, r.hl) + '</span>'
+      + drill(r.pend, r.hl, r.pendLots.length, lid + 'pd', '#a78bfa')
       + drill(r.inCur, r.hl, r.inLots.length, lid + 'in', '#38bdf8')
       + drill(none ? null : r.fcstOn, r.hl, Object.keys(r.byRegion).length, lid + 'on')
       + drill(none ? null : r.fcstOff, r.hl, Object.keys(r.byCh).length, lid + 'off')
@@ -4292,7 +4318,8 @@ async function renderSumStock() {
       + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>'
       + '<div id="' + lid + 'on" style="display:none;">' + breakdown(r, 'on') + '</div>'
       + '<div id="' + lid + 'off" style="display:none;">' + breakdown(r, 'off') + '</div>'
-      + '<div id="' + lid + 'in" style="display:none;">' + inboundHtml(r) + '</div>';
+      + '<div id="' + lid + 'in" style="display:none;">' + inboundHtml(r, false) + '</div>'
+      + '<div id="' + lid + 'pd" style="display:none;">' + inboundHtml(r, true) + '</div>';
   };
 
   // 안쪽에 스크롤 박스를 두지 않는다. 카드는 내용만큼 늘어나고 스크롤은 .kn-slide가 맡는다.
@@ -4321,9 +4348,10 @@ async function renderSumStock() {
       + (nnG ? ' · <span style="color:rgba(255,255,255,.4);">FCST 없음 ' + nnG + '</span>' : '') + '</span>'
       + (isPrimary ? '' : '<span style="font-size:10px;color:rgba(255,255,255,.32);margin-left:auto;">참고</span>')
       + '</div>'
-      + '<div style="display:grid;grid-template-columns:' + GC + ';gap:8px;' + HD + 'padding:0 10px 6px;">'
+      + '<div style="display:grid;grid-template-columns:' + GC + ';gap:' + GAP + ';' + HD + 'padding:0 10px 6px;">'
       + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
-      + '<span style="justify-self:end;">입고예정</span>'
+      + '<span style="justify-self:end;" title="여주창고 입고 완료·통관 미완 — 데일리스탁에 없다">통관대기</span>'
+      + '<span style="justify-self:end;" title="당월 잔여기간 통관 예정분">입고예정</span>'
       + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
       + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">Days</span></div>'
       + '</div>'
@@ -4372,7 +4400,10 @@ async function renderSumStock() {
     + '<span style="color:rgba(255,255,255,.55);">FCST 없음</span> = FCST·실적 어디에도 안 잡힌 SKU(행사 반입 등). '
     + '근거가 없어 비워두며 FCST가 반영되면 자동으로 채워진다 · '
     + 'DF(면세)는 재고를 별도 운영해 데일리스탁에 안 잡히므로 수요에서 제외 · '
-    + 'Days는 현재 가용재고만으로 버티는 기간(입고 미반영). 입고를 감안한 판정은 상태 배지가 한다 — '
+    + '데일리스탁은 <strong style="color:rgba(255,255,255,.6);font-weight:600;">통관 완료분</strong>만 담는다. '
+    + '<span style="color:#a78bfa;">통관대기</span>는 창고에 있으나 통관 전이라 재고에 안 잡히는 물량, '
+    + '<span style="color:#38bdf8;">입고예정</span>은 당월 잔여기간 통관 예정분 · '
+    + 'Days는 가용재고만으로 버티는 기간(통관대기·입고 미반영). 이를 감안한 판정은 상태 배지가 한다 — '
     + '<span style="color:#38bdf8;">입고대기</span>는 재고로는 모자라나 당월 입고로 덮이는 SKU, '
     + '<span style="color:#f87171;">쇼트</span>는 입고까지 더해도 모자란 SKU</div>';
   el.innerHTML = html;
