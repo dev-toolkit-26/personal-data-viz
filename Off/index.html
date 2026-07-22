@@ -874,7 +874,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Trend</span></button>
     <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Regional</span></button>
     <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Diagnosis</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="4"><span class="kn-side-num">05</span><span>SKU</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="4"><span class="kn-side-num">05</span><span>Stock</span></button>
   </div>
 
   <div class="kn-track" id="kn-track">
@@ -932,10 +932,11 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </section>
 
     <!-- Slide 5: SKU 특이사항 (브랜드별 AP/FCST/MTD/vs LM/vs LY) -->
+    <!-- Slide 5: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
     <section class="kn-slide" data-slide="4">
       <div class="kn-content">
-        <h2 class="kn-apex">SKU</h2>
-        <div id="sum-sku-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
+        <h2 class="kn-apex">Stock Coverage</h2>
+        <div id="sum-stock-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
@@ -1305,583 +1306,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
       mtdEl.innerHTML=dhtml;
     }
 
-    // ── Slide 4: SKU 특이사항 — SKU Detail 데이터를 브랜드별 그룹으로 (On-Trade 스타일) ──
-    // Off는 AP가 없어 AP 대신 RoFo. 컬럼: SKU | RoFo | FCST | MTD | vs LM | vs LY
-    // (Off SKU 월배열은 이미 HL 단위 — On-Trade 같은 factor 변환 불필요)
-    var skuEl=document.getElementById('sum-sku-card');
-    if(skuEl){
-      var _cmpC  = function(v){ return v==null?'#6b7280':(v>=1?'#4ade80':'#f87171'); };
-      var _cmpBg = function(v){ return v==null?'rgba(255,255,255,.08)':(v>=1?'rgba(74,222,128,.15)':'rgba(248,113,113,.15)'); };
-      var _pill  = function(v,cF,bF){ return v==null?'':'<span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;background:'+bF(v)+';color:'+cF(v)+';">'+fPct(v)+'</span>'; };
-      var _hlD   = function(v){ return (v!=null && v>0.001)?fHL(v)+' HL':'—'; };
-      var _lm = ci-1;   // 전월(vs LM)
-      // (brand|sku) 기준으로 전 채널·어카운트 합산
-      var agg={};
-      (OFF.channels||[]).forEach(function(c){ if(!_offInTtl(c)) return; (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
-        var actA=s.act_m||s.act_hl_m||[], lyA=s.ly_m||s.ly_hl_m||[], rofoA=s.rofo_m||[], fcstA=s.fcst_m||[];
-        var key=(s.brand||'(기타)')+'|'+(s.sku||'');
-        if(!agg[key]) agg[key]={brand:s.brand||'(기타)', sku:s.sku||'', rofo:0, fcst:0, mtd:0, lm:0, ly:0};
-        var o=agg[key];
-        o.rofo += rofoA[ci]||0; o.fcst += fcstA[ci]||0; o.mtd += actA[ci]||0;
-        o.lm   += (_lm>=0 ? (actA[_lm]||0) : 0); o.ly += lyA[ci]||0;
-      }); }); });
-      // 브랜드별 그룹핑 (FCST 있는 SKU만, FCST 없으면 MTD 있는 것)
-      var byBrand={};
-      Object.keys(agg).forEach(function(k){ var o=agg[k]; if(o.fcst<=0.001 && o.mtd<=0.001) return;
-        (byBrand[o.brand]=byBrand[o.brand]||[]).push(o); });
-      var brandGroups=Object.keys(byBrand).map(function(b){
-        var items=byBrand[b].sort(function(x,y){ return y.fcst-x.fcst || y.mtd-x.mtd; });
-        var tf=items.reduce(function(s,x){ return s+x.fcst; },0);
-        return {brand:b, items:items, tf:tf};
-      }).sort(function(a,b){ return b.tf-a.tf; });
-
-      if(brandGroups.length){
-        var GC=(window.innerWidth<=1440)?'150px repeat(5,1fr)':'190px repeat(5,1fr)';
-        var head='<div style="display:grid;grid-template-columns:'+GC+';gap:10px;font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:10px 0 10px 14px;border-bottom:1px solid rgba(255,255,255,.22);position:sticky;top:0;z-index:5;background:rgba(8,10,14,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);">'
-          +'<span>SKU</span><span style="justify-self:center;">RoFo</span><span style="justify-self:center;">FCST</span><span style="justify-self:center;">MTD</span><span style="justify-self:center;">vs LM</span><span style="justify-self:center;">vs LY</span></div>';
-        var body=brandGroups.map(function(g){
-          var rows=g.items.map(function(o){
-            var fcstRo=(o.rofo>0.001)?o.fcst/o.rofo:null;   // FCST vs RoFo
-            var mtdFc =(o.fcst>0.001)?o.mtd/o.fcst:null;     // MTD vs FCST
-            var lmAch =(o.lm>0.001)?o.fcst/o.lm:null;        // FCST vs 전월
-            var lyAch =(o.ly>0.001)?o.fcst/o.ly:null;        // FCST vs 전년
-            var cs='display:flex;justify-content:center;align-items:baseline;', ns='color:#fff;white-space:nowrap;';
-            return '<div style="display:grid;grid-template-columns:'+GC+';gap:10px;align-items:baseline;font-size:12px;line-height:1.75;padding:2px 0 2px 14px;">'
-              +'<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+o.sku+'</span>'
-              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.rofo)+'</span></span>'
-              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.fcst)+'</span>'+_pill(fcstRo,achC,achBg)+'</span>'
-              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.mtd)+'</span>'+_pill(mtdFc,achC,achBg)+'</span>'
-              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.lm)+'</span>'+_pill(lmAch,_cmpC,_cmpBg)+'</span>'
-              +'<span style="'+cs+'"><span style="'+ns+'">'+_hlD(o.ly)+'</span>'+_pill(lyAch,_cmpC,_cmpBg)+'</span>'
-              +'</div>';
-          }).join('');
-          return '<div style="margin-bottom:6px;"><div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,.78);letter-spacing:1px;margin:8px 0 3px;text-transform:uppercase;">── '+g.brand+' ──</div>'+rows+'</div>';
-        }).join('');
-        skuEl.innerHTML=head+body;   // 스크롤 없이 전체 SKU 한번에 표시 (슬라이드 자체 스크롤에 위임)
-      } else skuEl.innerHTML='<div style="color:rgba(255,255,255,.6);font-size:13px;">SKU 데이터 없음</div>';
-    }
-
-    // ── Slide 0 하단: 월간 요약 내러티브 (On-Trade Overview 스타일) ──
-    var narEl = document.getElementById('sum-overview-narrative');
-    if (narEl) {
-      var _hi = function(v,c){ return '<strong style="color:'+c+';">'+v+'</strong>'; };
-      var _P  = function(t){ return '<p style="margin:0 0 12px 0;">'+t+'</p>'; };
-      var _ppN = function(v){ return v==null?'-':(v>=0?'+':'')+(v*100).toFixed(1)+'pp'; };
-      var grC2 = (yoy!=null && yoy>=0) ? '#4ade80' : '#f87171';
-      var fcC2 = achC(fcstRofo), acC2 = achC(achRofo);
-      // Slide 3에서 계산된 함수 스코프 var 재사용(방어적 접근)
-      var _wdEl = (typeof _wd  !== 'undefined') ? _wd : null;
-      var _wdP  = (typeof wdPct !== 'undefined') ? wdPct : null;
-      var _tGap = (typeof tGap  !== 'undefined') ? tGap : null;
-      var _mtdR = (typeof mtdRofoT !== 'undefined') ? mtdRofoT : (tRofo ? tAct/tRofo : null);
-
-      var html = '<div class="kn-section-label" style="color:#4ade80;letter-spacing:1.5px;margin-bottom:14px;">월간 요약</div>';
-
-      // 1) 개요 — 최신 FCST 기준
-      var statusTxt = (fcstRofo==null) ? '집계 전' : (fcstRofo>=1 ? 'RoFo 이상' : (fcstRofo>=0.95 ? 'RoFo 근접' : 'RoFo 미달'));
-      html += _P('📊 ' + _hi(curMon,'#fff') + ' Off-Trade는 RoFo ' + _hi(fHL(tRofo)+' HL','#fff')
-        + ' 대비 최신 FCST ' + _hi(fHL(tFcst)+' HL',fcC2) + ' (' + _hi(fPct(fcstRofo),fcC2) + ' vs RoFo)로 ' + _hi(statusTxt,fcC2) + '. '
-        + '최신 FCST 기준 전년 동월(' + _hi(fHL(tLy)+' HL','rgba(255,255,255,.75)') + ') 대비 ' + _hi(fDelta(yoy),grC2)
-        + ((yoy==null) ? '.' : (yoy>=0 ? ' 성장.' : ' 감소.')));
-
-      // 2) MTD 페이스
-      if (tAct>0 && _wdEl) {
-        var paceTxt, paceC;
-        if (_tGap==null)        { paceTxt='집계 전'; paceC='#9ca3af'; }
-        else if (_tGap>=0.02)   { paceTxt='기준선 대비 앞서 순항 중'; paceC='#4ade80'; }
-        else if (_tGap>=-0.05)  { paceTxt='기준선과 유사 — 월말 집중 관리 필요'; paceC='#fbbf24'; }
-        else                    { paceTxt='기준선 대비 뒤처져 회복 액션 필요'; paceC='#f87171'; }
-        html += _P('📈 영업일 ' + _hi(_wdEl.elapsed+'/'+_wdEl.total+'일 ('+fPct(_wdP)+')','#fff') + ' 경과 시점, MTD Actual '
-          + _hi(fHL(tAct)+' HL',acC2) + '로 RoFo 대비 ' + _hi(fPct(_mtdR),acC2) + ' (기준선 대비 ' + _hi(_ppN(_tGap),paceC) + ') — ' + _hi(paceTxt,paceC) + '.');
-      } else {
-        html += _P('📈 ' + _hi(curMon,'#fff') + ' 실적 집계 전 — 예측(FCST) 기준 진단.');
-      }
-
-      // 3) SKU별 상세 — MTD vs FCST 진행율 & Working-Day pace (영어, On-Trade Overview 스타일)
-      var _pctWordN = function(v){ return v==null ? '-' : (v*100).toFixed(1) + ' percent'; };
-      var _paceClause = function(gpPP){   // gpPP: WD 기준선 대비 percentage-point gap
-        if (gpPP==null) return '';
-        if (Math.abs(gpPP) < 1.5) return 'in line with the working-day pace';
-        return (gpPP>=0 ? 'ahead of the working-day pace by ' : 'behind the working-day pace by ') + Math.abs(gpPP).toFixed(1) + ' points';
-      };
-      var skuMap = {};
-      (OFF.channels||[]).forEach(function(c){ if(!_offInTtl(c)) return; (c.accounts||[]).forEach(function(a){ (a.skus||[]).forEach(function(s){
-        var arr = s.act_m || s.act_hl_m || [], fArr = s.fcst_m || [];
-        var mtdHL = arr[ci]||0, fcstHL = fArr[ci]||0;
-        if (mtdHL<=0.001 && fcstHL<=0.001) return;
-        var key = (s.brand||'') + '|' + (s.sku||'');
-        if (!skuMap[key]) skuMap[key] = { name:(s.sku||'(SKU)'), brand:(s.brand||''), mtd:0, fcst:0 };
-        skuMap[key].mtd += mtdHL; skuMap[key].fcst += fcstHL;
-      }); }); });
-      var skuArr = Object.keys(skuMap).map(function(k){ var o=skuMap[k]; o.ratio = o.fcst>0 ? o.mtd/o.fcst : null; return o; });
-      var hasMtd = skuArr.some(function(o){ return o.mtd>0.001; });
-      var skuSent = '';
-      if (hasMtd) {
-        skuArr.filter(function(o){ return o.mtd>0.001; }).sort(function(a,b){ return b.mtd - a.mtd; }).slice(0,6).forEach(function(o){
-          var gpPP = (o.ratio!=null && _wdP!=null) ? (o.ratio - _wdP)*100 : null;
-          var rC = achC(o.ratio);
-          var s = _hi(o.name,'#fff') + ' is at ' + _hi(_pctWordN(o.ratio),rC) + ' of forecast';
-          var pc = _paceClause(gpPP);
-          if (pc) s += ', ' + _hi(pc, (gpPP!=null && gpPP>=-1.5) ? '#4ade80' : '#f87171');
-          s += ' <span style="color:rgba(255,255,255,.55);">(MTD ' + fHL(o.mtd) + ' HL / FCST ' + fHL(o.fcst) + ' HL)</span>.';
-          skuSent += _P(s);
-        });
-      } else {
-        // 실적 집계 전 — FCST 상위 SKU만 표시
-        skuArr.sort(function(a,b){ return b.fcst - a.fcst; }).slice(0,6).forEach(function(o){
-          skuSent += _P(_hi(o.name,'#fff') + ' is forecast at ' + _hi(fHL(o.fcst)+' HL','#60a5fa') + ' for ' + curMon + '.');
-        });
-      }
-      if (skuSent) {
-        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">SKU Breakdown — MTD vs FCST &amp; Working-Day Pace</div>' + skuSent;
-      }
-
-      narEl.innerHTML = html;
-    }
-  }
-
-  // ── 아래는 On 클론 원본 요약(미사용) — showSummaryOff()가 Off 데이터로 대체 ──
-  function _showSummaryOnClone_UNUSED() {
-    return;
-    // (이하 원본 로직 — 미사용)
-    var overlay = document.getElementById('summary-overlay');
-    overlay.style.display = 'flex';
-    overlay.scrollTop = 0;
-    document.body.style.overflow = 'hidden';
-
-    var ttl  = DASHBOARD_DATA.wk10_summary?.hl?.TTL;
-    var meta = DASHBOARD_DATA.wk_meta;
-    var hl   = DASHBOARD_DATA.wk10_summary?.hl || {};
-    var md   = DASHBOARD_DATA.monthly;
-    var wd   = DASHBOARD_DATA.wd_progress || {};
-    var _sumMonName = _UP_MONTH_NAMES[meta?.month || _UP_FCST_MONTH] || 'Mar';
-
-    // ── helpers ──
-    function _fmtHL(v)  { return v == null ? '—' : v.toLocaleString('ko-KR', {maximumFractionDigits:1}); }
-    function _fmtPct(v) { return v == null ? '—' : (v*100).toFixed(1) + '%'; }
-    function _fmtPctDelta(v) { if (v==null) return '—'; return (v>=0?'+':'')+(v*100).toFixed(1)+'%'; }
-    function _achColor(v) {
-      if (v==null) return '#6b7280';
-      return v >= 0.95 ? '#4ade80' : v >= 0.90 ? '#fbbf24' : '#f87171';
-    }
-    function _achBadgeBg(v) {
-      if (v==null) return 'rgba(255,255,255,.08)';
-      return v >= 0.95 ? 'rgba(74,222,128,.15)' : v >= 0.90 ? 'rgba(251,191,36,.15)' : 'rgba(248,113,113,.15)';
-    }
-
-    // ── Hero ──
-    var overallStatus = ttl.ap_fcst_ach >= 0.95 ? 'On Track' : ttl.ap_fcst_ach >= 0.90 ? '목표 근접' : '위험';
-    document.getElementById('sum-hero-headline').textContent =
-      _sumMonName + ' FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL (' + overallStatus + ')';
-
-    // ── KPI Cards ──
-    var kpis = [
-      { label: _sumMonName + ' AP 목표', value: _fmtHL(ttl.ap) + ' HL', sub: 'On Trade TTL', v: null, icon: '🎯' },
-      { label: 'This Wk FCST 달성률', value: _fmtPct(ttl.ap_fcst_ach), sub: 'FCST ' + _fmtHL(ttl.this_week_fcst) + ' HL', v: ttl.ap_fcst_ach, icon: '📊' },
-      { label: 'MTD 실적 달성률', value: _fmtPct(ttl.fcst_mtd_ach), sub: 'MTD ' + _fmtHL(ttl.mtd_actual) + ' HL', v: ttl.fcst_mtd_ach, icon: '📈' },
-      { label: '전년 동월 대비 성장률', value: _fmtPctDelta(ttl.fcst_growth_lym), sub: 'LY ' + _fmtHL(ttl.ly_month) + ' HL', v: (ttl.fcst_growth_lym||0) >= 0 ? 1 : 0, icon: (ttl.fcst_growth_lym||0)>=0?'⬆':'⬇' },
-    ];
-    document.getElementById('sum-kpi-grid').innerHTML = kpis.map(function(k) {
-      var ac = _achColor(k.v); var ab = _achBadgeBg(k.v);
-      var valColor = (k.v != null) ? ac : '#fff';
-      return '<div style="background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-top:2px solid ' + (k.v != null ? ac : 'rgba(255,255,255,.25)') + ';border-radius:14px;padding:22px 20px;position:relative;overflow:hidden;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);">'
-        + '<div style="position:absolute;top:14px;right:16px;font-size:22px;opacity:.3;">' + k.icon + '</div>'
-        + '<div style="font-size:11.5px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;">' + k.label + '</div>'
-        + '<div style="font-size:30px;font-weight:700;color:' + valColor + ';letter-spacing:-.5px;line-height:1.1;">' + k.value + '</div>'
-        + '<div style="font-size:12px;color:rgba(255,255,255,.6);margin-top:7px;">' + k.sub + '</div>'
-        + (k.v != null ? '<div style="display:inline-block;margin-top:11px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:' + ab + ';color:' + ac + ';">' + _fmtPct(k.v) + '</div>' : '')
-        + '</div>';
-    }).join('');
-
-    // ── KPI Comment ──
-    var mtdProgressPct = Math.round((wd.pct||0)*100);
-    var mtdAchPct = Math.round((ttl.fcst_mtd_ach||0)*100);
-    var fcstAchPct = ((ttl.ap_fcst_ach||0)*100).toFixed(1);
-    var kpiComment = '';
-    var mtdGapPp = mtdAchPct - mtdProgressPct;
-    var mtdGapColor = mtdGapPp >= 2 ? '#4ade80' : mtdGapPp >= -5 ? '#fbbf24' : '#f87171';
-    var fcstAchColor = (ttl.ap_fcst_ach||0) >= 0.95 ? '#4ade80' : (ttl.ap_fcst_ach||0) >= 0.9 ? '#fbbf24' : '#f87171';
-    var lymColor = (ttl.fcst_growth_lym||0) >= 0 ? '#4ade80' : '#f87171';
-    var hi = function(v, c){ return '<strong style="color:' + c + ';">' + v + '</strong>'; };
-    var wdLine = '📅 총 영업일 ' + hi((wd.total||0) + '일', '#fff') + ' 중 ' + hi((wd.elapsed||0) + '일', '#fff') + ' 경과 (' + hi(mtdProgressPct + '%', '#fff') + '). ';
-    var mtdStatusText = mtdGapPp >= 2
-      ? 'Business Day 경과율(' + hi(mtdProgressPct + '%', '#fff') + ') 대비 MTD Attainment(' + hi(mtdAchPct + '%', mtdGapColor) + ')이 ' + hi(mtdGapPp + 'pp', mtdGapColor) + ' 앞서고 있어 현재 페이스 유지 필요. '
-      : mtdGapPp >= -5
-      ? 'Business Day 경과율(' + hi(mtdProgressPct + '%', '#fff') + ') 대비 MTD Attainment(' + hi(mtdAchPct + '%', mtdGapColor) + ')이 유사한 수준으로, 월말까지 집중 관리 필요. '
-      : 'Business Day 경과율(' + hi(mtdProgressPct + '%', '#fff') + ') 대비 MTD Attainment(' + hi(mtdAchPct + '%', mtdGapColor) + ')이 ' + hi(Math.abs(mtdGapPp) + 'pp', mtdGapColor) + ' 뒤처지고 있어 월말까지 집중 관리 필요. ';
-    if (ttl.ap_fcst_ach >= 1.0) {
-      kpiComment = wdLine + '✅ ' + hi(_sumMonName + ' AP 목표 초과 달성', '#4ade80') + ' 예상. '
-        + 'This Wk FCST ' + hi(_fmtHL(ttl.this_week_fcst) + ' HL', '#fff') + ' vs AP(' + _fmtHL(ttl.ap) + ' HL) '
-        + hi(fcstAchPct + '%', fcstAchColor) + '로 목표 초과 달성 중. '
-        + mtdStatusText
-        + '전년 동월(' + _fmtHL(ttl.ly_month) + ' HL) 대비 ' + hi(_fmtPctDelta(ttl.fcst_growth_lym), lymColor) + ' 수준으로, '
-        + ((ttl.fcst_growth_lym||0)<0 ? 'YoY 하락세는 우려 사항이나 AP 달성은 유지 가능한 상황.' : 'YoY 성장 모멘텀도 지속되고 있음.');
-    } else {
-      kpiComment = wdLine + '⚠️ ' + hi('FCST 기준 ' + _sumMonName + ' AP 달성률 ' + fcstAchPct + '%', fcstAchColor) + '로 목표 미달. '
-        + mtdStatusText
-        + '전년 동월(' + _fmtHL(ttl.ly_month) + ' HL) 대비 ' + hi(_fmtPctDelta(ttl.fcst_growth_lym), lymColor) + ' 수준으로, '
-        + ((ttl.fcst_growth_lym||0)<0 ? 'YoY 하락세는 우려 사항이나 잔여 영업일 내 집중적인 회복 액션이 필요.' : 'YoY 성장 모멘텀은 유지되고 있으나 AP 달성을 위한 집중 관리 필요.');
-    }
-
-    document.getElementById('sum-kpi-comment').innerHTML = kpiComment;
-
-    // ── Monthly Summary Narrative (English, TTS-friendly) ──
-    (function renderOverviewNarrative(){
-      var narEl = document.getElementById('sum-overview-narrative');
-      if (!narEl) return;
-
-      var fcstMonIdx0 = (meta && meta.month ? meta.month : _UP_FCST_MONTH) - 1;
-      var skuRoot0 = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
-
-      function _num(v, digits) { return v == null ? null : Number(v).toLocaleString('en-US', {maximumFractionDigits: (digits == null ? 1 : digits)}); }
-      function _pctWord(v, digits) { return v == null ? null : (v * 100).toFixed(digits == null ? 1 : digits) + ' percent'; }
-      function _pctDeltaWord(v, digits) {
-        if (v == null) return null;
-        var n = (v * 100).toFixed(digits == null ? 1 : digits);
-        return (v >= 0 ? 'up ' : 'down ') + Math.abs(parseFloat(n)).toFixed(digits == null ? 1 : digits) + ' percent';
-      }
-      var REGION_DISPLAY = { 'Seoul':'Seoul', 'Busan':'Busan', 'DaeGu & JeJu':'Daegu and Jeju', 'DaeJeon':'Daejeon', 'GwangJu':'Gwangju' };
-      var P = function(text){ return '<p style="margin:0 0 12px 0;">' + text + '</p>'; };
-
-      var ttsSupported = ('speechSynthesis' in window) && ('SpeechSynthesisUtterance' in window);
-      var btnStyle = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;padding:6px 12px;border-radius:6px;font:600 12px Inter,sans-serif;cursor:pointer;transition:background .15s,border-color .15s;';
-      var btnStyleDisabled = btnStyle + 'opacity:.4;cursor:not-allowed;';
-      var selStyle = 'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;padding:5px 8px;border-radius:6px;font:500 11.5px Inter,sans-serif;cursor:pointer;max-width:200px;';
-      var toolbarHtml = '';
-      if (ttsSupported) {
-        toolbarHtml =
-            '<div id="sum-tts-bar" title="Microsoft Edge recommended for best voice quality" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">'
-          +   '<button id="sum-tts-play"  type="button" style="' + btnStyle + '">▶ Read Aloud</button>'
-          +   '<button id="sum-tts-pause" type="button" style="' + btnStyleDisabled + '" disabled>⏸ Pause</button>'
-          +   '<button id="sum-tts-stop"  type="button" style="' + btnStyleDisabled + '" disabled>⏹ Stop</button>'
-          +   '<select id="sum-tts-voice" style="' + selStyle + '" title="Voice"></select>'
-          +   '<select id="sum-tts-rate"  style="' + selStyle + '" title="Speed">'
-          +     '<option value="0.8">0.8x</option><option value="1" selected>1.0x</option><option value="1.2">1.2x</option>'
-          +   '</select>'
-          + '</div>';
-      }
-      var html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">'
-               + '<div class="kn-section-label" style="color:#4ade80;letter-spacing:1.5px;">Monthly Summary</div>'
-               + toolbarHtml
-               + '</div>'
-               + '<div id="sum-tts-body">';
-
-      var wdPct = (wd && wd.pct != null) ? wd.pct : null;
-      var apMtdAch_ttl = (ttl && ttl.ap > 0 && ttl.mtd_actual != null) ? ttl.mtd_actual / ttl.ap : null;
-      var apFcstAch_ttl = (ttl && ttl.ap_fcst_ach != null) ? ttl.ap_fcst_ach : null;
-
-      function _pace(gapPp) {
-        if (gapPp == null) return null;
-        if (Math.abs(gapPp) < 1.5) return 'roughly in line with';
-        return gapPp >= 0 ? 'ahead of' : 'behind';
-      }
-      function _forecastArc(ach) {
-        if (ach == null) return null;
-        if (ach >= 1.0) return 'overshoots the annual plan';
-        if (ach >= 0.97) return 'lands essentially on the annual plan';
-        if (ach >= 0.92) return 'comes in just below the annual plan';
-        return 'falls short of the annual plan';
-      }
-
-      // ── Paragraph 1: Headline (pace-focused, no hectoliter recital) ──
-      if (wdPct != null && apMtdAch_ttl != null) {
-        var gapPp = (apMtdAch_ttl - wdPct) * 100;
-        var pace = _pace(gapPp);
-        var p1 = 'For ' + _sumMonName + ', with ' + _pctWord(wdPct) + ' of working days elapsed, month-to-date attainment of the monthly target stands at ' + _pctWord(apMtdAch_ttl);
-        if (pace === 'roughly in line with') {
-          p1 += ' — ' + pace + ' the working-day pace. ';
-        } else {
-          p1 += ' — ' + pace + ' the working-day pace by ' + Math.abs(gapPp).toFixed(1) + ' points. ';
-        }
-        var arc = _forecastArc(apFcstAch_ttl);
-        if (arc) p1 += 'The latest rolling forecast ' + arc + ' at ' + _pctWord(apFcstAch_ttl) + '.';
-        html += P(p1);
-      } else {
-        html += P('For ' + _sumMonName + ', headline data is not yet available.');
-      }
-
-      // ── Paragraph 2: Year-over-year (one sentence, no hectoliter recital) ──
-      if (ttl && ttl.fcst_growth_lym != null) {
-        html += P('Year over year, the month-end forecast is trending ' + _pctDeltaWord(ttl.fcst_growth_lym) + ' versus the same month last year.');
-      }
-
-      // ── Paragraph 3: SKU section — Top 5 by this-month MTD volume, one sentence per SKU ──
-      var skuBlock = '';
-      if (skuRoot0.length > 0 && wdPct != null) {
-        var humanize = (typeof window.humanizeSkuName === 'function') ? window.humanizeSkuName : function(x){ return x; };
-        var skuList = [];
-        for (var bi = 0; bi < skuRoot0.length; bi++) {
-          var b = skuRoot0[bi];
-          if (!b || !Array.isArray(b.skus)) continue;
-          for (var sj = 0; sj < b.skus.length; sj++) {
-            var s = b.skus[sj];
-            if (!s || !s.data) continue;
-            var f = (s.data.hl_factor != null) ? s.data.hl_factor : 0.0792;
-            var mtdHL  = (s.data.mtd != null) ? s.data.mtd * f : null;
-            if (mtdHL == null || mtdHL <= 0) continue;
-            var mtdVsFcst;
-            if (s.data.fcst_mtd_ach != null) {
-              mtdVsFcst = s.data.fcst_mtd_ach;
-            } else {
-              var fcstHL = (s.data.this_week_fcst != null) ? s.data.this_week_fcst * f : null;
-              mtdVsFcst = (fcstHL != null && fcstHL > 0) ? mtdHL / fcstHL : null;
-            }
-            if (mtdVsFcst == null) continue;
-            skuList.push({ name: humanize(s.sku), volHL: mtdHL, ratio: mtdVsFcst });
-          }
-        }
-        skuList.sort(function(a, c){ return c.volHL - a.volHL; });
-        var top5 = skuList.slice(0, 5);
-
-        function _paceClause(gp) {
-          if (Math.abs(gp) < 1.5) return 'in line with the working-day pace';
-          return (gp >= 0 ? 'ahead of the working-day pace by ' : 'behind the working-day pace by ') + Math.abs(gp).toFixed(1) + ' points';
-        }
-
-        for (var ti = 0; ti < top5.length; ti++) {
-          var t = top5[ti];
-          var tGap = (t.ratio - wdPct) * 100;
-          skuBlock += P(t.name + ' is at ' + _pctWord(t.ratio) + ' of forecast, ' + _paceClause(tGap) + '.');
-        }
-      }
-      if (skuBlock) {
-        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">Top SKUs This Month</div>' + skuBlock;
-      }
-
-      // ── Paragraphs 4-8: Per branch (one tight sentence each) ──
-      var regionsBlock = '';
-      var regionsList = ['Seoul', 'Busan', 'DaeGu & JeJu', 'DaeJeon', 'GwangJu'];
-      for (var ri = 0; ri < regionsList.length; ri++) {
-        var key = regionsList[ri];
-        var r = hl[key];
-        if (!r) continue;
-        var displayName = REGION_DISPLAY[key] || key;
-        var rApMtdAch = (r.ap > 0 && r.mtd_actual != null) ? r.mtd_actual / r.ap : null;
-
-        var sentence = null;
-        if (rApMtdAch != null && wdPct != null) {
-          var rGap = (rApMtdAch - wdPct) * 100;
-          var rPace = _pace(rGap);
-          sentence = 'In ' + displayName + ', MTD is at ' + _pctWord(rApMtdAch) + ' of target, ';
-          if (rPace === 'roughly in line with') {
-            sentence += rPace + ' the working-day pace';
-          } else {
-            sentence += rPace + ' the working-day pace by ' + Math.abs(rGap).toFixed(1) + ' points';
-          }
-          if (r.fcst_growth_lym != null) sentence += ', with the forecast ' + _pctDeltaWord(r.fcst_growth_lym) + ' year over year';
-          sentence += '.';
-        } else if (r.fcst_growth_lym != null) {
-          sentence = 'In ' + displayName + ', the forecast is ' + _pctDeltaWord(r.fcst_growth_lym) + ' year over year.';
-        }
-        if (sentence) regionsBlock += P(sentence);
-      }
-
-      if (regionsBlock) {
-        html += '<div style="margin-top:6px;color:rgba(255,255,255,.65);font-size:11px;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;margin-bottom:10px;">Regional Breakdown</div>' + regionsBlock;
-      }
-
-      html += '</div>'; // close #sum-tts-body
-      narEl.innerHTML = html;
-
-      // ── TTS wiring ──
-      if (!ttsSupported) return;
-      var bodyEl  = document.getElementById('sum-tts-body');
-      var playBtn = document.getElementById('sum-tts-play');
-      var pauseBtn= document.getElementById('sum-tts-pause');
-      var stopBtn = document.getElementById('sum-tts-stop');
-      var voiceSel= document.getElementById('sum-tts-voice');
-      var rateSel = document.getElementById('sum-tts-rate');
-      if (!bodyEl || !playBtn) return;
-
-      window.__sumTTS = window.__sumTTS || { rate: 1.0, voiceName: null };
-      rateSel.value = String(window.__sumTTS.rate || 1);
-
-      function _populateVoices(){
-        var all = (window.speechSynthesis.getVoices() || []).filter(function(v){ return v.lang && v.lang.toLowerCase().indexOf('en') === 0; });
-        if (!all.length) {
-          voiceSel.innerHTML = '<option value="-1">(loading voices…)</option>';
-          voiceSel._voices = [];
-          return;
-        }
-        // Surface "Natural" voices first
-        all.sort(function(a, b){
-          var an = (a.name||'').indexOf('Natural') !== -1 ? 0 : 1;
-          var bn = (b.name||'').indexOf('Natural') !== -1 ? 0 : 1;
-          if (an !== bn) return an - bn;
-          return (a.name||'').localeCompare(b.name||'');
-        });
-        voiceSel.innerHTML = all.map(function(v, i){
-          return '<option value="' + i + '">' + (v.name || 'Voice ' + i) + ' (' + v.lang + ')</option>';
-        }).join('');
-        voiceSel._voices = all;
-        var idx = -1;
-        if (window.__sumTTS.voiceName) {
-          idx = all.findIndex(function(v){ return v.name === window.__sumTTS.voiceName; });
-        }
-        if (idx < 0) {
-          var preferred = window.pickPreferredVoice ? window.pickPreferredVoice(all) : all[0];
-          idx = preferred ? all.indexOf(preferred) : 0;
-        }
-        voiceSel.value = String(Math.max(0, idx));
-      }
-      _populateVoices();
-      if (typeof window.speechSynthesis.onvoiceschanged !== 'undefined') {
-        window.speechSynthesis.onvoiceschanged = _populateVoices;
-      }
-
-      function _setBtnState(state){
-        // state: 'idle' | 'playing' | 'paused'
-        function apply(btn, disabled, label){
-          btn.disabled = !!disabled;
-          btn.style.opacity = disabled ? '.4' : '1';
-          btn.style.cursor  = disabled ? 'not-allowed' : 'pointer';
-          if (label != null) btn.textContent = label;
-        }
-        if (state === 'playing') {
-          apply(playBtn, true,  '▶ Playing…');
-          apply(pauseBtn, false, '⏸ Pause');
-          apply(stopBtn, false, '⏹ Stop');
-        } else if (state === 'paused') {
-          apply(playBtn, true,  '▶ Paused');
-          apply(pauseBtn, false, '▶ Resume');
-          apply(stopBtn, false, '⏹ Stop');
-        } else {
-          apply(playBtn, false, '▶ Read Aloud');
-          apply(pauseBtn, true,  '⏸ Pause');
-          apply(stopBtn, true,  '⏹ Stop');
-        }
-      }
-
-      function _startSpeech(){
-        try { window.speechSynthesis.cancel(); } catch(e){}
-        // Split narrative into one utterance per paragraph/sentence.
-        // The TTS engine inserts a natural gap between utterances, so this
-        // gives a reliable pause that single-string-plus-period does not.
-        var lines = (bodyEl.innerText || bodyEl.textContent || '')
-          .replace(/[ \t]+/g, ' ')
-          .split(/\n+/)
-          .map(function(line){ return line.trim(); })
-          .filter(function(line){ return line.length > 0; })
-          .map(function(line){ return /[.!?]$/.test(line) ? line : line + '.'; });
-        if (!lines.length) return;
-
-        var voices = voiceSel._voices || [];
-        var chosen = voices[parseInt(voiceSel.value, 10)] || null;
-        var rate = parseFloat(rateSel.value) || 1.0;
-        var lastIdx = lines.length - 1;
-
-        lines.forEach(function(line, i){
-          var spoken = (typeof window.convertForTTS === 'function') ? window.convertForTTS(line) : line;
-          var u = new window.SpeechSynthesisUtterance(spoken);
-          if (chosen) { u.voice = chosen; u.lang = chosen.lang || 'en-US'; }
-          else { u.lang = 'en-US'; }
-          u.rate = rate;
-          u.pitch = 1.0;
-          if (i === lastIdx) {
-            u.onend   = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
-            u.onerror = function(){ window.__sumTTS.utterance = null; _setBtnState('idle'); };
-          }
-          window.speechSynthesis.speak(u);
-        });
-        window.__sumTTS.utterance = lines;
-        _setBtnState('playing');
-      }
-
-      playBtn.addEventListener('click', _startSpeech);
-      pauseBtn.addEventListener('click', function(){
-        var ss = window.speechSynthesis;
-        if (ss.paused) { ss.resume(); _setBtnState('playing'); }
-        else if (ss.speaking) { ss.pause(); _setBtnState('paused'); }
-      });
-      stopBtn.addEventListener('click', function(){
-        try { window.speechSynthesis.cancel(); } catch(e){}
-        window.__sumTTS.utterance = null;
-        _setBtnState('idle');
-      });
-      voiceSel.addEventListener('change', function(){
-        var idx = parseInt(voiceSel.value, 10);
-        var v = voiceSel._voices && voiceSel._voices[idx];
-        window.__sumTTS.voiceName = v ? v.name : null;
-      });
-      rateSel.addEventListener('change', function(){
-        window.__sumTTS.rate = parseFloat(rateSel.value) || 1.0;
-      });
-
-      // Cancel any leftover speech from a previous render
-      try { window.speechSynthesis.cancel(); } catch(e){}
-      _setBtnState('idle');
-    })();
-
-    // ── Slide 5: 주요 SKU 특이사항 (전체 SKU, 브랜드별 그룹, AP / FCST / vs LM / vs LY) ──
-    // SKU 표기는 FCST Status의 vs LM/LY 섹션과 동일하게 raw sku.sku 사용
-    var skuRoot = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
-    var fcstMonIdx = (meta && meta.month ? meta.month : _UP_FCST_MONTH) - 1;
-    var lastMonIdx = fcstMonIdx - 1;
-    var brandGroups = [];
-    for (var bi = 0; bi < skuRoot.length; bi++) {
-      var b = skuRoot[bi];
-      if (!b || !Array.isArray(b.skus)) continue;
-      var items = [];
-      for (var sj = 0; sj < b.skus.length; sj++) {
-        var s = b.skus[sj];
-        if (!s || !s.data) continue;
-        if (s.data.this_week_fcst == null) continue;
-        items.push({ label: s.sku, data: s.data });
-      }
-      if (items.length > 0) brandGroups.push({ brand: b.brand, items: items });
-    }
-    function _cmpColor(v){ return v == null ? '#6b7280' : v >= 1 ? '#4ade80' : '#f87171'; }
-    function _cmpBg(v){ return v == null ? 'rgba(255,255,255,.08)' : v >= 1 ? 'rgba(74,222,128,.15)' : 'rgba(248,113,113,.15)'; }
-    function _achPill(v, colorFn, bgFn){
-      return v == null ? '' : '<span style="margin-left:6px;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;background:' + bgFn(v) + ';color:' + colorFn(v) + ';">' + _fmtPct(v) + '</span>';
-    }
-    function _hlOrDash(v){ return v != null ? _fmtHL(v) + ' HL' : '—'; }
-    // 노트북 폭에서는 라벨 컬럼 200→150px로 좁혀 메트릭 셀 가용폭 확보 (데스크탑은 200px 유지)
-    var GRID_COLS = (window.innerWidth <= 1440) ? '150px repeat(5, 1fr)' : '200px repeat(5, 1fr)';
-    var skuTableHtml = '';
-    if (brandGroups.length > 0) {
-      var headerRow = '<div style="display:grid;grid-template-columns:' + GRID_COLS + ';gap:10px;font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:10px 0 10px 14px;border-bottom:1px solid rgba(255,255,255,.22);position:sticky;top:0;z-index:5;background:rgba(8,10,14,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 2px 8px rgba(0,0,0,.35);">'
-        + '<span>SKU</span><span style="justify-self:center;">AP</span><span style="justify-self:center;">FCST</span><span style="justify-self:center;">MTD</span><span style="justify-self:center;">vs LM</span><span style="justify-self:center;">vs LY</span>'
-        + '</div>';
-      skuTableHtml = headerRow
-        + brandGroups.map(function(g){
-            var rows = g.items.map(function(it){
-              var d = it.data;
-              // SKU Detail tab과 동일한 HL 변환:
-              //   AP는 standard c/s (HL × 12.6263) → ÷12.6263 ≈ ×0.0792
-              //   FCST/MTD/act_monthly/ly_month는 physical QTY → ×hl_factor (default 0.0792)
-              var factor = (d.hl_factor != null) ? d.hl_factor : 0.0792;
-              var rawAP   = (Array.isArray(d.ap_monthly) && d.ap_monthly[fcstMonIdx] != null) ? d.ap_monthly[fcstMonIdx] : d.ap;
-              var apHL    = (rawAP != null) ? rawAP * 0.0792 : null;
-              var fcstHL  = (d.this_week_fcst != null) ? d.this_week_fcst * factor : null;
-              var mtdHL   = (d.mtd != null) ? d.mtd * factor : null;
-              var lmRaw   = (Array.isArray(d.act_monthly) && lastMonIdx >= 0) ? d.act_monthly[lastMonIdx] : null;
-              var lmHL    = (lmRaw != null) ? lmRaw * factor : null;
-              var lyHL    = (d.ly_month != null) ? d.ly_month * factor : null;
-              var apFcstAch = (apHL && apHL > 0 && fcstHL != null)  ? fcstHL / apHL  : null;
-              var mtdAch    = (fcstHL && fcstHL > 0 && mtdHL != null) ? mtdHL / fcstHL : null;
-              var lmAch     = (lmHL && lmHL > 0 && fcstHL != null)  ? fcstHL / lmHL  : null;
-              var lyAch     = (lyHL && lyHL > 0 && fcstHL != null)  ? fcstHL / lyHL  : null;
-              // 셀 구조: HL+pill을 한 묶음으로 셀 가로 중앙에 정렬 (헤더 justify-self:center와 일치)
-              var _cellStyle = 'display:flex;justify-content:center;align-items:baseline;';
-              var _numStyle = 'color:#fff;white-space:nowrap;';
-              return '<div style="display:grid;grid-template-columns:' + GRID_COLS + ';gap:10px;align-items:baseline;font-size:12px;line-height:1.75;padding:2px 0 2px 14px;">'
-                + '<span style="color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + it.label + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(apHL) + '</span></span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(fcstHL) + '</span>' + _achPill(apFcstAch, _achColor, _achBadgeBg) + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(mtdHL) + '</span>' + _achPill(mtdAch, _achColor, _achBadgeBg) + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(lmHL) + '</span>' + _achPill(lmAch, _cmpColor, _cmpBg) + '</span>'
-                + '<span style="' + _cellStyle + '"><span style="' + _numStyle + '">' + _hlOrDash(lyHL) + '</span>' + _achPill(lyAch, _cmpColor, _cmpBg) + '</span>'
-                + '</div>';
-            }).join('');
-            return '<div style="margin-bottom:6px;">'
-              + '<div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,.78);letter-spacing:1px;margin:8px 0 3px;text-transform:uppercase;">── ' + g.brand + ' ──</div>'
-              + rows
-              + '</div>';
-          }).join('');
-    }
-    var skuCardEl = document.getElementById('sum-sku-card');
-    if (skuCardEl) skuCardEl.innerHTML = skuTableHtml;
+    // ── Slide 5: 재고 수급 — 비동기(On 스냅샷 조회)라 렌더만 걸어두고 진행 ──
+    renderSumStock();
 
     // ── Region Donuts (replaces former Chart A bar chart) ──
     var regions = _UP_DASH_REGIONS.filter(function(k){ return hl[k]; });
@@ -8598,6 +8024,690 @@ function _offBrandFromSku(sku){
   if(s.startsWith('MO ')) return "Monteith's";
   return '';
 }
+//  재고 수급(Stock Coverage) — Daily stock 파일 → 쇼트 리스크 산출
+//  · 재고는 전국 단일 풀이라 채널·지역으로 쪼개지 않는다. SKU 단위로만 본다.
+//  · 수요는 On+Off 합산. 한쪽만 보면 "우리 쪽은 안전"으로 보여 쇼트를 놓친다.
+//  · 단위: QTY(물리 단위) 원본 저장, 화면은 HL. c/s(=HL/0.0792)와 혼동 금지.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// 제품코드 → [대시보드 SKU, 케이스당 HL, 규격채널, (수출향)]
+const STOCK_SKU_MAP = {
+  512357:['BI ORI 440 Can',0.1056,'OFF'],
+  124662:['ED WHE 500 Can',0.12,'OFF'],
+  124544:['HE 0.0 330 Can',0.0792,'OFF'],
+  512270:['HE 0.0 330 Can',0.0792,'OFF'],
+  124572:['HE 0.0 500 Can',0.12,'OFF'],
+  512687:['HE 0.0 500 Can',0.12,'OFF'],
+  512272:['HE ORI 330 Can',0.0792,'OFF'],
+  512469:['HE ORI 330 Can',0.0792,'OFF'],
+  512519:['HE ORI 500 Can',0.12,'OFF'],
+  512568:['HE ORI 500 Can',0.12,'OFF'],
+  512869:['HE ORI 500 Can',0.12,'OFF'],
+  512906:['HE ORI 500 Can',0.12,'OFF'],
+  122228:['HE ORI 5000 Keg',0.1,'OFF'],
+  152604:['HE ORI 5000 Keg',0.1,'OFF'],
+  511526:['HE ORI 5000 Keg',0.1,'OFF'],
+  124242:['HE ORI 710 Can',0.0852,'OFF'],
+  512433:['HE SLV 250 Can',0.06,'OFF'],
+  512694:['HE SLV 250 Can',0.06,'OFF'],
+  124950:['HE SLV 330 Can',0.0792,'OFF'],
+  124955:['HE SLV 500 Can',0.12,'OFF'],
+  512696:['PA HEL 500 Can',0.12,'OFF'],
+  512916:['PA HEL 500 Can',0.12,'OFF'],
+  512699:['PA WHE 500 Can',0.12,'OFF'],
+  512700:['PA WHE 500 Can',0.12,'OFF'],
+  512904:['PA WHE 500 Can',0.12,'OFF'],
+  512853:['PA 0.0 500 Can',0.12,'OFF'],   // 파울라너 바이스비어 0,0 — 무알콜. PA XXX는 일반 헬의 구명이라 쓰면 합산된다
+  512814:['SU ORI 1000 Can',0.06,'OFF'],
+  512430:['SU ORI 500 Can',0.12,'OFF'],
+  512886:['SU ORI 618 Can',0.07416,'OFF'],
+  123417:['TI ORI 330 Can',0.0792,'OFF'],
+  125377:['TI ORI 500 Can',0.12,'OFF'],
+  511994:['TI ORI 500 Can',0.12,'OFF'],
+  511588:['TI PML 500 Can',0.12,'OFF'],
+  152917:['TI RAD 330 Can',0.0792,'OFF'],
+  512871:['TI RAD 330 Can',0.0792,'OFF'],   // 베트남 생산 전환분(EXKR=한국향) — 수출 아님
+  152576:['TI RAD 500 Can',0.12,'OFF'],
+  511100:['TI RAD 500 Can',0.12,'OFF'],
+  152916:['TI RGR 500 Can',0.12,'OFF'],
+  512044:['BI ORI 330 Bottle',0.0792,'ON'],
+  512724:['BI ORI 330 Bottle',0.0792,'ON'],
+  512588:['DE ORI 330 Bottle',0.0792,'ON'],
+  512845:['DE ORI 330 Bottle',0.0792,'ON'],
+  124548:['HE 0.0 330 Bottle',0.0792,'ON'],
+  511128:['HE ORI 20000 Air Keg',0.2,'ON'],
+  121916:['HE ORI 330 Bottle',0.0792,'ON'],
+  511990:['HE ORI 330 Bottle',0.0792,'ON'],
+  122536:['HE ORI 8000 Blade',0.08,'ON'],
+  124954:['HE SLV 330 Bottle',0.0792,'ON'],
+  512701:['PA WHE 20000 Keg',0.2,'ON'],
+  512491:['SU ORI 500 Bottle',0.06,'ON'],
+  512493:['SU ORI 500 Bottle',0.06,'ON'],
+  511621:['TI ORI 330 Bottle',0.0792,'ON'],
+  511815:['TI ORI 330 Bottle',0.0792,'ON'],
+  152577:['TI ORI 640 Bottle',0.0768,'ON'],
+  152643:['TI ORI 640 Bottle',0.0768,'ON'],
+};
+// 출고 가능 최소 잔여 유통기한.
+// OFF는 거래처 채널마다 요구 기간이 달라 재고를 두 등급으로 나눈다.
+//   7개월(210일) 필요: CVS · HYPER · SM
+//   6개월(180일) 필요: C&C · ALSM · 그 외
+// 즉 잔여 180~209일 재고는 6개월 채널에만 나갈 수 있는 '제한 재고'다.
+// ON(병·생·케그)은 3개월(90일).
+const STOCK_SHELF_OFF_CH = { CVS: 210, HYPER: 210, SM: 210, 'C&C': 180, ALSM: 180 };
+const STOCK_SHELF_OFF_HI  = 210;   // 7개월 채널 기준
+const STOCK_SHELF_OFF_LO  = 180;   // 6개월 채널 기준(= OFF 최소 출고 조건)
+const STOCK_SHELF_ON      = 90;    // ON 규격 기준
+// 특수 SKU(채널 전용 에디션·대용량)는 일반 출고룰을 적용하지 않는다.
+const STOCK_SHELF_EXEMPT = new Set(['SU ORI 1000 Can', 'SU ORI 618 Can']);
+// 판매 불가 제품유형 — 출고보류는 유통기한 이슈로 잡힌 것이라 가용재고에서 뺀다.
+const STOCK_NON_SELLABLE = new Set(['비매품', '시음주', '쉬링크', '출고보류', '유통기한임박']);
+// 8L Blade 단종 — On MTD가 음수(반품만 발생)라 판정에서 제외.
+const STOCK_DELISTED = new Set(['HE ORI 8000 Blade', 'HE SLV 8000 Blade', 'ED WHE 8000 Blade', 'TI ORI 8000 Blade']);
+const STOCK_CS_HL = 0.0792;   // c/s 환산 기준 (330ml x 24)
+// 이 대시보드에서 먼저 보여줄 규격채널. On 대시보드는 'ON'.
+// (ON/OFF SKU는 서로 겹치지 않는다 — 병/생/케그 11종 vs 캔/유통 23종)
+const STOCK_PRIMARY_CH = 'OFF';
+// 재고를 별도로 운영해 데일리스탁에 안 잡히는 채널 — 수요 집계에서 뺀다.
+// (면세만 별도. E-com·Military는 같은 창고에서 나가므로 포함한다.)
+const STOCK_EXCL_CH = new Set(['DF']);
+
+
+// ── 보세 반입일정(입고 예정) ──────────────────────────────────────────────────
+// 재고 스냅샷만으로는 "곧 들어온다"를 알 수 없어 쇼트가 과다하게 잡힌다.
+// 반입일정의 제품코드는 데일리스탁과 같은 체계라 그대로 붙는다.
+const STOCK_IN_EXCL_CODE = new Set([109872, 122718, 109585]);   // 면세 전용 — 데일리스탁·국내수요와 무관
+// 데일리스탁엔 재고가 없어 sku_map에 없지만 입고 예정에는 잡히는 코드
+const STOCK_IN_EXTRA = {
+  126137: ['DE ORI 330 Bottle', 0.0792, 'ON'],
+  511385: ['PA WHE 330 Bottle', 0.0792, 'ON'],    // 파울라너 위트 330병 — 대시보드에 없는 신규
+  512870: ['TI RAD 500 Can',    0.12,   'OFF'],   // 베트남 생산 전환분(EXKR=한국향)
+  512854: ['PA OKT 500 Can',    0.12,   'OFF'],   // 옥토버페스트 — 1회성 행사 물량, 신규 SKU
+  512860: ['PA OKT 20000 Keg',  0.2,    'ON'],    // 옥토버페스트 케그 — 신규
+};
+// 가용 시점은 '통관 완료' 기준이다. 데일리스탁은 통관분만 담으므로 미통관분은 재고에 없다.
+// 과거 1,437건 중앙값: 여주입고 → 통관 3일, ETA → 통관 12일.
+const STOCK_IN_SCHEMA   = 2;    // 1: 입고일 기준(통관 개념 없음) / 2: 통관 기준 + 통관대기 분리
+const STOCK_IN_LEAD_IN  = 3;    // 여주입고일만 있을 때 통관 추정
+const STOCK_IN_LEAD_ETA = 12;   // ETA만 있을 때 통관 추정
+
+// 반입일정 워크북 → {file, cutoff, rows:[{code, sku, hl, ch, arr, qty, exp, eta}]}
+// 워크북에 연도별 시트가 여러 장 있고 과거 이력이 더 크다. 시트를 고르지 않고 전부 읽은 뒤
+// 기준일 이후 도착분만 남긴다 — 과거 시트는 자연히 걸러진다.
+// ── On 스냅샷 ────────────────────────────────────────────────────────────────
+// 재고·입고 파일은 On에서 업로드하고 Off는 읽기만 한다(같은 파일을 두 번 올리지 않도록).
+// On 지역별 수요(sku_detail)와 FCST 기준월도 여기서 온다. 한 번 받아 캐시.
+let _STOCK_SNAP = null;
+function _stockSnap() { return _STOCK_SNAP || {}; }
+function _stockFcstMonth() { return (_stockSnap().wk_meta || {}).month || _OFF_ACT_MONTHS || 7; }
+async function _stockLoadSnap() {
+  if (_STOCK_SNAP) return _STOCK_SNAP;
+  const { data } = await _supabase.from('dashboard_snapshots').select('data').eq('id', 1).single();
+  _STOCK_SNAP = (data && data.data) || {};
+  return _STOCK_SNAP;
+}
+
+let _stockUnit = 'hl';
+function setStockUnit(u) {
+  if (_stockUnit === u) return;
+  _stockUnit = u;
+  renderSumStock();
+}
+
+// SKU 행 클릭 → 유통기한(로트)별 재고 펼치기
+function _stockToggleLot(id, ev) {
+  if (ev) ev.stopPropagation();
+  const el = document.getElementById(id);
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  const c = document.getElementById(id + '-c');
+  if (c) c.textContent = open ? '▸' : '▾';
+}
+
+// ── Off 수요 (이 페이지에 이미 로드된 원본 행에서 집계) ──────────────────────
+function _stockOffDemand() {
+  const out = {};
+  const hl = {}; for (const k in STOCK_SKU_MAP) hl[STOCK_SKU_MAP[k][0]] = STOCK_SKU_MAP[k][1];
+  const i = (_stockFcstMonth() || 7) - 1;
+  const arr = (r, k) => { const v = r[k]; return (v && v.value) || v || []; };
+  for (const r of ((window.OFF_SEED && OFF_SEED.rows) || [])) {
+    if (STOCK_EXCL_CH.has(r.ch)) continue;             // 별도 재고 채널 — 수요만 얹히면 쇼트가 부풀려진다
+    const sku = (window.OffIngest ? OffIngest.normalizeOffSku(r.sku, r.acct) : r.sku);
+    const f = hl[sku];
+    if (!f) continue;                                  // 재고에 없는 SKU는 판정 대상 아님
+    const o = out[sku] || (out[sku] = { fcst: 0, mtd: 0, next: 0, rofo: 0, fcstHi: 0, fcstLo: 0, byCh: {}, byAcct: {} });
+    const v = Math.max(arr(r, 'fcst_m')[i] || 0, 0) / f;
+    o.fcst += v;
+    if (v) {                                           // 드릴다운용 — 채널 / 채널·거래처 단위 보관
+      o.byCh[r.ch] = (o.byCh[r.ch] || 0) + v;
+      const k = r.ch + '|' + r.acct;
+      o.byAcct[k] = (o.byAcct[k] || 0) + v;
+    }
+    // 채널이 요구하는 잔여 유통기한으로 수요를 갈라 둔다
+    if ((STOCK_SHELF_OFF_CH[r.ch] || STOCK_SHELF_OFF_LO) >= STOCK_SHELF_OFF_HI) o.fcstHi += v; else o.fcstLo += v;
+    o.mtd  += Math.max(arr(r, 'act_q_m')[i] || 0, 0);
+    o.rofo += Math.max(arr(r, 'rofo_m')[i] || 0, 0) / f;
+    o.next += Math.max(arr(r, 'rofo_m')[i + 1] || 0, 0) / f;
+  }
+  return out;
+}
+
+// ── 산출 ───────────────────────────────────────────────────────────────────────
+// 가용재고 = 잔여 유통기한 >= 규격기준 & 판매가능 유형 & 국내향
+// 수요     = max(당월 FCST, MTD 런레이트)  — FCST가 낮게 잡히면 쇼트가 가려지므로 큰 쪽
+// 상태     = 쇼트(당월 잔여수요 > 가용) / 주의(커버 < 1) / 정상
+function _stockCompute(stock, offDem, inbound) {
+  const asOf = new Date(stock.as_of + 'T00:00:00');
+  const dim  = new Date(asOf.getFullYear(), asOf.getMonth() + 1, 0).getDate();
+  const elapsed = Math.max(asOf.getDate(), 1);
+  // 입고 예정 — 당월 잔여기간 / 익월로 나눠 담고, 로트는 드릴다운용으로 보관
+  const eom  = new Date(asOf.getFullYear(), asOf.getMonth() + 1, 1).toISOString().slice(0, 10);
+  const eon  = new Date(asOf.getFullYear(), asOf.getMonth() + 2, 1).toISOString().slice(0, 10);
+  // 통관일자가 비어 있어도 실제로는 통관돼 재고에 들어간 건이 많다(엑셀 미기입).
+  // 같은 제품코드·소비기한 로트가 데일리스탁에 있으면 이미 반영된 것으로 보고 제외한다
+  // — 안 그러면 통관대기가 재고와 이중 계상된다.
+  const inStock = new Set(stock.lots.map(l => l.code + '|' + l.exp));
+  const inb  = {};
+  for (const r of ((inbound && inbound.rows) || [])) {
+    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, matched: 0, cur: 0, next: 0, lots: [], pendLots: [] });
+    if (r.pending) {                                   // 입고 완료·통관 대기
+      if (r.exp && inStock.has(r.code + '|' + r.exp)) { o.matched += r.qty; continue; }
+      o.pend += r.qty; o.pendLots.push(r);
+      continue;
+    }
+    if (r.arr < eom) o.cur += r.qty; else if (r.arr < eon) o.next += r.qty;
+    o.lots.push(r);
+  }
+  const sup = {};
+  for (const lot of stock.lots) {
+    const m = STOCK_SKU_MAP[lot.code]; if (!m) continue;
+    const sku = m[0];
+    const isOn = m[2] === 'ON';
+    const s = sup[sku] || (sup[sku] = { hl: m[1], ch: m[2], total: 0, hi: 0, lo: 0, near: 0, blocked: 0, lots: [] });
+    s.total += lot.qty;
+    const days = lot.exp ? Math.round((new Date(lot.exp + 'T00:00:00') - asOf) / 86400000) : 9999;
+    const limit = isOn ? STOCK_SHELF_ON : STOCK_SHELF_OFF_LO;
+    let state;
+    if (STOCK_NON_SELLABLE.has(lot.type) || m[3] === 'EXPORT') { s.blocked += lot.qty; state = 'blocked'; }
+    else if (STOCK_SHELF_EXEMPT.has(sku)) { s.hi += lot.qty; state = 'hi'; }          // 특수 SKU — 룰 면제
+    else if (isOn) { if (days >= STOCK_SHELF_ON) { s.hi += lot.qty; state = 'hi'; }
+                     else { s.near += lot.qty; state = 'near'; } }
+    else if (days >= STOCK_SHELF_OFF_HI) { s.hi += lot.qty; state = 'hi'; }           // 전 채널 출고 가능
+    else if (days >= STOCK_SHELF_OFF_LO) { s.lo += lot.qty; state = 'lo'; }           // 6개월 채널에만 가능
+    else { s.near += lot.qty; state = 'near'; }
+    s.lots.push({ exp: lot.exp, type: lot.type, qty: lot.qty, days, state, limit, isOn,
+                  exempt: STOCK_SHELF_EXEMPT.has(sku) });
+  }
+  // 수요는 On/Off를 나눠 담는다 — 합계만 보면 "어느 쪽 수요가 큰지"가 사라져
+  // 왜 쇼트인지 설명이 안 된다(재고는 하나인데 수요는 두 채널에서 온다).
+  const dem = {};
+  const add = (src, sku, f, mt, nx, hi, lo, rf) => {
+    const o = dem[sku] || (dem[sku] = { on: 0, off: 0, mtd: 0, next: 0, rofo: 0, hi: 0, lo: 0 });
+    o[src] += f; o.mtd += mt; o.next += nx; o.hi += hi || 0; o.lo += lo || 0; o.rofo += rf || 0;
+  };
+  const i = (_stockFcstMonth() || 7) - 1;
+  // On은 지역별 sku_detail이 따로 있다 — 드릴다운용으로 SKU별 지역 FCST를 모은다
+  const onByRegion = {};
+  for (const rg in (_stockSnap().sku_detail || {})) {
+    if (rg === 'On Trade Total') continue;
+    for (const b of (_stockSnap().sku_detail[rg] || [])) {
+      for (const sk of (b.skus || [])) {
+        const v = Math.max((sk.data || {}).this_week_fcst || 0, 0);
+        if (!v) continue;
+        (onByRegion[sk.sku] || (onByRegion[sk.sku] = {}))[rg] = (onByRegion[sk.sku][rg] || 0) + v;
+      }
+    }
+  }
+  for (const b of ((_stockSnap().sku_detail || {})['On Trade Total'] || [])) {
+    for (const s of (b.skus || [])) {
+      const d = s.data || {};
+      // On-Trade 수요는 ON 규격(3개월) — 7개월 제한을 받지 않으므로 전부 저기준 몫
+      const fOn = Math.max(d.this_week_fcst || 0, 0);
+      const rm  = d.rofo_monthly || [];
+      add('on', s.sku, fOn, Math.max(d.mtd || 0, 0),
+          Math.max(rm[i + 1] || 0, 0), 0, fOn, Math.max(rm[i] || 0, 0));
+    }
+  }
+  for (const sku in (offDem || {}))
+    add('off', sku, offDem[sku].fcst, offDem[sku].mtd, offDem[sku].next,
+        offDem[sku].fcstHi, offDem[sku].fcstLo, offDem[sku].rofo);
+
+  const rows = [];
+  for (const sku in Object.assign({}, sup, inb)) {      // 재고 0이어도 입고 예정이 있으면 보여준다
+    if (STOCK_DELISTED.has(sku)) continue;
+    if (!sup[sku]) { const any = inb[sku].lots[0] || inb[sku].pendLots[0] || {};
+      sup[sku] = { hl: any.hl || 0.0792, ch: any.ch || 'OFF',
+                   total: 0, hi: 0, lo: 0, near: 0, blocked: 0, lots: [] }; }
+    const s = sup[sku], d = dem[sku] || { on: 0, off: 0, mtd: 0, next: 0, rofo: 0, hi: 0, lo: 0 };
+    const fcst = d.on + d.off;
+    const rr   = d.mtd / elapsed * dim;          // MTD 런레이트를 월 환산
+    const rofo = d.rofo || 0;                    // 당월 RoFo
+    // 셋 중 최대. 쇼트가 나면 FCST뿐 아니라 MTD도 눌려(없어서 못 판 물량은 실적에 안 잡힌다)
+    // 런레이트까지 같이 낮아진다. RoFo는 월 단위로 미리 잡혀 주간 FCST와 독립이라 하한이 된다.
+    const use  = Math.max(fcst, rr, rofo);
+    let basis = 'fcst';
+    if (rr > fcst) basis = 'rr';
+    if (rofo > Math.max(fcst, rr)) basis = 'rofo';
+    const rest = Math.max(use - d.mtd, 0);       // 당월 남은 수요
+    // 잔여 180~209일 재고(lo)는 6개월 채널에만 나간다. 그 채널 수요를 넘는 몫은
+    // 재고가 있어도 갈 곳이 없으므로 가용에서 뺀다(=제한 잉여).
+    const pend  = (inb[sku] && inb[sku].pend) || 0;       // 창고 입고 완료·통관 대기(재고 반영분 제외)
+    const pendM = (inb[sku] && inb[sku].matched) || 0;   // 이미 재고에 있어 제외한 몫(표시용)
+    const inCur = (inb[sku] && inb[sku].cur) || 0;        // 당월 잔여기간 통관 예정
+    const inNext = (inb[sku] && inb[sku].next) || 0;      // 익월 통관 예정
+    const loShare = fcst ? use * (d.lo / fcst) : use;      // 채택수요 중 6개월 채널 몫
+    const loUse   = Math.min(s.lo, loShare);
+    const avail   = s.hi + loUse;
+    const loIdle  = s.lo - loUse;                          // 7개월 채널에 못 나가 남는 물량
+    // Days는 '지금 당장 출고 가능한 일수'라 가용재고만 본다.
+    // 등급(주의/정상)은 통관대기를 감안한다 — 창고에 있고 통관만 남았으므로.
+    const cover = use ? (avail + pend) / use : null;
+    rows.push({
+      sku, hl: s.hl, ch: s.ch, avail, near: s.near, blocked: s.blocked, total: s.total,
+      byRegion: onByRegion[sku] || {},
+      byCh: (offDem && offDem[sku] && offDem[sku].byCh) || {},
+      byAcct: (offDem && offDem[sku] && offDem[sku].byAcct) || {},
+      hi: s.hi, lo: s.lo, loIdle, loShare,
+      lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
+      fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, rofo, basis,
+      use, rest, cover, gap: Math.max(rest - avail - pend - inCur, 0),
+      pend, pendM, inCur, inNext,
+      inLots: (inb[sku] && inb[sku].lots) || [], pendLots: (inb[sku] && inb[sku].pendLots) || [],
+      days: use ? avail / (use / dim) : null,
+      // use=0 은 FCST에도 실적에도 안 잡힌 SKU(행사 반입 등). 정상이 아니라 '판정 불가'다.
+      // 재고로는 모자라도 당월 입고로 덮이면 '입고대기' — 지금 조치할 쇼트와 구분한다.
+      status: !use ? 'nofcst'
+        : rest > avail + pend + inCur ? 'short'
+        : rest > avail ? 'incoming'
+        : (cover < 1) ? 'watch' : 'ok'
+    });
+  }
+  rows.sort((a, b) =>
+    (a.ch === STOCK_PRIMARY_CH ? 0 : 1) - (b.ch === STOCK_PRIMARY_CH ? 0 : 1)
+    || (a.status === 'nofcst') - (b.status === 'nofcst')
+    || (a.days == null) - (b.days == null) || (a.days - b.days));
+  return { rows, elapsed, dim };
+}
+
+// ── 슬라이드 렌더 ──────────────────────────────────────────────────────────────
+async function renderSumStock() {
+  const el = document.getElementById('sum-stock-card');
+  if (!el) return;
+  try { await _stockLoadSnap(); }
+  catch (e) {
+    console.warn('On 스냅샷 로드 실패:', e);
+    el.innerHTML = '<div style="color:#fbbf24;font-size:13px;padding:8px 0;">재고 데이터를 불러오지 못했습니다.</div>';
+    return;
+  }
+  const stock = _stockSnap().stock;
+  if (!stock || !stock.lots || !stock.lots.length) {
+    el.innerHTML = '<div style="color:rgba(255,255,255,.55);font-size:13px;padding:8px 0;">'
+      + '재고 파일이 아직 올라오지 않았습니다. <strong>On 대시보드</strong>의 Data Update 탭에서 <strong>Daily stock</strong> 파일을 업로드하세요.</div>';
+    return;
+  }
+  const offDem = _stockOffDemand();
+  const inbound = _stockSnap().inbound;
+  const hasInb  = !!(inbound && inbound.rows && inbound.rows.length);
+  const staleInb = hasInb && (inbound.v || 1) < STOCK_IN_SCHEMA;   // 구 파서로 저장된 스냅샷
+  const { rows, elapsed: elapsedDays, dim: daysInMonth } = _stockCompute(stock, offDem, inbound);
+  const nS = rows.filter(r => r.status === 'short').length;
+  const nW = rows.filter(r => r.status === 'watch').length;
+  const nO = rows.filter(r => r.status === 'ok').length;
+  const nN = rows.filter(r => r.status === 'nofcst').length;
+  const nI = rows.filter(r => r.status === 'incoming').length;
+  const C = { short: '#f87171', watch: '#fbbf24', ok: '#4ade80', incoming: '#38bdf8', nofcst: 'rgba(255,255,255,.35)' };
+  const fD = v => (v == null || !isFinite(v)) ? '—'
+    : Math.round(v).toLocaleString('ko-KR') + '<span style="color:rgba(255,255,255,.4);font-size:9.5px;">일</span>';
+  // 아래 값들은 전부 QTY로 계산돼 있다. 화면 단위만 여기서 갈아끼운다.
+  const UL = _stockUnit === 'hl' ? 'HL' : 'QTY';
+  const conv = (q, hl) => _stockUnit === 'hl' ? q * hl : q;
+  const nU = (q, hl) => Math.round(conv(q, hl)).toLocaleString('ko-KR');          // 숫자만
+  const fU = (q, hl) => (q == null || !isFinite(q)) ? '—'                          // 숫자 + 단위
+    : nU(q, hl) + ' <span style="color:rgba(255,255,255,.4);font-size:9.5px;">' + UL + '</span>';
+
+  const chip = (c, label, n) => '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:14px;'
+    + 'background:rgba(255,255,255,.06);border:1px solid ' + c + '55;font-size:11.5px;font-weight:600;color:#fff;">'
+    + '<span style="width:7px;height:7px;border-radius:50%;background:' + c + ';"></span>' + label + ' ' + n + '</span>';
+
+  // SKU를 고정폭으로 묶어 가용재고를 왼쪽으로 당기고, 남는 폭은 드릴다운이 붙는
+  // On/Off FCST 두 칸에 넘긴다.
+  // 공급 3단(가용·통관대기·입고예정)이 붙어 SKU는 남는 폭을 쓴다. 간격을 6px로 좁혀 폭을 번다.
+  const GC = (window.innerWidth <= 1440)
+    ? '78px minmax(0,1fr) 62px 62px 62px 70px 70px 72px 40px'
+    : '86px minmax(0,1fr) 70px 70px 70px 78px 78px 80px 46px';
+  const GAP = '6px';
+  const HD = 'font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;';
+
+  let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chip(C.short, '쇼트', nS) + (nI ? chip(C.incoming, '입고대기', nI) : '')
+    + chip(C.watch, '주의', nW) + chip(C.ok, '정상', nO)
+    + (nN ? chip(C.nofcst, 'FCST 없음', nN) : '') + '</div>'
+    + '<span style="font-size:11px;color:rgba(255,255,255,.5);display:inline-flex;align-items:center;gap:10px;">'
+    + '<span style="display:inline-flex;border:1px solid rgba(255,255,255,.18);border-radius:5px;overflow:hidden;">'
+    + ['hl', 'qty'].map(u => '<button type="button" onclick="setStockUnit(&quot;' + u + '&quot;)"'
+        + ' style="border:0;padding:2px 10px;font-size:10.5px;font-weight:700;letter-spacing:.4px;cursor:pointer;'
+        + (_stockUnit === u ? 'background:rgba(255,255,255,.16);color:#fff;' : 'background:transparent;color:rgba(255,255,255,.45);')
+        + '">' + (u === 'hl' ? 'HL' : 'QTY') + '</button>').join('')
+    + '</span>'
+    + '기준일 ' + stock.as_of
+    + (hasInb ? ' · 반입 ' + inbound.cutoff + ' 이후' : '')
+    + '</span></div>';
+
+  if (staleInb) html += '<div style="font-size:10.5px;color:#fbbf24;background:rgba(251,191,36,.08);'
+    + 'border:1px solid rgba(251,191,36,.25);border-radius:5px;padding:6px 10px;margin-bottom:8px;line-height:1.6;">'
+    + '입고 데이터가 <strong style="font-weight:600;">구 형식으로 저장돼 있습니다</strong>(통관 반영 전 업로드분). '
+    + '창고에 들어왔지만 통관 전인 물량이 통째로 빠져 <strong style="font-weight:600;">통관대기가 0으로 나옵니다</strong>. '
+    + 'On 대시보드에서 반입일정을 다시 업로드해 주세요.</div>';
+
+  // 반입일정 미업로드 안내 — 통관대기·입고예정이 비면 쇼트가 실제보다 많이 잡힌다
+  if (!hasInb) html += '<div style="font-size:10.5px;color:#fbbf24;background:rgba(251,191,36,.08);'
+    + 'border:1px solid rgba(251,191,36,.25);border-radius:5px;padding:6px 10px;margin-bottom:8px;line-height:1.6;">'
+    + '보세 반입일정이 올라오지 않아 <strong style="font-weight:600;">통관대기·입고예정이 비어 있습니다</strong>. '
+    + '데일리스탁은 통관 완료분만 담으므로 창고에 있어도 통관 전인 물량과 도착 예정분이 판정에서 빠집니다 — '
+    + '쇼트가 실제보다 많게 나옵니다. Data Update 탭에서 '
+    + '<strong style="font-weight:600;">입고 예정 (보세 반입일정)</strong> 파일을 올려주세요(On 대시보드).</div>';
+
+  // 범례 — 각주까지 내려가야 알 수 있으면 설명이 아니다. 표 바로 위에 둔다.
+  html += '<div style="font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:8px;padding-left:2px;">'
+    + '채택수요 = 당월 FCST · <strong style="color:rgba(255,255,255,.75);font-weight:600;">런레이트</strong>'
+    + '(MTD ÷ 경과일 × 월일수) · <strong style="color:rgba(255,255,255,.75);font-weight:600;">당월 RoFo</strong> '
+    + '셋 중 <strong style="color:rgba(255,255,255,.75);font-weight:600;">가장 큰 값</strong>. '
+    + '<span style="color:#fbbf24;font-weight:700;">런</span> = 판매가 FCST보다 빠른 SKU · '
+    + '<span style="color:#fb923c;font-weight:700;">RoFo</span> = RoFo가 둘보다 큰 SKU '
+    + '(쇼트가 나면 FCST도 실적도 함께 눌리므로 RoFo를 하한으로 둔다) · '
+    + '<strong style="color:rgba(255,255,255,.75);font-weight:600;">Days</strong> = 가용재고 ÷ 일평균 수요 '
+    + '(당월 ' + daysInMonth + '일 기준 · 한 달치면 ' + daysInMonth + '일)</div>';
+
+  // 규격채널 박스 — 재고는 전국 단일 풀이지만 제품 규격(병/생 vs 캔)은 갈리므로
+  // ON/OFF를 각각 박스로 세우고 아래로 쭉 나열한다. 컬럼 헤더는 박스 안에서 sticky라
+  // 스크롤을 내려도 지금 보는 행이 어느 박스의 무슨 값인지 유지된다.
+  const CH_LABEL = { ON: 'ON · 병 · 생 · 케그', OFF: 'OFF · 캔 · 유통' };
+  const CH_COLOR = { ON: '#60a5fa', OFF: '#c084fc' };
+  const order = [STOCK_PRIMARY_CH, STOCK_PRIMARY_CH === 'ON' ? 'OFF' : 'ON'];
+
+  // 로트 상세 — 유통일자 오름차순. 임박/차단 로트에 표시를 달아 어느 물량이
+  // 왜 가용에서 빠졌는지 행을 펼치면 바로 확인된다.
+  const lotHtml = r => {
+    const LC = { hi: C.ok, lo: '#60a5fa', near: C.watch, blocked: 'rgba(255,255,255,.45)' };
+    const LG = '78px 52px minmax(0,1fr) 84px 92px';
+    let h = '<div style="padding:6px 10px 8px 10px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
+      + '<div style="display:grid;grid-template-columns:' + LG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
+      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>유통일자</span><span style="justify-self:end;">잔여</span>'
+      + '<span style="padding-left:8px;">제품유형</span><span style="justify-self:end;">수량</span>'
+      + '<span style="justify-self:end;">상태</span></div>';
+    h += r.lots.map(l => {
+      const c = LC[l.state];
+      const tag = l.state === 'near'
+        ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:700;background:rgba(251,191,36,.18);color:' + c + ';white-space:nowrap;">임박 · 출고불가</span>'
+        : l.state === 'blocked'
+        ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:600;background:rgba(255,255,255,.07);color:' + c + ';white-space:nowrap;">' + (l.type || '차단') + '</span>'
+        : l.state === 'lo'
+        ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:700;background:rgba(96,165,250,.16);color:' + c + ';white-space:nowrap;" title="CVS·HYPER·SM은 잔여 7개월(210일) 이상만 받는다">6개월 채널만</span>'
+        : '<span style="font-size:9.5px;color:' + c + ';">전 채널</span>';
+      return '<div style="display:grid;grid-template-columns:' + LG + ';gap:8px;align-items:baseline;font-size:11px;'
+        + 'line-height:1.7;padding:0 0 0 2px;' + (l.state === 'near' ? 'background:rgba(251,191,36,.05);'
+          : l.state === 'lo' ? 'background:rgba(96,165,250,.05);' : '') + '">'
+        + '<span style="color:' + (l.state === 'hi' ? '#fff' : c) + ';">' + (l.exp || '—') + '</span>'
+        + '<span style="justify-self:end;color:' + (l.state === 'near' || l.state === 'lo' ? c : 'rgba(255,255,255,.72)') + ';">' + l.days + '일</span>'
+        + '<span style="padding-left:8px;color:rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (l.type || '') + '</span>'
+        + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
+        + '<span style="justify-self:end;">' + tag + '</span></div>';
+    }).join('');
+    const lim = r.lots[0];
+    h += '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
+      + (lim && lim.exempt ? '특수 SKU — 유통기한 출고룰 면제'
+         : lim && lim.isOn ? '잔여 ' + STOCK_SHELF_ON + '일 미만은 출고 불가라 가용재고에서 제외'
+         : '잔여 ' + STOCK_SHELF_OFF_HI + '일 이상 = 전 채널 / ' + STOCK_SHELF_OFF_LO + '~'
+           + (STOCK_SHELF_OFF_HI - 1) + '일 = C&amp;C·ALSM 등 6개월 채널만 / ' + STOCK_SHELF_OFF_LO + '일 미만 = 출고 불가')
+      + ' · 총재고 ' + nU(r.total, r.hl) + ' ' + UL + ' 중 가용 ' + nU(r.avail, r.hl) + ' ' + UL
+      + (r.loIdle * r.hl >= 0.5 ? '<br><span style="color:#60a5fa;">6개월 채널 전용 ' + nU(r.lo, r.hl)
+         + ' ' + UL + ' 중 ' + nU(r.loIdle, r.hl)
+         + ' ' + UL + '은 그 채널 수요를 넘어 갈 곳이 없다 → 가용에서 제외</span>' : '')
+      + '</div></div>';
+    return h;
+  };
+
+  // On FCST → 지역별 / Off FCST → 채널별(채널 아래 거래처까지) 내역
+  const breakdown = (r, kind) => {
+    const isOn = kind === 'on';
+    const src = isOn ? r.byRegion : r.byCh;
+    const keys = Object.keys(src).sort((a, b) => src[b] - src[a]);
+    if (!keys.length) return '';
+    const tot = keys.reduce((a, k) => a + src[k], 0);
+    const accent = isOn ? '#60a5fa' : '#c084fc';
+    const BG = '112px minmax(0,1fr) 76px 44px';
+    let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
+      + '<div style="font-size:9.5px;color:' + accent + ';letter-spacing:.5px;padding:0 0 4px 2px;">'
+      + (isOn ? 'On FCST — 지역별' : 'Off FCST — 채널별') + ' · 합계 '
+      + nU(tot, r.hl) + ' ' + UL + '</div>';
+    h += keys.map(k => {
+      const v = src[k], pct = tot ? v / tot * 100 : 0;
+      // Off는 채널 아래 거래처까지 한 줄로 덧붙인다(어느 거래처가 물량을 끄는지)
+      const accts = !isOn ? Object.keys(r.byAcct).filter(x => x.split('|')[0] === k)
+        .sort((a, b) => r.byAcct[b] - r.byAcct[a])
+        .map(x => x.split('|')[1] + ' ' + nU(r.byAcct[x], r.hl)).join(' · ') : '';
+      return '<div style="display:grid;grid-template-columns:' + BG + ';gap:8px;align-items:center;font-size:11px;'
+        + 'line-height:1.75;padding:0 0 0 2px;">'
+        + '<span style="color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + k + '</span>'
+        + '<div style="background:rgba(255,255,255,.06);border-radius:3px;height:5px;">'
+        + '<div style="background:' + accent + ';height:100%;border-radius:3px;width:' + pct.toFixed(1) + '%;opacity:.8;"></div></div>'
+        + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(v, r.hl) + '</span>'
+        + '<span style="justify-self:end;color:rgba(255,255,255,.65);">' + pct.toFixed(0) + '%</span>'
+        + (accts ? '<span style="grid-column:1/-1;font-size:9.5px;color:rgba(255,255,255,.35);padding:0 0 3px 6px;'
+           + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + accts + '</span>' : '')
+        + '</div>';
+    }).join('');
+    return h + '</div>';
+  };
+
+  // 입고 로트 상세. pend=true면 '통관 대기'(창고 입고 완료·미통관), false면 통관 예정분.
+  // 소비기한이 비어 있으면 룰을 걸 수 없어 그대로 표시만 한다.
+  const inboundHtml = (r, pend) => {
+    const lots = (pend ? r.pendLots : r.inLots).slice()
+      .sort((a, b) => (pend ? (a.inn || '').localeCompare(b.inn || '') : a.arr.localeCompare(b.arr)));
+    if (!lots.length) return '';
+    const col = pend ? '#a78bfa' : '#38bdf8';
+    const IG = '82px 36px minmax(0,1fr) 86px 76px';
+    let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
+      + '<div style="font-size:9.5px;color:' + col + ';letter-spacing:.5px;padding:0 0 4px 2px;">'
+      + (pend ? '통관 대기 · ' + nU(r.pend, r.hl) + ' ' + UL + ' — 창고 입고 완료, 통관 전이라 데일리스탁에 없다'
+              + (r.pendM * r.hl >= 0.5 ? ' · <span style="color:rgba(255,255,255,.5);">같은 유통기한이 재고에 있어 '
+                 + nU(r.pendM, r.hl) + ' ' + UL + ' 제외(이미 반영)</span>' : '')
+              : '통관 예정 · 당월 잔여 ' + nU(r.inCur, r.hl) + ' ' + UL + ' / 익월 ' + nU(r.inNext, r.hl) + ' ' + UL)
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
+      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>' + (pend ? '입고일' : '통관예정') + '</span><span></span>'
+      + '<span>소비기한</span><span style="justify-self:end;">수량</span>'
+      + '<span style="justify-self:end;">' + (pend ? '대기' : '잔여') + '</span></div>';
+    const asOf = stock.as_of;
+    h += lots.map(l => {
+      const base = pend ? (l.inn || l.arr) : l.arr;
+      const rem  = l.exp ? Math.round((new Date(l.exp + 'T00:00:00') - new Date(base + 'T00:00:00')) / 86400000) : null;
+      const wait = pend ? Math.round((new Date(asOf + 'T00:00:00') - new Date(base + 'T00:00:00')) / 86400000) : null;
+      const warn = pend ? wait > 30 : rem != null && rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI);
+      return '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;align-items:baseline;font-size:11px;'
+        + 'line-height:1.7;padding:0 0 0 2px;">'
+        + '<span style="color:#fff;">' + base + '</span>'
+        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (pend ? '' : (l.est ? '추정' : '확정')) + '</span>'
+        + '<span style="color:rgba(255,255,255,.75);">' + (l.exp || '<span style="color:#fbbf24;">미상</span>') + '</span>'
+        + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
+        + '<span style="justify-self:end;color:' + (warn ? C.watch : 'rgba(255,255,255,.72)') + ';">'
+        + (pend ? wait + '일' : rem == null ? '—' : rem + '일') + '</span></div>';
+    }).join('');
+    h += '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
+      + (pend ? '통관되면 바로 가용재고가 된다. 반입일정에 통관일자가 비어 있어도 같은 제품코드·소비기한 '
+              + '로트가 데일리스탁에 있으면 이미 통관된 것으로 보고 제외한다(엑셀 미기입 건).'
+              : '통관일자가 없으면 추정: 여주입고일 + ' + STOCK_IN_LEAD_IN + '일, 입고일도 없으면 ETA + '
+                + STOCK_IN_LEAD_ETA + '일(과거 리드타임 중앙값). 소비기한 미상은 전량 가용으로 본다.')
+      + '</div></div>';
+    return h;
+  };
+
+  const rowHtml = (r, i) => {
+    const c = C[r.status];
+    const badge = r.status === 'short'
+      ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.18);color:' + c + ';white-space:nowrap;">−'
+        + nU(r.gap, r.hl) + ' ' + UL + '</span>'
+      : r.status === 'watch'
+      ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>'
+      : r.status === 'incoming'
+      ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(56,189,248,.16);color:' + c + ';white-space:nowrap;" title="재고로는 모자라지만 당월 입고 예정으로 덮인다">입고대기</span>'
+      : r.status === 'nofcst'
+      ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(255,255,255,.06);color:' + c + ';white-space:nowrap;" title="FCST·실적에 잡히지 않은 SKU — 판정 근거가 없어 비워둔다. FCST가 반영되면 자동으로 채워진다.">FCST 없음</span>'
+      : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(74,222,128,.12);color:' + c + ';">정상</span>';
+    // FCST가 아닌 기준이 채택된 경우 표시 — FCST만 믿으면 이 물량이 안 보인다
+    const useMark = r.basis === 'rr'
+      ? '<span style="color:#fbbf24;font-size:9px;margin-left:3px;font-weight:700;"'
+        + ' title="실제 판매 속도(런레이트)가 FCST보다 빨라 런레이트를 수요로 채택">런</span>'
+      : r.basis === 'rofo'
+      ? '<span style="color:#fb923c;font-size:9px;margin-left:3px;font-weight:700;"'
+        + ' title="당월 RoFo가 FCST·런레이트보다 커서 RoFo를 수요로 채택 — 쇼트로 FCST와 실적이 함께 눌렸을 수 있다">RoFo</span>'
+      : '';
+    // 수요 근거가 없으면 숫자를 만들어 보여주지 않는다(0 HL은 "0으로 예측했다"는 뜻이 되어버린다)
+    const none = r.status === 'nofcst';
+    const dash = '<span style="color:rgba(255,255,255,.35);">—</span>';
+    const dim  = '#fff';
+    const AC = { short: C.short, incoming: C.incoming, watch: C.watch };
+    const acc = AC[r.status];                       // 위험 등급 색 (정상·판정불가는 없음)
+    const tint = r.status === 'short' ? 'background:rgba(248,113,113,.07);'
+               : r.status === 'incoming' ? 'background:rgba(56,189,248,.06);'
+               : r.status === 'watch' ? 'background:rgba(251,191,36,.05);' : '';
+    const lid = '_stocklot' + i;
+    // FCST 셀 — 하위 내역이 있으면 눌러서 펼친다(점선 밑줄로 클릭 가능 표시)
+    const drill = (q, hl, n, id, col) => '<span style="justify-self:end;white-space:nowrap;'
+      + (n ? 'cursor:pointer;border-bottom:1px dotted rgba(255,255,255,.45);color:' + (col || '#fff') + ';"'
+           + ' onclick="_stockToggleLot(&quot;' + id + '&quot;, event)" title="클릭 — 내역 펼치기'
+           : 'color:rgba(255,255,255,.8);"') + '">'
+      + (q == null ? dash : fU(q, hl))
+      + (n ? '<span id="' + id + '-c" style="color:rgba(255,255,255,.3);font-size:9px;margin-left:3px;">▸</span>' : '')
+      + '</span>';
+    // 임박 물량이 있으면 SKU 옆에 표시 — 펼치지 않아도 "가용이 왜 적은지" 단서가 보인다
+    const nearTag = (r.near * r.hl >= 0.5
+      ? '<span style="margin-left:6px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(251,191,36,.16);color:' + C.watch + ';white-space:nowrap;">임박 '
+        + nU(r.near, r.hl) + '</span>' : '')
+      + (r.loIdle * r.hl >= 0.5
+      ? '<span style="margin-left:5px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(96,165,250,.16);color:#60a5fa;white-space:nowrap;"'
+        + ' title="잔여 7개월 미만이라 CVS·HYPER·SM에 못 나가고, 6개월 채널 수요도 넘어선 물량">채널제한 '
+        + nU(r.loIdle, r.hl) + '</span>' : '');
+    return '<div onclick="_stockToggleLot(&quot;' + lid + '&quot;, event)" title="클릭 — 유통기한별 재고 펼치기"'
+      + ' style="display:grid;grid-template-columns:' + GC + ';gap:' + GAP + ';align-items:baseline;font-size:12px;cursor:pointer;'
+      + 'line-height:1.8;padding:3px 10px 3px 7px;border-top:1px solid rgba(255,255,255,.06);' + tint
+      + 'border-left:3px solid ' + (acc || 'transparent') + ';">'
+      + '<span>' + badge + '</span>'
+      + '<span style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+      + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
+      + r.sku + nearTag + '</span>'
+      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fU(r.avail, r.hl) + '</span>'
+      + (hasInb ? drill(r.pend, r.hl, r.pendLots.length, lid + 'pd', '#a78bfa')
+                : '<span style="justify-self:end;color:rgba(255,255,255,.35);">—</span>')
+      + (hasInb ? drill(r.inCur, r.hl, r.inLots.length, lid + 'in', '#38bdf8')
+                : '<span style="justify-self:end;color:rgba(255,255,255,.25);">—</span>')
+      + drill(none ? null : r.fcstOn, r.hl, Object.keys(r.byRegion).length, lid + 'on')
+      + drill(none ? null : r.fcstOff, r.hl, Object.keys(r.byCh).length, lid + 'off')
+      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fU(r.use, r.hl) + useMark) + '</span>'
+      + '<span style="justify-self:end;color:' + (none ? 'rgba(255,255,255,.25)' : c) + ';font-weight:700;white-space:nowrap;">' + (none ? '—' : fD(r.days)) + '</span>'
+      + '</div>'
+      + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>'
+      + '<div id="' + lid + 'on" style="display:none;">' + breakdown(r, 'on') + '</div>'
+      + '<div id="' + lid + 'off" style="display:none;">' + breakdown(r, 'off') + '</div>'
+      + '<div id="' + lid + 'in" style="display:none;">' + inboundHtml(r, false) + '</div>'
+      + '<div id="' + lid + 'pd" style="display:none;">' + inboundHtml(r, true) + '</div>';
+  };
+
+  // 안쪽에 스크롤 박스를 두지 않는다. 카드는 내용만큼 늘어나고 스크롤은 .kn-slide가 맡는다.
+  // (중첩 스크롤이면 어디를 굴려야 할지 모호하고, 박스 안 목록이 잘려 보인다)
+  for (const ch of order) {
+    const grp = rows.filter(r => r.ch === ch);
+    if (!grp.length) continue;
+    const nsG = grp.filter(r => r.status === 'short').length;
+    const nwG = grp.filter(r => r.status === 'watch').length;
+    const nnG = grp.filter(r => r.status === 'nofcst').length;
+    const isPrimary = ch === STOCK_PRIMARY_CH;
+    const col = CH_COLOR[ch];
+    html += '<div style="border:1px solid ' + col + (isPrimary ? '44' : '26') + ';border-radius:6px;'
+      + 'background:rgba(0,0,0,.22);margin-bottom:' + (ch === order[0] ? '12px' : '0') + ';">'
+      // 박스 헤더(규격 라벨 + 컬럼명)를 하나로 묶어 sticky — 아래로 내려도 무슨 박스의 무슨 값인지 유지
+      + '<div style="position:sticky;top:0;z-index:2;background:rgba(10,12,16,.97);border-radius:5px 5px 0 0;'
+      + '-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid ' + col + '44;">'
+      + '<div style="display:flex;align-items:center;gap:9px;padding:7px 10px 5px;">'
+      + '<span style="padding:2px 9px;border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.5px;'
+      + 'background:' + col + (isPrimary ? '2e' : '18') + ';color:' + col + ';border:1px solid ' + col + (isPrimary ? '66' : '33') + ';">'
+      + CH_LABEL[ch] + '</span>'
+      + '<span style="font-size:10.5px;color:rgba(255,255,255,.7);">' + grp.length + '개 SKU'
+      + (nsG ? ' · <span style="color:' + C.short + ';">쇼트 ' + nsG + '</span>' : '')
+      + (nwG ? ' · <span style="color:' + C.watch + ';">주의 ' + nwG + '</span>' : '')
+      + (!nsG && !nwG ? ' · <span style="color:' + C.ok + ';">이상 없음</span>' : '')
+      + (nnG ? ' · <span style="color:rgba(255,255,255,.4);">FCST 없음 ' + nnG + '</span>' : '') + '</span>'
+      + (isPrimary ? '' : '<span style="font-size:10px;color:rgba(255,255,255,.32);margin-left:auto;">참고</span>')
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:' + GC + ';gap:' + GAP + ';' + HD + 'padding:0 10px 6px 10px;">'
+      + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
+      + '<span style="justify-self:end;" title="여주창고 입고 완료·통관 미완 — 데일리스탁에 없다">통관대기</span>'
+      + '<span style="justify-self:end;" title="당월 잔여기간 통관 예정분">입고예정</span>'
+      + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
+      + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">Days</span></div>'
+      + '</div>'
+      + grp.map(r => rowHtml(r, rows.indexOf(r))).join('')
+      + '</div>';
+  }
+
+  // ── 산출 과정 — 가장 위험한 SKU 하나를 끝까지 풀어 보여준다 ──────────────────
+  // 임박·보류 차감이 실제로 일어나는 SKU를 우선 고른다 — 차감이 0이면 STEP 1이 설명이 안 된다.
+  const risky = rows.filter(r => r.status !== 'ok');
+  const cut = r => (r.near + r.blocked + r.loIdle) * r.hl;
+  const ex = risky.reduce((a, r) => (cut(r) > cut(a) ? r : a), risky[0]) || rows[0];
+  const stepBox = (n, title, body) =>
+    '<div style="flex:1 1 190px;min-width:0;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.09);'
+    + 'border-left:2px solid rgba(255,255,255,.28);padding:8px 11px;">'
+    + '<div style="font-size:9.5px;color:rgba(255,255,255,.45);letter-spacing:.6px;margin-bottom:3px;">STEP ' + n + ' · ' + title + '</div>'
+    + '<div style="font-size:11px;color:rgba(255,255,255,.88);line-height:1.6;">' + body + '</div></div>';
+  const W = v => nU(v, ex.hl);
+  const wht = t => '<span style="color:#fff;font-weight:600;">' + t + '</span>';
+
+  if (ex) {
+    html += '<div style="margin-top:14px;padding-top:11px;border-top:1px solid rgba(255,255,255,.16);">'
+      + '<div style="' + HD + 'margin-bottom:8px;">산출 과정 — <span style="text-transform:none;">' + ex.sku + '</span> <span style="color:rgba(255,255,255,.4);font-weight:400;text-transform:none;letter-spacing:0;">(단위 ' + UL + ')</span></div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      + stepBox(1, '가용재고', '총재고 ' + W(ex.total) + ' − 유통기한 임박 ' + W(ex.near)
+          + ' − 출고보류·수출향 ' + W(ex.blocked)
+          + (ex.loIdle * ex.hl >= 0.5 ? ' − 채널제한 ' + W(ex.loIdle) : '')
+          + ' = ' + wht(W(ex.avail)))
+      + stepBox(2, '수요 합산', 'On FCST ' + W(ex.fcstOn) + ' + Off FCST ' + W(ex.fcstOff)
+          + ' = ' + wht(W(ex.fcst)))
+      + stepBox(3, '수요 기준 대조', '런레이트 ' + W(ex.rr) + ' (MTD ' + W(ex.mtd) + ' ÷ ' + elapsedDays + '일 × ' + daysInMonth + '일)'
+          + '<br>RoFo ' + W(ex.rofo) + ' · FCST ' + W(ex.fcst)
+          + '<br>→ 최대 채택 ' + wht(W(ex.use))
+          + (ex.basis === 'rr' ? ' <span style="color:#fbbf24;">(런레이트)</span>'
+             : ex.basis === 'rofo' ? ' <span style="color:#fb923c;">(RoFo)</span>'
+             : ' <span style="color:rgba(255,255,255,.5);">(FCST)</span>'))
+      + stepBox(4, '소진일수 · 판정', '가용 ' + W(ex.avail) + ' ÷ 일평균 ' + W(ex.use / daysInMonth)
+          + ' = ' + wht(ex.days == null ? '—' : Math.round(ex.days).toLocaleString('ko-KR') + '일')
+          + '<br>잔여수요 ' + W(ex.rest) + (ex.status === 'short' ? ' > ' : ' ≤ ') + '가용 ' + W(ex.avail)
+          + ' → <span style="color:' + C[ex.status] + ';font-weight:700;">'
+          + (ex.status === 'short' ? '쇼트' : ex.status === 'watch' ? '주의' : '정상') + '</span>')
+      + '</div></div>';
+  }
+
+  html += '<div style="margin-top:10px;font-size:10.5px;color:rgba(255,255,255,.4);line-height:1.65;padding-left:4px;">'
+    + '재고는 전국 단일 풀이라 채널·지역으로 나누지 않고 SKU 단위로 본다. 수요는 On+Off 합산 — 한쪽만 보면 상대 채널 수요가 빠져 안전해 보인다. · '
+    + '출고 가능 잔여 유통기한 — OFF: CVS·HYPER·SM 210일(7개월), C&amp;C·ALSM·기타 180일(6개월) / ON(병·생·케그) 90일. '
+    + '잔여 180~209일 재고는 6개월 채널에만 나가므로 그 채널 수요를 넘는 몫은 가용에서 제외한다. 설화 1L·618ml은 특수 SKU라 면제 · '
+    + '주의 = 당월(' + daysInMonth + '일)을 못 넘기는 SKU · '
+    + '<span style="color:rgba(255,255,255,.55);">FCST 없음</span> = FCST·실적 어디에도 안 잡힌 SKU(행사 반입 등). '
+    + '근거가 없어 비워두며 FCST가 반영되면 자동으로 채워진다 · '
+    + 'DF(면세)는 재고를 별도 운영해 데일리스탁에 안 잡히므로 수요에서 제외 · '
+    + '데일리스탁은 <strong style="color:rgba(255,255,255,.6);font-weight:600;">통관 완료분</strong>만 담는다. '
+    + '<span style="color:#a78bfa;">통관대기</span>는 창고에 있으나 통관 전이라 재고에 안 잡히는 물량, '
+    + '<span style="color:#38bdf8;">입고예정</span>은 당월 잔여기간 통관 예정분 · '
+    + 'Days는 지금 당장 출고 가능한 일수라 가용재고만 본다. 등급은 통관대기·입고예정까지 감안한다 — '
+    + '<span style="color:#38bdf8;">입고대기</span>는 재고로는 모자라나 당월 입고로 덮이는 SKU, '
+    + '<span style="color:#f87171;">쇼트</span>는 입고까지 더해도 모자란 SKU</div>';
+  el.innerHTML = html;
+}
+
+
+
 function _offNormalizeBrandName(s){
   const b = (s.brand || '').trim();
   if(b) return b;
