@@ -3834,9 +3834,14 @@ async function _stockOffDemand() {
     const sku = (window.OffIngest ? OffIngest.normalizeOffSku(r.sku, r.acct) : r.sku);
     const f = hl[sku];
     if (!f) continue;                                  // 재고에 없는 SKU는 판정 대상 아님
-    const o = out[sku] || (out[sku] = { fcst: 0, mtd: 0, next: 0, fcstHi: 0, fcstLo: 0 });
+    const o = out[sku] || (out[sku] = { fcst: 0, mtd: 0, next: 0, fcstHi: 0, fcstLo: 0, byCh: {}, byAcct: {} });
     const v = Math.max(arr(r, 'fcst_m')[i] || 0, 0) / f;
     o.fcst += v;
+    if (v) {                                   // 드릴다운용 — 채널 / 채널·거래처 단위 보관
+      o.byCh[r.ch] = (o.byCh[r.ch] || 0) + v;
+      const k = r.ch + '|' + r.acct;
+      o.byAcct[k] = (o.byAcct[k] || 0) + v;
+    }
     // 채널이 요구하는 잔여 유통기한으로 수요를 갈라 둔다 — 어느 재고가 어디로 갈 수 있는지 판정에 쓴다
     if ((STOCK_SHELF_OFF_CH[r.ch] || STOCK_SHELF_OFF_LO) >= STOCK_SHELF_OFF_HI) o.fcstHi += v; else o.fcstLo += v;
     o.mtd  += Math.max(arr(r, 'act_q_m')[i] || 0, 0);
@@ -3882,6 +3887,18 @@ function _stockCompute(stock, offDem) {
     o[src] += f; o.mtd += mt; o.next += nx; o.hi += hi || 0; o.lo += lo || 0;
   };
   const i = (_upGetFcstMonth() || 7) - 1;
+  // On은 지역별 sku_detail이 따로 있다 — 드릴다운용으로 SKU별 지역 FCST를 모은다
+  const onByRegion = {};
+  for (const rg in (DASHBOARD_DATA.sku_detail || {})) {
+    if (rg === 'On Trade Total') continue;
+    for (const b of (DASHBOARD_DATA.sku_detail[rg] || [])) {
+      for (const sk of (b.skus || [])) {
+        const v = Math.max((sk.data || {}).this_week_fcst || 0, 0);
+        if (!v) continue;
+        (onByRegion[sk.sku] || (onByRegion[sk.sku] = {}))[rg] = (onByRegion[sk.sku][rg] || 0) + v;
+      }
+    }
+  }
   for (const b of ((DASHBOARD_DATA.sku_detail || {})['On Trade Total'] || [])) {
     for (const s of (b.skus || [])) {
       const d = s.data || {};
@@ -3911,6 +3928,9 @@ function _stockCompute(stock, offDem) {
     const cover = use ? avail / use : null;
     rows.push({
       sku, hl: s.hl, ch: s.ch, avail, near: s.near, blocked: s.blocked, total: s.total,
+      byRegion: onByRegion[sku] || {},
+      byCh: (offDem && offDem[sku] && offDem[sku].byCh) || {},
+      byAcct: (offDem && offDem[sku] && offDem[sku].byAcct) || {},
       hi: s.hi, lo: s.lo, loIdle, loShare,
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, basis: rr > fcst ? 'rr' : 'fcst',
@@ -3966,9 +3986,11 @@ async function renderSumStock() {
     + 'background:rgba(255,255,255,.06);border:1px solid ' + c + '55;font-size:11.5px;font-weight:600;color:#fff;">'
     + '<span style="width:7px;height:7px;border-radius:50%;background:' + c + ';"></span>' + label + ' ' + n + '</span>';
 
+  // SKU를 고정폭으로 묶어 가용재고를 왼쪽으로 당기고, 남는 폭은 드릴다운이 붙는
+  // On/Off FCST 두 칸에 넘긴다.
   const GC = (window.innerWidth <= 1440)
-    ? '84px minmax(0,1fr) 74px 66px 66px 82px 48px'
-    : '96px minmax(0,1fr) 88px 78px 78px 96px 56px';
+    ? '84px 158px 76px minmax(0,1fr) minmax(0,1fr) 84px 48px'
+    : '96px 178px 90px minmax(0,1fr) minmax(0,1fr) 98px 56px';
   const HD = 'font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;';
 
   let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
@@ -4027,6 +4049,39 @@ async function renderSumStock() {
     return h;
   };
 
+  // On FCST → 지역별 / Off FCST → 채널별(채널 아래 거래처까지) 내역
+  const breakdown = (r, kind) => {
+    const isOn = kind === 'on';
+    const src = isOn ? r.byRegion : r.byCh;
+    const keys = Object.keys(src).sort((a, b) => src[b] - src[a]);
+    if (!keys.length) return '';
+    const tot = keys.reduce((a, k) => a + src[k], 0);
+    const accent = isOn ? '#60a5fa' : '#c084fc';
+    const BG = '112px minmax(0,1fr) 76px 44px';
+    let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
+      + '<div style="font-size:9.5px;color:' + accent + ';letter-spacing:.5px;padding:0 0 4px 2px;">'
+      + (isOn ? 'On FCST — 지역별' : 'Off FCST — 채널별') + ' · 합계 '
+      + Math.round(tot * r.hl).toLocaleString('ko-KR') + ' HL</div>';
+    h += keys.map(k => {
+      const v = src[k], pct = tot ? v / tot * 100 : 0;
+      // Off는 채널 아래 거래처까지 한 줄로 덧붙인다(어느 거래처가 물량을 끄는지)
+      const accts = !isOn ? Object.keys(r.byAcct).filter(x => x.split('|')[0] === k)
+        .sort((a, b) => r.byAcct[b] - r.byAcct[a])
+        .map(x => x.split('|')[1] + ' ' + Math.round(r.byAcct[x] * r.hl).toLocaleString('ko-KR')).join(' · ') : '';
+      return '<div style="display:grid;grid-template-columns:' + BG + ';gap:8px;align-items:center;font-size:11px;'
+        + 'line-height:1.75;padding:0 0 0 2px;">'
+        + '<span style="color:rgba(255,255,255,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + k + '</span>'
+        + '<div style="background:rgba(255,255,255,.06);border-radius:3px;height:5px;">'
+        + '<div style="background:' + accent + ';height:100%;border-radius:3px;width:' + pct.toFixed(1) + '%;opacity:.8;"></div></div>'
+        + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fHL(v * r.hl) + '</span>'
+        + '<span style="justify-self:end;color:rgba(255,255,255,.4);">' + pct.toFixed(0) + '%</span>'
+        + (accts ? '<span style="grid-column:1/-1;font-size:9.5px;color:rgba(255,255,255,.35);padding:0 0 3px 6px;'
+           + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + accts + '</span>' : '')
+        + '</div>';
+    }).join('');
+    return h + '</div>';
+  };
+
   const rowHtml = (r, i) => {
     const c = C[r.status];
     const badge = r.status === 'short'
@@ -4046,6 +4101,14 @@ async function renderSumStock() {
     const dash = '<span style="color:rgba(255,255,255,.25);">—</span>';
     const dim  = r.status === 'ok' || none ? 'rgba(255,255,255,.72)' : '#fff';
     const lid = '_stocklot' + i;
+    // FCST 셀 — 하위 내역이 있으면 눌러서 펼친다(점선 밑줄로 클릭 가능 표시)
+    const drill = (v, n, id) => '<span style="justify-self:end;white-space:nowrap;'
+      + (n ? 'cursor:pointer;border-bottom:1px dotted rgba(255,255,255,.3);color:rgba(255,255,255,.72);"'
+           + ' onclick="_stockToggleLot(&quot;' + id + '&quot;, event)" title="클릭 — 내역 펼치기'
+           : 'color:rgba(255,255,255,.55);"') + '">'
+      + (v == null ? dash : fHL(v))
+      + (n ? '<span id="' + id + '-c" style="color:rgba(255,255,255,.3);font-size:9px;margin-left:3px;">▸</span>' : '')
+      + '</span>';
     // 임박 물량이 있으면 SKU 옆에 표시 — 펼치지 않아도 "가용이 왜 적은지" 단서가 보인다
     const nearTag = (r.near * r.hl >= 0.5
       ? '<span style="margin-left:6px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(251,191,36,.16);color:' + C.watch + ';white-space:nowrap;">임박 '
@@ -4062,12 +4125,14 @@ async function renderSumStock() {
       + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
       + r.sku + nearTag + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
-      + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + (none ? dash : fHL(r.fcstOn * r.hl)) + '</span>'
-      + '<span style="justify-self:end;color:rgba(255,255,255,.55);white-space:nowrap;">' + (none ? dash : fHL(r.fcstOff * r.hl)) + '</span>'
+      + drill(none ? null : r.fcstOn * r.hl, Object.keys(r.byRegion).length, lid + 'on')
+      + drill(none ? null : r.fcstOff * r.hl, Object.keys(r.byCh).length, lid + 'off')
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fHL(r.use * r.hl) + useMark) + '</span>'
       + '<span style="justify-self:end;color:' + (none ? 'rgba(255,255,255,.25)' : c) + ';font-weight:700;white-space:nowrap;">' + (none ? '—' : fD(r.days)) + '</span>'
       + '</div>'
-      + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>';
+      + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>'
+      + '<div id="' + lid + 'on" style="display:none;">' + breakdown(r, 'on') + '</div>'
+      + '<div id="' + lid + 'off" style="display:none;">' + breakdown(r, 'off') + '</div>';
   };
 
   // 안쪽에 스크롤 박스를 두지 않는다. 카드는 내용만큼 늘어나고 스크롤은 .kn-slide가 맡는다.
