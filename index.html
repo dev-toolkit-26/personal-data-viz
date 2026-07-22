@@ -3888,10 +3888,18 @@ function _stockCompute(stock, offDem, inbound) {
   // 입고 예정 — 당월 잔여기간 / 익월로 나눠 담고, 로트는 드릴다운용으로 보관
   const eom  = new Date(asOf.getFullYear(), asOf.getMonth() + 1, 1).toISOString().slice(0, 10);
   const eon  = new Date(asOf.getFullYear(), asOf.getMonth() + 2, 1).toISOString().slice(0, 10);
+  // 통관일자가 비어 있어도 실제로는 통관돼 재고에 들어간 건이 많다(엑셀 미기입).
+  // 같은 제품코드·소비기한 로트가 데일리스탁에 있으면 이미 반영된 것으로 보고 제외한다
+  // — 안 그러면 통관대기가 재고와 이중 계상된다.
+  const inStock = new Set(stock.lots.map(l => l.code + '|' + l.exp));
   const inb  = {};
   for (const r of ((inbound && inbound.rows) || [])) {
-    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, cur: 0, next: 0, lots: [], pendLots: [] });
-    if (r.pending) { o.pend += r.qty; o.pendLots.push(r); continue; }   // 입고 완료·통관 대기
+    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, matched: 0, cur: 0, next: 0, lots: [], pendLots: [] });
+    if (r.pending) {                                   // 입고 완료·통관 대기
+      if (r.exp && inStock.has(r.code + '|' + r.exp)) { o.matched += r.qty; continue; }
+      o.pend += r.qty; o.pendLots.push(r);
+      continue;
+    }
     if (r.arr < eom) o.cur += r.qty; else if (r.arr < eon) o.next += r.qty;
     o.lots.push(r);
   }
@@ -3968,14 +3976,17 @@ function _stockCompute(stock, offDem, inbound) {
     const rest = Math.max(use - d.mtd, 0);       // 당월 남은 수요
     // 잔여 180~209일 재고(lo)는 6개월 채널에만 나간다. 그 채널 수요를 넘는 몫은
     // 재고가 있어도 갈 곳이 없으므로 가용에서 뺀다(=제한 잉여).
-    const pend  = (inb[sku] && inb[sku].pend) || 0;        // 창고 입고 완료·통관 대기
+    const pend  = (inb[sku] && inb[sku].pend) || 0;       // 창고 입고 완료·통관 대기(재고 반영분 제외)
+    const pendM = (inb[sku] && inb[sku].matched) || 0;   // 이미 재고에 있어 제외한 몫(표시용)
     const inCur = (inb[sku] && inb[sku].cur) || 0;        // 당월 잔여기간 통관 예정
     const inNext = (inb[sku] && inb[sku].next) || 0;      // 익월 통관 예정
     const loShare = fcst ? use * (d.lo / fcst) : use;      // 채택수요 중 6개월 채널 몫
     const loUse   = Math.min(s.lo, loShare);
     const avail   = s.hi + loUse;
     const loIdle  = s.lo - loUse;                          // 7개월 채널에 못 나가 남는 물량
-    const cover = use ? avail / use : null;
+    // Days는 '지금 당장 출고 가능한 일수'라 가용재고만 본다.
+    // 등급(주의/정상)은 통관대기를 감안한다 — 창고에 있고 통관만 남았으므로.
+    const cover = use ? (avail + pend) / use : null;
     rows.push({
       sku, hl: s.hl, ch: s.ch, avail, near: s.near, blocked: s.blocked, total: s.total,
       byRegion: onByRegion[sku] || {},
@@ -3985,7 +3996,7 @@ function _stockCompute(stock, offDem, inbound) {
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, rofo, basis,
       use, rest, cover, gap: Math.max(rest - avail - pend - inCur, 0),
-      pend, inCur, inNext,
+      pend, pendM, inCur, inNext,
       inLots: (inb[sku] && inb[sku].lots) || [], pendLots: (inb[sku] && inb[sku].pendLots) || [],
       days: use ? avail / (use / dim) : null,
       // use=0 은 FCST에도 실적에도 안 잡힌 SKU(행사 반입 등). 정상이 아니라 '판정 불가'다.
@@ -4274,6 +4285,8 @@ async function renderSumStock() {
     let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
       + '<div style="font-size:9.5px;color:' + col + ';letter-spacing:.5px;padding:0 0 4px 2px;">'
       + (pend ? '통관 대기 · ' + nU(r.pend, r.hl) + ' ' + UL + ' — 창고 입고 완료, 통관 전이라 데일리스탁에 없다'
+              + (r.pendM * r.hl >= 0.5 ? ' · <span style="color:rgba(255,255,255,.5);">같은 유통기한이 재고에 있어 '
+                 + nU(r.pendM, r.hl) + ' ' + UL + ' 제외(이미 반영)</span>' : '')
               : '통관 예정 · 당월 잔여 ' + nU(r.inCur, r.hl) + ' ' + UL + ' / 익월 ' + nU(r.inNext, r.hl) + ' ' + UL)
       + '</div>'
       + '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
@@ -4296,7 +4309,8 @@ async function renderSumStock() {
         + (pend ? wait + '일' : rem == null ? '—' : rem + '일') + '</span></div>';
     }).join('');
     h += '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
-      + (pend ? '통관되면 바로 가용재고가 된다. 대기 30일 초과는 노란색 — 검사·서류 등으로 묶여 있을 수 있다.'
+      + (pend ? '통관되면 바로 가용재고가 된다. 반입일정에 통관일자가 비어 있어도 같은 제품코드·소비기한 '
+              + '로트가 데일리스탁에 있으면 이미 통관된 것으로 보고 제외한다(엑셀 미기입 건).'
               : '통관일자가 없으면 추정: 여주입고일 + ' + STOCK_IN_LEAD_IN + '일, 입고일도 없으면 ETA + '
                 + STOCK_IN_LEAD_ETA + '일(과거 리드타임 중앙값). 소비기한 미상은 전량 가용으로 본다.')
       + '</div></div>';
@@ -4359,7 +4373,7 @@ async function renderSumStock() {
       + r.sku + nearTag + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fU(r.avail, r.hl) + '</span>'
       + (hasInb ? drill(r.pend, r.hl, r.pendLots.length, lid + 'pd', '#a78bfa')
-                : '<span style="justify-self:end;color:rgba(255,255,255,.25);">—</span>')
+                : '<span style="justify-self:end;color:rgba(255,255,255,.35);">—</span>')
       + (hasInb ? drill(r.inCur, r.hl, r.inLots.length, lid + 'in', '#38bdf8')
                 : '<span style="justify-self:end;color:rgba(255,255,255,.25);">—</span>')
       + drill(none ? null : r.fcstOn, r.hl, Object.keys(r.byRegion).length, lid + 'on')
@@ -4459,7 +4473,7 @@ async function renderSumStock() {
     + '데일리스탁은 <strong style="color:rgba(255,255,255,.6);font-weight:600;">통관 완료분</strong>만 담는다. '
     + '<span style="color:#a78bfa;">통관대기</span>는 창고에 있으나 통관 전이라 재고에 안 잡히는 물량, '
     + '<span style="color:#38bdf8;">입고예정</span>은 당월 잔여기간 통관 예정분 · '
-    + 'Days는 가용재고만으로 버티는 기간(통관대기·입고 미반영). 이를 감안한 판정은 상태 배지가 한다 — '
+    + 'Days는 지금 당장 출고 가능한 일수라 가용재고만 본다. 등급은 통관대기·입고예정까지 감안한다 — '
     + '<span style="color:#38bdf8;">입고대기</span>는 재고로는 모자라나 당월 입고로 덮이는 SKU, '
     + '<span style="color:#f87171;">쇼트</span>는 입고까지 더해도 모자란 SKU</div>';
   el.innerHTML = html;
