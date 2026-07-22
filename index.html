@@ -3947,6 +3947,15 @@ function _stockCompute(stock, offDem) {
   return { rows, elapsed, dim };
 }
 
+// 표시 단위 — 'hl'(기본) | 'qty'. 재고 원본은 QTY라 QTY가 실물 감각에 맞고,
+// FCST·수요는 HL로 이야기하므로 둘 다 필요하다. 환산은 hl_factor 하나로만 한다.
+let _stockUnit = 'hl';
+function setStockUnit(u) {
+  if (_stockUnit === u) return;
+  _stockUnit = u;
+  renderSumStock();
+}
+
 // SKU 행 클릭 → 유통기한(로트)별 재고 펼치기
 function _stockToggleLot(id, ev) {
   if (ev) ev.stopPropagation();
@@ -3979,8 +3988,12 @@ async function renderSumStock() {
   const C = { short: '#f87171', watch: '#fbbf24', ok: '#4ade80', nofcst: 'rgba(255,255,255,.35)' };
   const fD = v => (v == null || !isFinite(v)) ? '—'
     : Math.round(v).toLocaleString('ko-KR') + '<span style="color:rgba(255,255,255,.4);font-size:9.5px;">일</span>';
-  const fHL = v => (v == null || !isFinite(v)) ? '—'
-    : Math.round(v).toLocaleString('ko-KR') + ' <span style="color:rgba(255,255,255,.4);font-size:9.5px;">HL</span>';
+  // 아래 값들은 전부 QTY로 계산돼 있다. 화면 단위만 여기서 갈아끼운다.
+  const UL = _stockUnit === 'hl' ? 'HL' : 'QTY';
+  const conv = (q, hl) => _stockUnit === 'hl' ? q * hl : q;
+  const nU = (q, hl) => Math.round(conv(q, hl)).toLocaleString('ko-KR');          // 숫자만
+  const fU = (q, hl) => (q == null || !isFinite(q)) ? '—'                          // 숫자 + 단위
+    : nU(q, hl) + ' <span style="color:rgba(255,255,255,.4);font-size:9.5px;">' + UL + '</span>';
 
   const chip = (c, label, n) => '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:14px;'
     + 'background:rgba(255,255,255,.06);border:1px solid ' + c + '55;font-size:11.5px;font-weight:600;color:#fff;">'
@@ -3996,7 +4009,14 @@ async function renderSumStock() {
   let html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + chip(C.short, '쇼트', nS) + chip(C.watch, '주의', nW) + chip(C.ok, '정상', nO)
     + (nN ? chip(C.nofcst, 'FCST 없음', nN) : '') + '</div>'
-    + '<span style="font-size:11px;color:rgba(255,255,255,.5);">기준일 ' + stock.as_of
+    + '<span style="font-size:11px;color:rgba(255,255,255,.5);display:inline-flex;align-items:center;gap:10px;">'
+    + '<span style="display:inline-flex;border:1px solid rgba(255,255,255,.18);border-radius:5px;overflow:hidden;">'
+    + ['hl', 'qty'].map(u => '<button type="button" onclick="setStockUnit(&quot;' + u + '&quot;)"'
+        + ' style="border:0;padding:2px 10px;font-size:10.5px;font-weight:700;letter-spacing:.4px;cursor:pointer;'
+        + (_stockUnit === u ? 'background:rgba(255,255,255,.16);color:#fff;' : 'background:transparent;color:rgba(255,255,255,.45);')
+        + '">' + (u === 'hl' ? 'HL' : 'QTY') + '</button>').join('')
+    + '</span>'
+    + '기준일 ' + stock.as_of
     + (offDem ? '' : ' · <span style="color:#fbbf24;">Off 수요 미반영</span>') + '</span></div>';
 
   // 규격채널 박스 — 재고는 전국 단일 풀이지만 제품 규격(병/생 vs 캔)은 갈리므로
@@ -4031,7 +4051,7 @@ async function renderSumStock() {
         + '<span style="color:' + (l.state === 'hi' ? 'rgba(255,255,255,.75)' : c) + ';">' + (l.exp || '—') + '</span>'
         + '<span style="justify-self:end;color:' + (l.state === 'near' || l.state === 'lo' ? c : 'rgba(255,255,255,.5)') + ';">' + l.days + '일</span>'
         + '<span style="padding-left:8px;color:rgba(255,255,255,.45);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (l.type || '') + '</span>'
-        + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fHL(l.qty * r.hl) + '</span>'
+        + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
         + '<span style="justify-self:end;">' + tag + '</span></div>';
     }).join('');
     const lim = r.lots[0];
@@ -4040,11 +4060,10 @@ async function renderSumStock() {
          : lim && lim.isOn ? '잔여 ' + STOCK_SHELF_ON + '일 미만은 출고 불가라 가용재고에서 제외'
          : '잔여 ' + STOCK_SHELF_OFF_HI + '일 이상 = 전 채널 / ' + STOCK_SHELF_OFF_LO + '~'
            + (STOCK_SHELF_OFF_HI - 1) + '일 = C&amp;C·ALSM 등 6개월 채널만 / ' + STOCK_SHELF_OFF_LO + '일 미만 = 출고 불가')
-      + ' · 총재고 ' + Math.round(r.total * r.hl).toLocaleString('ko-KR') + ' HL 중 가용 '
-      + Math.round(r.avail * r.hl).toLocaleString('ko-KR') + ' HL'
-      + (r.loIdle * r.hl >= 0.5 ? '<br><span style="color:#60a5fa;">6개월 채널 전용 ' + Math.round(r.lo * r.hl).toLocaleString('ko-KR')
-         + ' HL 중 ' + Math.round(r.loIdle * r.hl).toLocaleString('ko-KR')
-         + ' HL은 그 채널 수요를 넘어 갈 곳이 없다 → 가용에서 제외</span>' : '')
+      + ' · 총재고 ' + nU(r.total, r.hl) + ' ' + UL + ' 중 가용 ' + nU(r.avail, r.hl) + ' ' + UL
+      + (r.loIdle * r.hl >= 0.5 ? '<br><span style="color:#60a5fa;">6개월 채널 전용 ' + nU(r.lo, r.hl)
+         + ' ' + UL + ' 중 ' + nU(r.loIdle, r.hl)
+         + ' ' + UL + '은 그 채널 수요를 넘어 갈 곳이 없다 → 가용에서 제외</span>' : '')
       + '</div></div>';
     return h;
   };
@@ -4061,19 +4080,19 @@ async function renderSumStock() {
     let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
       + '<div style="font-size:9.5px;color:' + accent + ';letter-spacing:.5px;padding:0 0 4px 2px;">'
       + (isOn ? 'On FCST — 지역별' : 'Off FCST — 채널별') + ' · 합계 '
-      + Math.round(tot * r.hl).toLocaleString('ko-KR') + ' HL</div>';
+      + nU(tot, r.hl) + ' ' + UL + '</div>';
     h += keys.map(k => {
       const v = src[k], pct = tot ? v / tot * 100 : 0;
       // Off는 채널 아래 거래처까지 한 줄로 덧붙인다(어느 거래처가 물량을 끄는지)
       const accts = !isOn ? Object.keys(r.byAcct).filter(x => x.split('|')[0] === k)
         .sort((a, b) => r.byAcct[b] - r.byAcct[a])
-        .map(x => x.split('|')[1] + ' ' + Math.round(r.byAcct[x] * r.hl).toLocaleString('ko-KR')).join(' · ') : '';
+        .map(x => x.split('|')[1] + ' ' + nU(r.byAcct[x], r.hl)).join(' · ') : '';
       return '<div style="display:grid;grid-template-columns:' + BG + ';gap:8px;align-items:center;font-size:11px;'
         + 'line-height:1.75;padding:0 0 0 2px;">'
         + '<span style="color:rgba(255,255,255,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + k + '</span>'
         + '<div style="background:rgba(255,255,255,.06);border-radius:3px;height:5px;">'
         + '<div style="background:' + accent + ';height:100%;border-radius:3px;width:' + pct.toFixed(1) + '%;opacity:.8;"></div></div>'
-        + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fHL(v * r.hl) + '</span>'
+        + '<span style="justify-self:end;color:rgba(255,255,255,.75);white-space:nowrap;">' + fU(v, r.hl) + '</span>'
         + '<span style="justify-self:end;color:rgba(255,255,255,.4);">' + pct.toFixed(0) + '%</span>'
         + (accts ? '<span style="grid-column:1/-1;font-size:9.5px;color:rgba(255,255,255,.35);padding:0 0 3px 6px;'
            + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + accts + '</span>' : '')
@@ -4086,7 +4105,7 @@ async function renderSumStock() {
     const c = C[r.status];
     const badge = r.status === 'short'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(248,113,113,.18);color:' + c + ';white-space:nowrap;">−'
-        + Math.round(r.gap * r.hl).toLocaleString('ko-KR') + ' HL</span>'
+        + nU(r.gap, r.hl) + ' ' + UL + '</span>'
       : r.status === 'watch'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(251,191,36,.16);color:' + c + ';">주의</span>'
       : r.status === 'nofcst'
@@ -4102,21 +4121,21 @@ async function renderSumStock() {
     const dim  = r.status === 'ok' || none ? 'rgba(255,255,255,.72)' : '#fff';
     const lid = '_stocklot' + i;
     // FCST 셀 — 하위 내역이 있으면 눌러서 펼친다(점선 밑줄로 클릭 가능 표시)
-    const drill = (v, n, id) => '<span style="justify-self:end;white-space:nowrap;'
+    const drill = (q, hl, n, id) => '<span style="justify-self:end;white-space:nowrap;'
       + (n ? 'cursor:pointer;border-bottom:1px dotted rgba(255,255,255,.3);color:rgba(255,255,255,.72);"'
            + ' onclick="_stockToggleLot(&quot;' + id + '&quot;, event)" title="클릭 — 내역 펼치기'
            : 'color:rgba(255,255,255,.55);"') + '">'
-      + (v == null ? dash : fHL(v))
+      + (q == null ? dash : fU(q, hl))
       + (n ? '<span id="' + id + '-c" style="color:rgba(255,255,255,.3);font-size:9px;margin-left:3px;">▸</span>' : '')
       + '</span>';
     // 임박 물량이 있으면 SKU 옆에 표시 — 펼치지 않아도 "가용이 왜 적은지" 단서가 보인다
     const nearTag = (r.near * r.hl >= 0.5
       ? '<span style="margin-left:6px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(251,191,36,.16);color:' + C.watch + ';white-space:nowrap;">임박 '
-        + Math.round(r.near * r.hl).toLocaleString('ko-KR') + '</span>' : '')
+        + nU(r.near, r.hl) + '</span>' : '')
       + (r.loIdle * r.hl >= 0.5
       ? '<span style="margin-left:5px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(96,165,250,.16);color:#60a5fa;white-space:nowrap;"'
         + ' title="잔여 7개월 미만이라 CVS·HYPER·SM에 못 나가고, 6개월 채널 수요도 넘어선 물량">채널제한 '
-        + Math.round(r.loIdle * r.hl).toLocaleString('ko-KR') + '</span>' : '');
+        + nU(r.loIdle, r.hl) + '</span>' : '');
     return '<div onclick="_stockToggleLot(&quot;' + lid + '&quot;, event)" title="클릭 — 유통기한별 재고 펼치기"'
       + ' style="display:grid;grid-template-columns:' + GC + ';gap:8px;align-items:baseline;font-size:12px;cursor:pointer;'
       + 'line-height:1.75;padding:2px 10px;border-top:1px solid rgba(255,255,255,.05);">'
@@ -4124,10 +4143,10 @@ async function renderSumStock() {
       + '<span style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
       + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
       + r.sku + nearTag + '</span>'
-      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fHL(r.avail * r.hl) + '</span>'
-      + drill(none ? null : r.fcstOn * r.hl, Object.keys(r.byRegion).length, lid + 'on')
-      + drill(none ? null : r.fcstOff * r.hl, Object.keys(r.byCh).length, lid + 'off')
-      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fHL(r.use * r.hl) + useMark) + '</span>'
+      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fU(r.avail, r.hl) + '</span>'
+      + drill(none ? null : r.fcstOn, r.hl, Object.keys(r.byRegion).length, lid + 'on')
+      + drill(none ? null : r.fcstOff, r.hl, Object.keys(r.byCh).length, lid + 'off')
+      + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fU(r.use, r.hl) + useMark) + '</span>'
       + '<span style="justify-self:end;color:' + (none ? 'rgba(255,255,255,.25)' : c) + ';font-weight:700;white-space:nowrap;">' + (none ? '—' : fD(r.days)) + '</span>'
       + '</div>'
       + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>'
@@ -4180,12 +4199,12 @@ async function renderSumStock() {
     + 'border-left:2px solid rgba(255,255,255,.28);padding:8px 11px;">'
     + '<div style="font-size:9.5px;color:rgba(255,255,255,.45);letter-spacing:.6px;margin-bottom:3px;">STEP ' + n + ' · ' + title + '</div>'
     + '<div style="font-size:11px;color:rgba(255,255,255,.88);line-height:1.6;">' + body + '</div></div>';
-  const W = v => Math.round(v * ex.hl).toLocaleString('ko-KR');
+  const W = v => nU(v, ex.hl);
   const wht = t => '<span style="color:#fff;font-weight:600;">' + t + '</span>';
 
   if (ex) {
     html += '<div style="margin-top:14px;padding-top:11px;border-top:1px solid rgba(255,255,255,.16);">'
-      + '<div style="' + HD + 'margin-bottom:8px;">산출 과정 — <span style="text-transform:none;">' + ex.sku + '</span> <span style="color:rgba(255,255,255,.4);font-weight:400;text-transform:none;letter-spacing:0;">(단위 HL)</span></div>'
+      + '<div style="' + HD + 'margin-bottom:8px;">산출 과정 — <span style="text-transform:none;">' + ex.sku + '</span> <span style="color:rgba(255,255,255,.4);font-weight:400;text-transform:none;letter-spacing:0;">(단위 ' + UL + ')</span></div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
       + stepBox(1, '가용재고', '총재고 ' + W(ex.total) + ' − 유통기한 임박 ' + W(ex.near)
           + ' − 출고보류·수출향 ' + W(ex.blocked)
