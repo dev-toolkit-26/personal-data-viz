@@ -556,8 +556,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .kn-stage strong { word-break:keep-all; }
 .kn-bg { position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,rgba(0,0,0,0.5) 100%), url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1400&q=80') center/cover no-repeat; animation:knBgShift 20s ease-in-out infinite alternate; }
 @keyframes knBgShift { 0%{background-position:center 40%} 100%{background-position:center 60%} }
-.kn-track { position:absolute; inset:0; display:flex; width:400%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
-.kn-slide { flex:0 0 25%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
+.kn-track { position:absolute; inset:0; display:flex; width:300%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
+.kn-slide { flex:0 0 33.3333%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
 .kn-slide.is-active { opacity:1; }
 .kn-slide > .kn-content { width:85%; max-width:1320px; }
 .kn-card { background:rgba(0,0,0,.5); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); border:1px solid rgba(255,255,255,.1); border-radius:16px; }
@@ -871,9 +871,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
       <button class="kn-side-btn" type="button" onclick="enterDashboard()"><span class="kn-side-num">→</span><span>Dashboard</span></button>
     </div>
     <button class="kn-side-btn is-active" type="button" data-slide="0"><span class="kn-side-num">01</span><span>Overview</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Regional</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Diagnosis</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Stock</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Channel</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Stock</span></button>
   </div>
 
   <div class="kn-track" id="kn-track">
@@ -899,14 +898,13 @@ td:first-child, td:nth-child(2) { text-align: left; }
           <div id="sum-chartD-channel-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;"></div>
         </div>
 
-        <div id="sum-overview-narrative" class="kn-card" style="margin-top:18px;border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.88);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
-    <!-- Slide 3: Regional Breakdown -->
+    <!-- Slide 2: Channel × Diagnosis — 채널 축으로 도넛+진척을 한 장에 통합 (On과 동일 구성) -->
     <section class="kn-slide" data-slide="1">
-      <div class="kn-content">
-        <h2 class="kn-apex">Regional Breakdown</h2>
+      <div class="kn-content" style="max-width:1280px;width:90%;">
+        <h2 class="kn-apex">Channel × Diagnosis</h2>
         <div class="kn-card" style="padding:24px 26px;">
           <div id="sum-region-donuts" style="display:grid;grid-template-columns:repeat(5,1fr);gap:18px;padding:8px 0 4px;"></div>
           <div style="margin-top:18px;border-top:1px solid rgba(255,255,255,.12);padding-top:16px;">
@@ -915,20 +913,12 @@ td:first-child, td:nth-child(2) { text-align: left; }
             <div id="sum-region-badges" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;"></div>
           </div>
         </div>
+        <div id="sum-mtd-diag" style="margin-top:18px;"></div>
       </div>
     </section>
 
-    <!-- Slide 4: MTD Progress Diagnosis -->
+    <!-- Slide 3: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
     <section class="kn-slide" data-slide="2">
-      <div class="kn-content" style="max-width:1280px;width:90%;">
-        <h2 class="kn-apex">MTD Progress Diagnosis</h2>
-        <div id="sum-mtd-diag"></div>
-      </div>
-    </section>
-
-    <!-- Slide 5: SKU 특이사항 (브랜드별 AP/FCST/MTD/vs LM/vs LY) -->
-    <!-- Slide 5: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
-    <section class="kn-slide" data-slide="3">
       <div class="kn-content">
         <h2 class="kn-apex">Stock Coverage</h2>
         <div id="sum-stock-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
@@ -945,7 +935,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <button class="kn-dot is-active" type="button" data-slide="0" aria-label="Slide 1"></button>
     <button class="kn-dot"            type="button" data-slide="1" aria-label="Slide 2"></button>
     <button class="kn-dot"            type="button" data-slide="2" aria-label="Slide 3"></button>
-    <button class="kn-dot"            type="button" data-slide="3" aria-label="Slide 4"></button>
   </div>
 </div>
 
@@ -1303,254 +1292,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
     // ── Slide 5: 재고 수급 — 비동기(On 스냅샷 조회)라 렌더만 걸어두고 진행 ──
     renderSumStock();
 
-    // ── Region Donuts (replaces former Chart A bar chart) ──
-    var regions = _UP_DASH_REGIONS.filter(function(k){ return hl[k]; });
-    Chart.defaults.color = 'rgba(255,255,255,.82)';
-
-    var R = 48, C = 2 * Math.PI * R;
-    document.getElementById('sum-region-donuts').innerHTML = regions.map(function(k) {
-      var d = hl[k];
-      var ach = d.ap_fcst_ach || 0;
-      var pct = Math.min(ach * 100, 100);
-      var pctRound = Math.round(ach * 100);
-      var ac = _achColor(ach);
-      var targetOffset = C - (C * pct / 100);
-      return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;">'
-        + '<div style="position:relative;width:118px;height:118px;">'
-        +   '<svg width="118" height="118" viewBox="0 0 118 118" style="transform:rotate(-90deg);">'
-        +     '<circle cx="59" cy="59" r="' + R + '" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="14"/>'
-        +     '<circle class="kn-donut-arc" cx="59" cy="59" r="' + R + '" fill="none" stroke="' + ac + '"'
-        +       ' stroke-width="14" stroke-linecap="round" stroke-dasharray="' + C + '"'
-        +       ' stroke-dashoffset="' + C + '" data-target-offset="' + targetOffset + '" data-full-offset="' + C + '"'
-        +       ' style="transition: stroke-dashoffset 1.2s cubic-bezier(.65,.05,.36,1);"/>'
-        +   '</svg>'
-        +   '<div style="position:absolute;inset:14px;background:rgba(0,0,0,.78);border-radius:50%;display:flex;align-items:center;justify-content:center;">'
-        +     '<div style="font-size:26px;font-weight:700;color:' + ac + ';line-height:1;">' + pctRound + '%</div>'
-        +   '</div>'
-        + '</div>'
-        + '<div style="font-size:13px;font-weight:700;color:#fff;text-align:center;white-space:nowrap;">' + k + '</div>'
-        + '<div style="font-size:12px;color:rgba(255,255,255,.7);text-align:center;">FCST <strong style="color:#fff;">' + _fmtHL(d.this_week_fcst) + '</strong> HL</div>'
-        + '<div style="font-size:11px;color:rgba(255,255,255,.45);text-align:center;">AP ' + _fmtHL(d.ap) + ' HL</div>'
-        + '</div>';
-    }).join('');
-
-    // ── Chart A Analysis Comment ──
-    var overFcst = regions.filter(function(k){ return hl[k].ap_fcst_ach >= 1.0; });
-    var underFcst = regions.filter(function(k){ return hl[k].ap_fcst_ach < 0.95; });
-    var topRegion = regions.reduce(function(a,b){ return hl[a].ap_fcst_ach > hl[b].ap_fcst_ach ? a : b; });
-    var botRegion = regions.reduce(function(a,b){ return hl[a].ap_fcst_ach < hl[b].ap_fcst_ach ? a : b; });
-
-    document.getElementById('sum-chartA-comment').innerHTML =
-        (overFcst.length > 0 ? '<strong style="color:#4ade80;">AP 초과 지역 (Above AP):</strong> ' + overFcst.join(', ') + '<br>' : '')
-      + (underFcst.length > 0 ? '<strong style="color:#f87171;">AP 미달 지역 (Below AP):</strong> ' + underFcst.join(', ') + '<br>' : '')
-      + '<br>특히, '
-      + (hl['DaeJeon'] && hl['DaeJeon'].fcst_growth_lym < -0.1 ? 'DaeJeon(전년 대비 -' + Math.abs((hl['DaeJeon'].fcst_growth_lym*100)).toFixed(1) + '%)과 ' : '')
-      + (hl['GwangJu'] && hl['GwangJu'].fcst_growth_lym < -0.1 ? 'GwangJu(전년 대비 -' + Math.abs((hl['GwangJu'].fcst_growth_lym*100)).toFixed(1) + '%) ' : '')
-      + '지역은 YoY 큰 폭 감소세를 보이고 있어 면밀한 모니터링이 필요.';
-
-    // Region badges
-    document.getElementById('sum-region-badges').innerHTML = regions.map(function(k) {
-      var d = hl[k];
-      var ach = d.ap_fcst_ach;
-      var ac = _achColor(ach);
-      var ab = _achBadgeBg(ach);
-      var lym = d.fcst_growth_lym || 0;
-      var gSign = lym >= 0 ? '+' : '';
-      var lymColor = lym >= 0 ? '#4ade80' : '#f87171';
-      return '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);border-left:2px solid ' + ac + ';border-radius:8px;padding:9px 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);">'
-        + '<span style="color:#fff;font-size:12px;font-weight:600;margin-right:6px;">' + k + '</span>'
-        + '<div style="display:flex;gap:10px;align-items:center;">'
-        + '<span style="font-size:11px;font-weight:600;display:inline-flex;align-items:baseline;gap:6px;"><span style="color:rgba(255,255,255,.5);letter-spacing:.5px;">LYM</span><span style="color:' + lymColor + ';">' + gSign + (lym*100).toFixed(1) + '%</span></span>'
-        + '<span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:' + ab + ';color:' + ac + ';">' + _fmtPct(ach) + '</span>'
-        + '</div></div>';
-    }).join('');
-
-    // ── Chart D ──
-    if (_sumChartD) { _sumChartD.destroy(); }
-    _sumChartD = new Chart(document.getElementById('sum-chartD'), {
-      type: 'line',
-      data: {
-        labels: md.months,
-        datasets: [
-          { label: '2025 Actual',     data: md.act_2025, borderColor: 'rgba(255,255,255,.5)', backgroundColor: 'transparent',           tension: .3, fill: false, borderDash: [5,3], pointRadius: 2 },
-          { label: '2026 AP',         data: md.ap_2026,  borderColor: '#e30613',              backgroundColor: 'rgba(227,6,19,.08)',    tension: .3, fill: false, pointRadius: 3 },
-          { label: '2026 DSR Actual', data: md.act_2026, borderColor: '#4ade80',              backgroundColor: 'rgba(74,222,128,.18)',  tension: .3, fill: true,  pointRadius: 5, pointBackgroundColor: '#4ade80' },
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        animation: false,
-        plugins: {
-          legend: { position: 'top', labels: { color: 'rgba(255,255,255,.6)', font: { size: 11 }, boxWidth: 12 } }
-        },
-        scales: {
-          y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.06)' }, ticks: { color: 'rgba(255,255,255,.4)', font: { size: 10 }, callback: function(v){ return v.toLocaleString('ko-KR',{maximumFractionDigits:0}); } } },
-          x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,.5)', font: { size: 10 } } }
-        }
-      }
-    });
-
-    // ── Chart D Analysis Comment ──
-    (function() {
-      var lines = [];
-      var months = md.months || [];
-      var act25  = md.act_2025  || [];
-      var ap26   = md.ap_2026   || [];
-      var act26  = md.act_2026  || [];
-
-      // 현재 FCST 월 인덱스 (0-based): wk_meta.month 기반 동적 감지
-      var fcstMonthIdx = _upGetFcstMonth() - 1;
-
-      // ① 실적 확정 월 분석 (현재 FCST 월 이전 월만)
-      var actualMonths = [];
-      for (var i = 0; i < fcstMonthIdx; i++) {
-        if (act26[i] != null && act26[i] > 0) actualMonths.push(i);
-      }
-
-      if (actualMonths.length > 0) {
-        var parts = [];
-        var ytdActSum = 0, ytdApSum = 0, ytdLySum = 0;
-        for (var j = 0; j < actualMonths.length; j++) {
-          var idx = actualMonths[j];
-          var ach  = ap26[idx] ? act26[idx] / ap26[idx] : null;
-          var vsLy = act25[idx] ? act26[idx] / act25[idx] : null;
-          var gapHL = ap26[idx] ? act26[idx] - ap26[idx] : null;
-          var achColor = ach != null ? (ach >= 1 ? '#4ade80' : ach >= 0.9 ? '#fbbf24' : '#f87171') : '#fff';
-          var lyColor  = vsLy != null ? (vsLy >= 1 ? '#4ade80' : '#f87171') : '#fff';
-          var gapColor = gapHL != null ? (gapHL >= 0 ? '#4ade80' : '#f87171') : '#fff';
-          var achTxt = ach  != null ? Math.round(ach*100) + '%' : '-';
-          var lyTxt  = vsLy != null ? (vsLy >= 1 ? '+' : '') + Math.round((vsLy-1)*100) + '%' : null;
-          var gapTxt = gapHL != null ? (gapHL >= 0 ? '+' : '') + Math.round(gapHL) + ' HL' : null;
-          parts.push('<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:12px;line-height:1.65;">'
-            + '<span style="color:#fff;font-weight:700;min-width:36px;">' + months[idx] + '</span>'
-            + '<span style="color:rgba(255,255,255,.85);min-width:88px;">' + _fmtHL(act26[idx]) + ' HL</span>'
-            + '<span style="color:rgba(255,255,255,.5);font-size:11px;">AP</span>'
-            + '<b style="color:' + achColor + ';min-width:42px;">' + achTxt + '</b>'
-            + (gapTxt ? '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">Gap</span><b style="color:' + gapColor + ';">' + gapTxt + '</b>' : '')
-            + (lyTxt ? '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">vs LY</span><b style="color:' + lyColor + ';">' + lyTxt + '</b>' : '')
-            + '</div>');
-          ytdActSum += (act26[idx] || 0);
-          ytdApSum  += (ap26[idx]  || 0);
-          ytdLySum  += (act25[idx] || 0);
-        }
-        // 확정 월 YTD 누적 (현재 FCST 월 제외)
-        if (actualMonths.length > 1 && ytdApSum > 0) {
-          var ytdRange   = months[actualMonths[0]] + '~' + months[actualMonths[actualMonths.length-1]];
-          var ytdAch     = ytdActSum / ytdApSum;
-          var ytdGap     = ytdActSum - ytdApSum;
-          var ytdVsLy    = ytdLySum > 0 ? ytdActSum / ytdLySum : null;
-          var ytdAchColor= ytdAch >= 1 ? '#4ade80' : ytdAch >= 0.9 ? '#fbbf24' : '#f87171';
-          var ytdGapColor= ytdGap >= 0 ? '#4ade80' : '#f87171';
-          var ytdLyColor = ytdVsLy != null ? (ytdVsLy >= 1 ? '#4ade80' : '#f87171') : '#fff';
-          var ytdAchTxt  = Math.round(ytdAch*100) + '%';
-          var ytdGapTxt  = (ytdGap >= 0 ? '+' : '') + Math.round(ytdGap) + ' HL';
-          var ytdLyTxt   = ytdVsLy != null ? (ytdVsLy >= 1 ? '+' : '') + Math.round((ytdVsLy-1)*100) + '%' : null;
-          parts.push('<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-size:12px;line-height:1.65;border-top:1px dashed rgba(255,255,255,.18);padding-top:5px;margin-top:3px;">'
-            + '<span style="color:#fff;font-weight:700;min-width:36px;">YTD</span>'
-            + '<span style="color:rgba(255,255,255,.85);min-width:88px;">' + _fmtHL(ytdActSum) + ' HL</span>'
-            + '<span style="color:rgba(255,255,255,.5);font-size:11px;">AP</span>'
-            + '<b style="color:' + ytdAchColor + ';min-width:42px;">' + ytdAchTxt + '</b>'
-            + '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">Gap</span><b style="color:' + ytdGapColor + ';">' + ytdGapTxt + '</b>'
-            + (ytdLyTxt ? '<span style="color:rgba(255,255,255,.3);">·</span><span style="color:rgba(255,255,255,.5);font-size:11px;">vs LY</span><b style="color:' + ytdLyColor + ';">' + ytdLyTxt + '</b>' : '')
-            + '<span style="color:rgba(255,255,255,.4);font-size:10.5px;margin-left:auto;">' + ytdRange + ' 누적</span>'
-            + '</div>');
-        }
-        lines.push('<div style="display:flex;align-items:flex-start;gap:10px;">'
-          + '<span style="color:rgba(255,255,255,.75);white-space:nowrap;">✅ 확정 실적:</span>'
-          + '<div style="display:flex;flex-direction:column;gap:3px;flex:1;">' + parts.join('') + '</div>'
-          + '</div>');
-      }
-
-      // ② 현재 월 FCST 상세 (Mar = fcstMonthIdx)
-      if (fcstMonthIdx < months.length && ap26[fcstMonthIdx] != null) {
-        var fcstHL   = ttl.this_week_fcst;
-        var lwHL     = ttl.last_week_fcst;
-        var fcstAp   = ap26[fcstMonthIdx];
-        var fcstAch  = fcstAp ? fcstHL / fcstAp : null;
-        var apGap    = Math.round(fcstHL - fcstAp);
-        var diffWoW  = Math.round(fcstHL - lwHL);
-        var mtdActual = ttl.mtd_actual;
-        var mtdAch   = ttl.fcst_mtd_ach;
-        var wdElapsed = wd.elapsed || 0;
-        var wdTotal   = wd.total   || 22;
-        var wdPct     = wd.pct     || 0;
-        var vsLyMar  = act25[fcstMonthIdx] ? fcstHL / act25[fcstMonthIdx] : null;
-
-        // FCST 한 줄
-        var fcstColor = fcstAch != null ? (fcstAch >= 1 ? '#4ade80' : '#f87171') : '#fff';
-        var fcstLine  = '📊 <span style="color:rgba(255,255,255,.75)">' + months[fcstMonthIdx] + ' FCST:</span> '
-          + '<b style="color:#fff">' + _fmtHL(fcstHL) + ' HL</b>'
-          + (fcstAch != null ? ' → AP 대비 <b style="color:' + fcstColor + '">' + Math.round(fcstAch*100) + '%</b>'
-            + ' (' + (apGap >= 0 ? '+' : '') + apGap + ' HL)' : '');
-
-        if (diffWoW !== 0) {
-          fcstLine += ' · WoW <b style="color:' + (diffWoW >= 0 ? '#4ade80' : '#f87171') + '">'
-            + (diffWoW >= 0 ? '+' : '') + diffWoW + ' HL</b>';
-        } else {
-          fcstLine += ' · WoW 변동 없음';
-        }
-        if (vsLyMar != null) {
-          fcstLine += ' · vs LY <b style="color:' + (vsLyMar >= 1 ? '#4ade80' : '#f87171') + '">'
-            + (vsLyMar >= 1 ? '+' : '') + Math.round((vsLyMar-1)*100) + '%</b>';
-        }
-        lines.push(fcstLine);
-
-        // MTD 진행 상황
-        var mtdColor = mtdAch >= wdPct ? '#4ade80' : mtdAch >= wdPct * 0.95 ? '#fbbf24' : '#f87171';
-        var mtdGap   = Math.round((wdPct - mtdAch) * 100);
-        var mtdLine  = '📈 <span style="color:rgba(255,255,255,.75)">MTD 진행:</span> '
-          + '<b style="color:#fff">' + _fmtHL(mtdActual) + ' HL</b>'
-          + ' (영업일 ' + wdElapsed + '/' + wdTotal + 'WD · 경과율 ' + Math.round(wdPct*100) + '%)'
-          + ' → MTD Attainment <b style="color:' + mtdColor + '">' + Math.round(mtdAch*100) + '%</b> (vs ' + (months[fcstMonthIdx] || 'FCST') + ' FCST)'
-          + (mtdAch < wdPct
-            ? ' · ⚠️ 경과율 대비 <b style="color:#f87171">' + mtdGap + '%p</b> 뒤처짐, 잔여 ' + (wdTotal - wdElapsed) + 'WD 집중 관리 필요'
-            : ' · 경과율 대비 진행 양호');
-        lines.push(mtdLine);
-      }
-
-      // ③ YTD 누적 AP 달성률 (Jan~Mar FCST 기준)
-      var ytdAct = 0, ytdAp = 0, ytdLy = 0;
-      for (var n = 0; n <= fcstMonthIdx; n++) {
-        var actVal = n < fcstMonthIdx ? (act26[n] || 0) : (ttl.this_week_fcst || 0);
-        ytdAct += actVal;
-        ytdAp  += (ap26[n]  || 0);
-        ytdLy  += (act25[n] || 0);
-      }
-      if (ytdAp > 0) {
-        var ytdAch   = ytdAct / ytdAp;
-        var ytdVsLy  = ytdLy > 0 ? ytdAct / ytdLy : null;
-        var ytdColor = ytdAch >= 1 ? '#4ade80' : '#fbbf24';
-        var ytdLine  = '🗓️ <span style="color:rgba(255,255,255,.75)">YTD 누적 (Jan~' + (months[fcstMonthIdx] || 'FCST') + ' 포함):</span> '
-          + '<b style="color:#fff">' + _fmtHL(ytdAct) + ' HL</b> / AP ' + _fmtHL(ytdAp) + ' HL'
-          + ' → <b style="color:' + ytdColor + '">' + Math.round(ytdAch*100) + '%</b>';
-        if (ytdVsLy != null) {
-          ytdLine += ' · vs LY <b style="color:' + (ytdVsLy >= 1 ? '#4ade80' : '#f87171') + '">'
-            + (ytdVsLy >= 1 ? '+' : '') + Math.round((ytdVsLy-1)*100) + '%</b>';
-        }
-        lines.push(ytdLine);
-      }
-
-      // ④ 월별 vs LY 트렌드 요약 (확정 월만)
-      var lyComments = [];
-      for (var m = 0; m < actualMonths.length; m++) {
-        var mi = actualMonths[m];
-        if (act25[mi] > 0) {
-          var growth = (act26[mi] - act25[mi]) / act25[mi];
-          lyComments.push('<b style="color:#fff">' + months[mi] + '</b> '
-            + (growth >= 0 ? '<b style="color:#4ade80">+' : '<b style="color:#f87171">')
-            + Math.round(growth*100) + '%</b>');
-        }
-      }
-      if (lyComments.length > 0) {
-        lines.push('📉 <span style="color:rgba(255,255,255,.75)">확정 월 vs LY 트렌드:</span> ' + lyComments.join(' / '));
-      }
-
-      document.getElementById('sum-chartD-comment').innerHTML =
-        lines.length > 0 ? lines.join('<br><br>') : '데이터가 없습니다.';
-    })();
-
-    // ── MTD Progress Diagnosis ──
-    renderSumMTDDiagnosis();
+    // (On에서 복사돼 온 도넛·차트·진척 블록이 여기 있었다. Off에는 DASHBOARD_DATA가 없어
+    //  한 번도 실행된 적 없는 죽은 코드였다 — 실제 렌더는 위쪽 Off 전용 코드가 이미 끝냈다.)
   }
 </script>
 
@@ -10589,7 +10332,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
         wrap.classList.add('is-on');
       }
     }
-    if (slideIdx === 1) {
+    if (slideIdx === 1) {          // 도넛과 진척 바가 한 장으로 합쳐졌다
       var arcs = document.querySelectorAll('.kn-donut-arc');
       arcs.forEach(function(a){
         a.style.transition = 'none';
@@ -10599,7 +10342,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
         a.style.strokeDashoffset = a.dataset.targetOffset;
       });
     }
-    if (slideIdx === 2) {
+    if (slideIdx === 1) {
       var bars = document.querySelectorAll('.kn-bar-fill');
       bars.forEach(function(b){
         var t = b.dataset.targetW;
@@ -10613,7 +10356,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
   }
   function go(n) {
     idx = (n + total) % total;
-    track.style.transform = 'translateX(-' + (idx * 25) + '%)';
+    track.style.transform = 'translateX(-' + (idx * 33.3333) + '%)';
     slides.forEach(function(s, i){ s.classList.toggle('is-active', i === idx); });
     dots.forEach(function(d, i){ d.classList.toggle('is-active', i === idx); });
     sideBtns.forEach(function(b, i){ b.classList.toggle('is-active', i === idx); });
