@@ -556,8 +556,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .kn-stage strong { word-break:keep-all; }
 .kn-bg { position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,rgba(0,0,0,0.5) 100%), url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1400&q=80') center/cover no-repeat; animation:knBgShift 20s ease-in-out infinite alternate; }
 @keyframes knBgShift { 0%{background-position:center 40%} 100%{background-position:center 60%} }
-.kn-track { position:absolute; inset:0; display:flex; width:500%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
-.kn-slide { flex:0 0 20%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
+.kn-track { position:absolute; inset:0; display:flex; width:400%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
+.kn-slide { flex:0 0 25%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
 .kn-slide.is-active { opacity:1; }
 .kn-slide > .kn-content { width:85%; max-width:1320px; }
 .kn-card { background:rgba(0,0,0,.5); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); border:1px solid rgba(255,255,255,.1); border-radius:16px; }
@@ -871,29 +871,22 @@ td:first-child, td:nth-child(2) { text-align: left; }
       <button class="kn-side-btn" type="button" onclick="enterDashboard()"><span class="kn-side-num">→</span><span>Dashboard</span></button>
     </div>
     <button class="kn-side-btn is-active" type="button" data-slide="0"><span class="kn-side-num">01</span><span>Overview</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Trend</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Regional</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Diagnosis</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="4"><span class="kn-side-num">05</span><span>Stock</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Regional</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Diagnosis</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Stock</span></button>
   </div>
 
   <div class="kn-track" id="kn-track">
 
-    <!-- Slide 1: Hero + KPI -->
+    <!-- Slide 1: Hero + KPI + Monthly Trend (On과 동일하게 한 장으로) -->
     <section class="kn-slide is-active" data-slide="0">
       <div class="kn-content">
         <h1 id="sum-hero-headline" class="kn-apex" style="margin-bottom:28px;"></h1>
         <div class="kn-section-label" style="margin-top:8px;">Key Performance Indicators</div>
         <div id="sum-kpi-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:22px;"></div>
         <div id="sum-kpi-comment" class="kn-card" style="border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
-        <div id="sum-overview-narrative" class="kn-card" style="margin-top:18px;border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.88);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
-      </div>
-    </section>
 
-    <!-- Slide 2: Monthly Trend -->
-    <section class="kn-slide" data-slide="1">
-      <div class="kn-content">
-        <h2 class="kn-apex">Monthly Trend</h2>
+        <div class="kn-section-label" style="margin-top:26px;">Monthly Trend</div>
         <div class="kn-card" style="padding:24px;">
           <div class="kn-chart-reveal" style="position:relative;height:300px;"><canvas id="sum-chartD"></canvas></div>
           <div style="margin-top:20px;border-top:1px solid rgba(255,255,255,.12);padding-top:16px;">
@@ -905,11 +898,13 @@ td:first-child, td:nth-child(2) { text-align: left; }
           <div class="kn-section-label" style="margin-bottom:14px;color:#4ade80;letter-spacing:1.5px;">채널별 Monthly Trend (RoFo / Actual / FCST / 2025)</div>
           <div id="sum-chartD-channel-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:18px;"></div>
         </div>
+
+        <div id="sum-overview-narrative" class="kn-card" style="margin-top:18px;border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.88);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
     <!-- Slide 3: Regional Breakdown -->
-    <section class="kn-slide" data-slide="2">
+    <section class="kn-slide" data-slide="1">
       <div class="kn-content">
         <h2 class="kn-apex">Regional Breakdown</h2>
         <div class="kn-card" style="padding:24px 26px;">
@@ -924,7 +919,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </section>
 
     <!-- Slide 4: MTD Progress Diagnosis -->
-    <section class="kn-slide" data-slide="3">
+    <section class="kn-slide" data-slide="2">
       <div class="kn-content" style="max-width:1280px;width:90%;">
         <h2 class="kn-apex">MTD Progress Diagnosis</h2>
         <div id="sum-mtd-diag"></div>
@@ -933,7 +928,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
     <!-- Slide 5: SKU 특이사항 (브랜드별 AP/FCST/MTD/vs LM/vs LY) -->
     <!-- Slide 5: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
-    <section class="kn-slide" data-slide="4">
+    <section class="kn-slide" data-slide="3">
       <div class="kn-content">
         <h2 class="kn-apex">Stock Coverage</h2>
         <div id="sum-stock-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
@@ -951,7 +946,6 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <button class="kn-dot"            type="button" data-slide="1" aria-label="Slide 2"></button>
     <button class="kn-dot"            type="button" data-slide="2" aria-label="Slide 3"></button>
     <button class="kn-dot"            type="button" data-slide="3" aria-label="Slide 4"></button>
-    <button class="kn-dot"            type="button" data-slide="4" aria-label="Slide 5"></button>
   </div>
 </div>
 
@@ -10584,7 +10578,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
   var idx = 0, total = slides.length;
 
   function triggerAnim(slideIdx) {
-    if (slideIdx === 1) {
+    if (slideIdx === 0) {          // 월별 트렌드가 Overview로 합쳐졌다
       try { if (typeof _sumChartD !== 'undefined' && _sumChartD) _sumChartD.resize(); } catch(_) {}
       var wrap = document.querySelector('.kn-chart-reveal');
       if (wrap) {
@@ -10595,7 +10589,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
         wrap.classList.add('is-on');
       }
     }
-    if (slideIdx === 2) {
+    if (slideIdx === 1) {
       var arcs = document.querySelectorAll('.kn-donut-arc');
       arcs.forEach(function(a){
         a.style.transition = 'none';
@@ -10605,7 +10599,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
         a.style.strokeDashoffset = a.dataset.targetOffset;
       });
     }
-    if (slideIdx === 3) {
+    if (slideIdx === 2) {
       var bars = document.querySelectorAll('.kn-bar-fill');
       bars.forEach(function(b){
         var t = b.dataset.targetW;
@@ -10619,7 +10613,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
   }
   function go(n) {
     idx = (n + total) % total;
-    track.style.transform = 'translateX(-' + (idx * 20) + '%)';
+    track.style.transform = 'translateX(-' + (idx * 25) + '%)';
     slides.forEach(function(s, i){ s.classList.toggle('is-active', i === idx); });
     dots.forEach(function(d, i){ d.classList.toggle('is-active', i === idx); });
     sideBtns.forEach(function(b, i){ b.classList.toggle('is-active', i === idx); });
