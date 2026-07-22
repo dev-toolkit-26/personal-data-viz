@@ -4098,7 +4098,9 @@ async function renderSumStock() {
   let offDem = null;
   try { offDem = await _stockOffDemand(); }
   catch (e) { console.warn('Off 수요 로드 실패 — On 수요만으로 판정합니다:', e); }
-  const { rows, elapsed: elapsedDays, dim: daysInMonth } = _stockCompute(stock, offDem, DASHBOARD_DATA.inbound);
+  const inbound = DASHBOARD_DATA.inbound;
+  const hasInb  = !!(inbound && inbound.rows && inbound.rows.length);
+  const { rows, elapsed: elapsedDays, dim: daysInMonth } = _stockCompute(stock, offDem, inbound);
   const nS = rows.filter(r => r.status === 'short').length;
   const nW = rows.filter(r => r.status === 'watch').length;
   const nO = rows.filter(r => r.status === 'ok').length;
@@ -4139,7 +4141,24 @@ async function renderSumStock() {
         + '">' + (u === 'hl' ? 'HL' : 'QTY') + '</button>').join('')
     + '</span>'
     + '기준일 ' + stock.as_of
+    + (hasInb ? ' · 반입 ' + inbound.cutoff + ' 이후' : '')
     + (offDem ? '' : ' · <span style="color:#fbbf24;">Off 수요 미반영</span>') + '</span></div>';
+
+  // 반입일정 미업로드 안내 — 통관대기·입고예정이 비면 쇼트가 실제보다 많이 잡힌다
+  if (!hasInb) html += '<div style="font-size:10.5px;color:#fbbf24;background:rgba(251,191,36,.08);'
+    + 'border:1px solid rgba(251,191,36,.25);border-radius:5px;padding:6px 10px;margin-bottom:8px;line-height:1.6;">'
+    + '보세 반입일정이 올라오지 않아 <strong style="font-weight:600;">통관대기·입고예정이 비어 있습니다</strong>. '
+    + '데일리스탁은 통관 완료분만 담으므로 창고에 있어도 통관 전인 물량과 도착 예정분이 판정에서 빠집니다 — '
+    + '쇼트가 실제보다 많게 나옵니다. Data Update 탭에서 '
+    + '<strong style="font-weight:600;">입고 예정 (보세 반입일정)</strong> 파일을 올려주세요.</div>';
+
+  // 범례 — 각주까지 내려가야 알 수 있으면 설명이 아니다. 표 바로 위에 둔다.
+  html += '<div style="font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:8px;padding-left:2px;">'
+    + '채택수요 = 당월 FCST와 <strong style="color:rgba(255,255,255,.75);font-weight:600;">런레이트</strong>'
+    + '(MTD ÷ 경과일 × 월일수 = 지금 판매 속도의 월 환산) 중 <strong style="color:rgba(255,255,255,.75);font-weight:600;">큰 쪽</strong>. '
+    + '<span style="color:#fbbf24;font-weight:700;">런</span> = 실제 판매가 FCST보다 빨라 런레이트가 채택된 SKU · '
+    + '<strong style="color:rgba(255,255,255,.75);font-weight:600;">Days</strong> = 가용재고 ÷ 일평균 수요 '
+    + '(당월 ' + daysInMonth + '일 기준 · 한 달치면 ' + daysInMonth + '일)</div>';
 
   // 규격채널 박스 — 재고는 전국 단일 풀이지만 제품 규격(병/생 vs 캔)은 갈리므로
   // ON/OFF를 각각 박스로 세우고 아래로 쭉 나열한다. 컬럼 헤더는 박스 안에서 sticky라
@@ -4308,8 +4327,10 @@ async function renderSumStock() {
       + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
       + r.sku + nearTag + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fU(r.avail, r.hl) + '</span>'
-      + drill(r.pend, r.hl, r.pendLots.length, lid + 'pd', '#a78bfa')
-      + drill(r.inCur, r.hl, r.inLots.length, lid + 'in', '#38bdf8')
+      + (hasInb ? drill(r.pend, r.hl, r.pendLots.length, lid + 'pd', '#a78bfa')
+                : '<span style="justify-self:end;color:rgba(255,255,255,.25);">—</span>')
+      + (hasInb ? drill(r.inCur, r.hl, r.inLots.length, lid + 'in', '#38bdf8')
+                : '<span style="justify-self:end;color:rgba(255,255,255,.25);">—</span>')
       + drill(none ? null : r.fcstOn, r.hl, Object.keys(r.byRegion).length, lid + 'on')
       + drill(none ? null : r.fcstOff, r.hl, Object.keys(r.byCh).length, lid + 'off')
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fU(r.use, r.hl) + useMark) + '</span>'
