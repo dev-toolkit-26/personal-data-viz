@@ -3859,7 +3859,7 @@ async function _stockOffDemand() {
     const sku = (window.OffIngest ? OffIngest.normalizeOffSku(r.sku, r.acct) : r.sku);
     const f = hl[sku];
     if (!f) continue;                                  // 재고에 없는 SKU는 판정 대상 아님
-    const o = out[sku] || (out[sku] = { fcst: 0, mtd: 0, next: 0, fcstHi: 0, fcstLo: 0, byCh: {}, byAcct: {} });
+    const o = out[sku] || (out[sku] = { fcst: 0, mtd: 0, next: 0, rofo: 0, fcstHi: 0, fcstLo: 0, byCh: {}, byAcct: {} });
     const v = Math.max(arr(r, 'fcst_m')[i] || 0, 0) / f;
     o.fcst += v;
     if (v) {                                   // 드릴다운용 — 채널 / 채널·거래처 단위 보관
@@ -3870,6 +3870,7 @@ async function _stockOffDemand() {
     // 채널이 요구하는 잔여 유통기한으로 수요를 갈라 둔다 — 어느 재고가 어디로 갈 수 있는지 판정에 쓴다
     if ((STOCK_SHELF_OFF_CH[r.ch] || STOCK_SHELF_OFF_LO) >= STOCK_SHELF_OFF_HI) o.fcstHi += v; else o.fcstLo += v;
     o.mtd  += Math.max(arr(r, 'act_q_m')[i] || 0, 0);
+    o.rofo += Math.max(arr(r, 'rofo_m')[i] || 0, 0) / f;      // 당월 RoFo — 주간 FCST와 독립된 하한
     o.next += Math.max(arr(r, 'rofo_m')[i + 1] || 0, 0) / f;
   }
   _stockOffCache = out;
@@ -3917,9 +3918,9 @@ function _stockCompute(stock, offDem, inbound) {
   // 수요는 On/Off를 나눠 담는다 — 합계만 보면 "어느 쪽 수요가 큰지"가 사라져
   // 왜 쇼트인지 설명이 안 된다(재고는 하나인데 수요는 두 채널에서 온다).
   const dem = {};
-  const add = (src, sku, f, mt, nx, hi, lo) => {
-    const o = dem[sku] || (dem[sku] = { on: 0, off: 0, mtd: 0, next: 0, hi: 0, lo: 0 });
-    o[src] += f; o.mtd += mt; o.next += nx; o.hi += hi || 0; o.lo += lo || 0;
+  const add = (src, sku, f, mt, nx, hi, lo, rf) => {
+    const o = dem[sku] || (dem[sku] = { on: 0, off: 0, mtd: 0, next: 0, rofo: 0, hi: 0, lo: 0 });
+    o[src] += f; o.mtd += mt; o.next += nx; o.hi += hi || 0; o.lo += lo || 0; o.rofo += rf || 0;
   };
   const i = (_upGetFcstMonth() || 7) - 1;
   // On은 지역별 sku_detail이 따로 있다 — 드릴다운용으로 SKU별 지역 FCST를 모은다
@@ -3939,12 +3940,14 @@ function _stockCompute(stock, offDem, inbound) {
       const d = s.data || {};
       // On-Trade 수요는 ON 규격(3개월) — 7개월 제한을 받지 않으므로 전부 저기준 몫
       const fOn = Math.max(d.this_week_fcst || 0, 0);
+      const rm  = d.rofo_monthly || [];
       add('on', s.sku, fOn, Math.max(d.mtd || 0, 0),
-          Math.max((d.rofo_monthly || [])[i + 1] || 0, 0), 0, fOn);
+          Math.max(rm[i + 1] || 0, 0), 0, fOn, Math.max(rm[i] || 0, 0));
     }
   }
   for (const sku in (offDem || {}))
-    add('off', sku, offDem[sku].fcst, offDem[sku].mtd, offDem[sku].next, offDem[sku].fcstHi, offDem[sku].fcstLo);
+    add('off', sku, offDem[sku].fcst, offDem[sku].mtd, offDem[sku].next,
+        offDem[sku].fcstHi, offDem[sku].fcstLo, offDem[sku].rofo);
 
   const rows = [];
   for (const sku in Object.assign({}, sup, inb)) {      // 재고 0이어도 입고 예정이 있으면 보여준다
@@ -3952,10 +3955,16 @@ function _stockCompute(stock, offDem, inbound) {
     if (!sup[sku]) { const any = inb[sku].lots[0] || inb[sku].pendLots[0] || {};
       sup[sku] = { hl: any.hl || 0.0792, ch: any.ch || 'OFF',
                    total: 0, hi: 0, lo: 0, near: 0, blocked: 0, lots: [] }; }
-    const s = sup[sku], d = dem[sku] || { on: 0, off: 0, mtd: 0, next: 0, hi: 0, lo: 0 };
+    const s = sup[sku], d = dem[sku] || { on: 0, off: 0, mtd: 0, next: 0, rofo: 0, hi: 0, lo: 0 };
     const fcst = d.on + d.off;
     const rr   = d.mtd / elapsed * dim;          // MTD 런레이트를 월 환산
-    const use  = Math.max(fcst, rr);             // 큰 쪽 채택 — FCST 하향이 쇼트를 가리므로
+    const rofo = d.rofo || 0;                    // 당월 RoFo
+    // 셋 중 최대. 쇼트가 나면 FCST뿐 아니라 MTD도 눌려(없어서 못 판 물량은 실적에 안 잡힌다)
+    // 런레이트까지 같이 낮아진다. RoFo는 월 단위로 미리 잡혀 주간 FCST와 독립이라 하한이 된다.
+    const use  = Math.max(fcst, rr, rofo);
+    let basis = 'fcst';
+    if (rr > fcst) basis = 'rr';
+    if (rofo > Math.max(fcst, rr)) basis = 'rofo';
     const rest = Math.max(use - d.mtd, 0);       // 당월 남은 수요
     // 잔여 180~209일 재고(lo)는 6개월 채널에만 나간다. 그 채널 수요를 넘는 몫은
     // 재고가 있어도 갈 곳이 없으므로 가용에서 뺀다(=제한 잉여).
@@ -3974,7 +3983,7 @@ function _stockCompute(stock, offDem, inbound) {
       byAcct: (offDem && offDem[sku] && offDem[sku].byAcct) || {},
       hi: s.hi, lo: s.lo, loIdle, loShare,
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
-      fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, basis: rr > fcst ? 'rr' : 'fcst',
+      fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, rofo, basis,
       use, rest, cover, gap: Math.max(rest - avail - pend - inCur, 0),
       pend, inCur, inNext,
       inLots: (inb[sku] && inb[sku].lots) || [], pendLots: (inb[sku] && inb[sku].pendLots) || [],
@@ -4154,9 +4163,12 @@ async function renderSumStock() {
 
   // 범례 — 각주까지 내려가야 알 수 있으면 설명이 아니다. 표 바로 위에 둔다.
   html += '<div style="font-size:10.5px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:8px;padding-left:2px;">'
-    + '채택수요 = 당월 FCST와 <strong style="color:rgba(255,255,255,.75);font-weight:600;">런레이트</strong>'
-    + '(MTD ÷ 경과일 × 월일수 = 지금 판매 속도의 월 환산) 중 <strong style="color:rgba(255,255,255,.75);font-weight:600;">큰 쪽</strong>. '
-    + '<span style="color:#fbbf24;font-weight:700;">런</span> = 실제 판매가 FCST보다 빨라 런레이트가 채택된 SKU · '
+    + '채택수요 = 당월 FCST · <strong style="color:rgba(255,255,255,.75);font-weight:600;">런레이트</strong>'
+    + '(MTD ÷ 경과일 × 월일수) · <strong style="color:rgba(255,255,255,.75);font-weight:600;">당월 RoFo</strong> '
+    + '셋 중 <strong style="color:rgba(255,255,255,.75);font-weight:600;">가장 큰 값</strong>. '
+    + '<span style="color:#fbbf24;font-weight:700;">런</span> = 판매가 FCST보다 빠른 SKU · '
+    + '<span style="color:#fb923c;font-weight:700;">RoFo</span> = RoFo가 둘보다 큰 SKU '
+    + '(쇼트가 나면 FCST도 실적도 함께 눌리므로 RoFo를 하한으로 둔다) · '
     + '<strong style="color:rgba(255,255,255,.75);font-weight:600;">Days</strong> = 가용재고 ÷ 일평균 수요 '
     + '(당월 ' + daysInMonth + '일 기준 · 한 달치면 ' + daysInMonth + '일)</div>';
 
@@ -4294,10 +4306,14 @@ async function renderSumStock() {
       : r.status === 'nofcst'
       ? '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(255,255,255,.06);color:' + c + ';white-space:nowrap;" title="FCST·실적에 잡히지 않은 SKU — 판정 근거가 없어 비워둔다. FCST가 반영되면 자동으로 채워진다.">FCST 없음</span>'
       : '<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(74,222,128,.12);color:' + c + ';">정상</span>';
-    // 런레이트가 FCST를 넘어 채택된 경우 표시 — FCST만 믿으면 이 물량이 안 보인다
+    // FCST가 아닌 기준이 채택된 경우 표시 — FCST만 믿으면 이 물량이 안 보인다
     const useMark = r.basis === 'rr'
       ? '<span style="color:#fbbf24;font-size:9px;margin-left:3px;font-weight:700;"'
-        + ' title="실제 판매 속도(런레이트)가 FCST보다 빨라 런레이트를 수요로 채택">런</span>' : '';
+        + ' title="실제 판매 속도(런레이트)가 FCST보다 빨라 런레이트를 수요로 채택">런</span>'
+      : r.basis === 'rofo'
+      ? '<span style="color:#fb923c;font-size:9px;margin-left:3px;font-weight:700;"'
+        + ' title="당월 RoFo가 FCST·런레이트보다 커서 RoFo를 수요로 채택 — 쇼트로 FCST와 실적이 함께 눌렸을 수 있다">RoFo</span>'
+      : '';
     // 수요 근거가 없으면 숫자를 만들어 보여주지 않는다(0 HL은 "0으로 예측했다"는 뜻이 되어버린다)
     const none = r.status === 'nofcst';
     const dash = '<span style="color:rgba(255,255,255,.25);">—</span>';
@@ -4403,8 +4419,12 @@ async function renderSumStock() {
           + ' = ' + wht(W(ex.avail)))
       + stepBox(2, '수요 합산', 'On FCST ' + W(ex.fcstOn) + ' + Off FCST ' + W(ex.fcstOff)
           + ' = ' + wht(W(ex.fcst)))
-      + stepBox(3, '런레이트 대조', 'MTD ' + W(ex.mtd) + ' ÷ ' + elapsedDays + '일 × ' + daysInMonth + '일 = ' + W(ex.rr)
-          + '<br>→ 큰 쪽 채택 ' + wht(W(ex.use)) + (ex.basis === 'rr' ? ' <span style="color:#fbbf24;">(런레이트)</span>' : ' <span style="color:rgba(255,255,255,.5);">(FCST)</span>'))
+      + stepBox(3, '수요 기준 대조', '런레이트 ' + W(ex.rr) + ' (MTD ' + W(ex.mtd) + ' ÷ ' + elapsedDays + '일 × ' + daysInMonth + '일)'
+          + '<br>RoFo ' + W(ex.rofo) + ' · FCST ' + W(ex.fcst)
+          + '<br>→ 최대 채택 ' + wht(W(ex.use))
+          + (ex.basis === 'rr' ? ' <span style="color:#fbbf24;">(런레이트)</span>'
+             : ex.basis === 'rofo' ? ' <span style="color:#fb923c;">(RoFo)</span>'
+             : ' <span style="color:rgba(255,255,255,.5);">(FCST)</span>'))
       + stepBox(4, '소진일수 · 판정', '가용 ' + W(ex.avail) + ' ÷ 일평균 ' + W(ex.use / daysInMonth)
           + ' = ' + wht(ex.days == null ? '—' : Math.round(ex.days).toLocaleString('ko-KR') + '일')
           + '<br>잔여수요 ' + W(ex.rest) + (ex.status === 'short' ? ' > ' : ' ≤ ') + '가용 ' + W(ex.avail)
