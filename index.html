@@ -3894,14 +3894,18 @@ function _stockCompute(stock, offDem, inbound) {
   const inStock = new Set(stock.lots.map(l => l.code + '|' + l.exp));
   const inb  = {};
   for (const r of ((inbound && inbound.rows) || [])) {
-    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, matched: 0, cur: 0, next: 0, lots: [], pendLots: [] });
+    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, matched: 0, cur: 0, next: 0, sail: 0,
+                                            lots: [], pendLots: [], sailLots: [] });
     if (r.pending) {                                   // 입고 완료·통관 대기
       if (r.exp && inStock.has(r.code + '|' + r.exp)) { o.matched += r.qty; continue; }
       o.pend += r.qty; o.pendLots.push(r);
       continue;
     }
-    if (r.arr < eom) o.cur += r.qty; else if (r.arr < eon) o.next += r.qty;
-    o.lots.push(r);
+    if (r.arr < eom) { o.cur += r.qty; o.lots.push(r); }        // 당월 안에 통관 — 이번 달 쇼트를 메운다
+    else {                                                      // 익월 이후 — 파이프라인
+      o.sail += r.qty; o.sailLots.push(r);
+      if (r.arr < eon) o.next += r.qty;
+    }
   }
   const sup = {};
   for (const lot of stock.lots) {
@@ -3968,6 +3972,7 @@ function _stockCompute(stock, offDem, inbound) {
     const pendM = (inb[sku] && inb[sku].matched) || 0;   // 이미 재고에 있어 제외한 몫(표시용)
     const inCur = (inb[sku] && inb[sku].cur) || 0;        // 당월 잔여기간 통관 예정
     const inNext = (inb[sku] && inb[sku].next) || 0;      // 익월 통관 예정
+    const inSail = (inb[sku] && inb[sku].sail) || 0;     // 익월 이후 도착분 전체(입항예정)
     const fcst = d.on + d.off;
     const rr   = d.mtd / elapsed * dim;          // MTD 런레이트를 월 환산
     const rofo = d.rofo || 0;                    // 당월 RoFo
@@ -4000,8 +4005,9 @@ function _stockCompute(stock, offDem, inbound) {
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, rofo, basis,
       use, rest, cover, gap: Math.max(rest - avail - pend - inCur, 0),
-      pend, pendM, inCur, inNext,
+      pend, pendM, inCur, inNext, inSail,
       inLots: (inb[sku] && inb[sku].lots) || [], pendLots: (inb[sku] && inb[sku].pendLots) || [],
+      sailLots: (inb[sku] && inb[sku].sailLots) || [],
       days: use ? avail / (use / dim) : null,
       // use=0 은 FCST에도 실적에도 안 잡힌 SKU(행사 반입 등). 정상이 아니라 '판정 불가'다.
       // 재고로는 모자라도 당월 입고로 덮이면 '입고대기' — 지금 조치할 쇼트와 구분한다.
@@ -4140,8 +4146,7 @@ async function renderSumStock() {
   const UL = _stockUnit === 'hl' ? 'HL' : 'QTY';
   const conv = (q, hl) => _stockUnit === 'hl' ? q * hl : q;
   const nU = (q, hl) => Math.round(conv(q, hl)).toLocaleString('ko-KR');          // 숫자만
-  const fU = (q, hl) => (q == null || !isFinite(q)) ? '—'                          // 숫자 + 단위
-    : nU(q, hl) + ' <span style="color:rgba(255,255,255,.4);font-size:9.5px;">' + UL + '</span>';
+  const fU = (q, hl) => (q == null || !isFinite(q)) ? '—' : nU(q, hl);   // 숫자만 (단위는 헤더 토글)
 
   const chip = (c, label, n) => '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:14px;'
     + 'background:rgba(255,255,255,.06);border:1px solid ' + c + '55;font-size:11.5px;font-weight:600;color:#fff;">'
@@ -4151,8 +4156,8 @@ async function renderSumStock() {
   // On/Off FCST 두 칸에 넘긴다.
   // 공급 3단(가용·통관대기·입고예정)이 붙어 SKU는 남는 폭을 쓴다. 간격을 6px로 좁혀 폭을 번다.
   const GC = (window.innerWidth <= 1440)
-    ? '78px minmax(0,1fr) 62px 62px 62px 70px 70px 72px 40px'
-    : '86px minmax(0,1fr) 70px 70px 70px 78px 78px 80px 46px';
+    ? '72px minmax(0,1fr) 46px 46px 46px 46px 52px 52px 54px 34px'
+    : '80px minmax(0,1fr) 52px 52px 52px 52px 58px 58px 60px 38px';
   const GAP = '6px';
   const HD = 'font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.8px;font-weight:700;';
 
@@ -4161,6 +4166,7 @@ async function renderSumStock() {
     + chip(C.watch, '주의', nW) + chip(C.ok, '정상', nO)
     + (nN ? chip(C.nofcst, 'FCST 없음', nN) : '') + '</div>'
     + '<span style="font-size:11px;color:rgba(255,255,255,.5);display:inline-flex;align-items:center;gap:10px;">'
+    + '<span style="color:rgba(255,255,255,.4);">단위</span>'
     + '<span style="display:inline-flex;border:1px solid rgba(255,255,255,.18);border-radius:5px;overflow:hidden;">'
     + ['hl', 'qty'].map(u => '<button type="button" onclick="setStockUnit(&quot;' + u + '&quot;)"'
         + ' style="border:0;padding:2px 10px;font-size:10.5px;font-weight:700;letter-spacing:.4px;cursor:pointer;'
@@ -4278,45 +4284,58 @@ async function renderSumStock() {
     return h + '</div>';
   };
 
-  // 입고 로트 상세. pend=true면 '통관 대기'(창고 입고 완료·미통관), false면 통관 예정분.
+  // 입고 로트 상세. mode: 'pend' 통관대기 / 'cur' 당월 통관예정 / 'sail' 익월 이후 입항예정.
   // 소비기한이 비어 있으면 룰을 걸 수 없어 그대로 표시만 한다.
-  const inboundHtml = (r, pend) => {
-    const lots = (pend ? r.pendLots : r.inLots).slice()
-      .sort((a, b) => (pend ? (a.inn || '').localeCompare(b.inn || '') : a.arr.localeCompare(b.arr)));
+  const inboundHtml = (r, mode) => {
+    const pend = mode === 'pend', sail = mode === 'sail';
+    const src = pend ? r.pendLots : sail ? r.sailLots : r.inLots;
+    const lots = src.slice().sort((a, b) =>
+      (pend ? (a.inn || a.arr) : a.arr).localeCompare(pend ? (b.inn || b.arr) : b.arr));
     if (!lots.length) return '';
-    const col = pend ? '#a78bfa' : '#38bdf8';
+    const col = pend ? '#a78bfa' : sail ? '#5eead4' : '#38bdf8';
     const IG = '82px 36px minmax(0,1fr) 86px 76px';
+    // ETA만 잡힌 건은 arr = ETA + 리드타임이므로 되짚어 ETA를 복원한다
+    const etaOf = l => { const t = new Date(l.arr + 'T00:00:00');
+      t.setDate(t.getDate() - STOCK_IN_LEAD_ETA); return t.toISOString().slice(0, 10); };
     let h = '<div style="padding:6px 10px 8px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
       + '<div style="font-size:9.5px;color:' + col + ';letter-spacing:.5px;padding:0 0 4px 2px;">'
       + (pend ? '통관 대기 · ' + nU(r.pend, r.hl) + ' ' + UL + ' — 창고 입고 완료, 통관 전이라 데일리스탁에 없다'
               + (r.pendM * r.hl >= 0.5 ? ' · <span style="color:rgba(255,255,255,.5);">같은 유통기한이 재고에 있어 '
                  + nU(r.pendM, r.hl) + ' ' + UL + ' 제외(이미 반영)</span>' : '')
-              : '통관 예정 · 당월 잔여 ' + nU(r.inCur, r.hl) + ' ' + UL + ' / 익월 ' + nU(r.inNext, r.hl) + ' ' + UL)
+         : sail ? '입항 예정 · ' + nU(r.inSail, r.hl) + ' ' + UL + ' — 익월 이후 도착분(당월 판정에는 미반영)'
+                + ' · 익월 ' + nU(r.inNext, r.hl) + ' ' + UL
+         : '통관 예정 · 당월 잔여 ' + nU(r.inCur, r.hl) + ' ' + UL)
       + '</div>'
       + '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
-      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>' + (pend ? '입고일' : '통관예정') + '</span><span></span>'
-      + '<span>소비기한</span><span style="justify-self:end;">수량</span>'
-      + '<span style="justify-self:end;">' + (pend ? '대기' : '잔여') + '</span></div>';
+      + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>' + (pend ? '입고일' : sail ? 'ETA' : '통관예정') + '</span><span></span>'
+      + '<span>' + (sail ? '통관예정' : '소비기한') + '</span><span style="justify-self:end;">수량</span>'
+      + '<span style="justify-self:end;">' + (pend ? '대기' : sail ? '남은일수' : '잔여') + '</span></div>';
     const asOf = stock.as_of;
     h += lots.map(l => {
-      const base = pend ? (l.inn || l.arr) : l.arr;
-      const rem  = l.exp ? Math.round((new Date(l.exp + 'T00:00:00') - new Date(base + 'T00:00:00')) / 86400000) : null;
-      const wait = pend ? Math.round((new Date(asOf + 'T00:00:00') - new Date(base + 'T00:00:00')) / 86400000) : null;
-      const warn = pend ? wait > 30 : rem != null && rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI);
+      const base = pend ? (l.inn || l.arr) : sail ? (l.inn || etaOf(l)) : l.arr;
+      const rem  = l.exp ? Math.round((new Date(l.exp + 'T00:00:00') - new Date(l.arr + 'T00:00:00')) / 86400000) : null;
+      const wait = Math.round((new Date((sail ? l.arr : base) + 'T00:00:00') - new Date(asOf + 'T00:00:00')) / 86400000);
+      const warn = pend ? (new Date(asOf) - new Date(base)) / 86400000 > 30
+                        : rem != null && rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI);
       return '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;align-items:baseline;font-size:11px;'
         + 'line-height:1.7;padding:0 0 0 2px;">'
         + '<span style="color:#fff;">' + base + '</span>'
-        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (pend ? '' : (l.est ? '추정' : '확정')) + '</span>'
-        + '<span style="color:rgba(255,255,255,.75);">' + (l.exp || '<span style="color:#fbbf24;">미상</span>') + '</span>'
+        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (pend ? '' : l.inn ? '확정' : 'ETA') + '</span>'
+        + '<span style="color:rgba(255,255,255,.75);">'
+        + (sail ? l.arr : (l.exp || '<span style="color:#fbbf24;">미상</span>')) + '</span>'
         + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
         + '<span style="justify-self:end;color:' + (warn ? C.watch : 'rgba(255,255,255,.72)') + ';">'
-        + (pend ? wait + '일' : rem == null ? '—' : rem + '일') + '</span></div>';
+        + (pend ? Math.round((new Date(asOf) - new Date(base)) / 86400000) + '일'
+                : sail ? 'D-' + Math.max(wait, 0)
+                : rem == null ? '—' : rem + '일') + '</span></div>';
     }).join('');
     h += '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
       + (pend ? '통관되면 바로 가용재고가 된다. 반입일정에 통관일자가 비어 있어도 같은 제품코드·소비기한 '
               + '로트가 데일리스탁에 있으면 이미 통관된 것으로 보고 제외한다(엑셀 미기입 건).'
-              : '통관일자가 없으면 추정: 여주입고일 + ' + STOCK_IN_LEAD_IN + '일, 입고일도 없으면 ETA + '
-                + STOCK_IN_LEAD_ETA + '일(과거 리드타임 중앙값). 소비기한 미상은 전량 가용으로 본다.')
+         : sail ? 'ETA가 잡혔다는 건 이미 선적돼 오고 있다는 뜻이다. 다만 해상 지연·통관 변수가 남아 '
+                + '당월 쇼트 판정에는 넣지 않는다. 통관예정 = ETA + ' + STOCK_IN_LEAD_ETA + '일(과거 리드타임 중앙값).'
+         : '통관일자가 없으면 추정: 여주입고일 + ' + STOCK_IN_LEAD_IN + '일, 입고일도 없으면 ETA + '
+           + STOCK_IN_LEAD_ETA + '일(과거 리드타임 중앙값). 소비기한 미상은 전량 가용으로 본다.')
       + '</div></div>';
     return h;
   };
@@ -4372,14 +4391,16 @@ async function renderSumStock() {
       + 'line-height:1.8;padding:3px 10px 3px 7px;border-top:1px solid rgba(255,255,255,.06);' + tint
       + 'border-left:3px solid ' + (acc || 'transparent') + ';">'
       + '<span>' + badge + '</span>'
-      + '<span style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
+      + '<span title="' + r.sku + '" style="color:' + dim + ';font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
       + '<span id="' + lid + '-c" style="color:rgba(255,255,255,.35);font-size:9px;margin-right:4px;">▸</span>'
       + r.sku + nearTag + '</span>'
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + fU(r.avail, r.hl) + '</span>'
       + (hasInb ? drill(r.pend, r.hl, r.pendLots.length, lid + 'pd', '#a78bfa')
                 : '<span style="justify-self:end;color:rgba(255,255,255,.35);">—</span>')
       + (hasInb ? drill(r.inCur, r.hl, r.inLots.length, lid + 'in', '#38bdf8')
-                : '<span style="justify-self:end;color:rgba(255,255,255,.25);">—</span>')
+                : '<span style="justify-self:end;color:rgba(255,255,255,.35);">—</span>')
+      + (hasInb ? drill(r.inSail, r.hl, r.sailLots.length, lid + 'sl', '#5eead4')
+                : '<span style="justify-self:end;color:rgba(255,255,255,.35);">—</span>')
       + drill(none ? null : r.fcstOn, r.hl, Object.keys(r.byRegion).length, lid + 'on')
       + drill(none ? null : r.fcstOff, r.hl, Object.keys(r.byCh).length, lid + 'off')
       + '<span style="justify-self:end;color:' + dim + ';white-space:nowrap;">' + (none ? dash : fU(r.use, r.hl) + useMark) + '</span>'
@@ -4388,8 +4409,9 @@ async function renderSumStock() {
       + '<div id="' + lid + '" style="display:none;">' + lotHtml(r) + '</div>'
       + '<div id="' + lid + 'on" style="display:none;">' + breakdown(r, 'on') + '</div>'
       + '<div id="' + lid + 'off" style="display:none;">' + breakdown(r, 'off') + '</div>'
-      + '<div id="' + lid + 'in" style="display:none;">' + inboundHtml(r, false) + '</div>'
-      + '<div id="' + lid + 'pd" style="display:none;">' + inboundHtml(r, true) + '</div>';
+      + '<div id="' + lid + 'in" style="display:none;">' + inboundHtml(r, 'cur') + '</div>'
+      + '<div id="' + lid + 'pd" style="display:none;">' + inboundHtml(r, 'pend') + '</div>'
+      + '<div id="' + lid + 'sl" style="display:none;">' + inboundHtml(r, 'sail') + '</div>';
   };
 
   // 안쪽에 스크롤 박스를 두지 않는다. 카드는 내용만큼 늘어나고 스크롤은 .kn-slide가 맡는다.
@@ -4421,7 +4443,8 @@ async function renderSumStock() {
       + '<div style="display:grid;grid-template-columns:' + GC + ';gap:' + GAP + ';' + HD + 'padding:0 10px 6px 10px;">'
       + '<span>상태</span><span>SKU</span><span style="justify-self:end;">가용재고</span>'
       + '<span style="justify-self:end;" title="여주창고 입고 완료·통관 미완 — 데일리스탁에 없다">통관대기</span>'
-      + '<span style="justify-self:end;" title="당월 잔여기간 통관 예정분">입고예정</span>'
+      + '<span style="justify-self:end;" title="당월 잔여기간 안에 통관되는 물량 — 이번 달 쇼트를 메운다">입고예정</span>'
+      + '<span style="justify-self:end;" title="익월 이후 도착분. ETA만 잡힌 해상 운송 중 물량이 대부분이라 당월 판정에는 넣지 않는다">입항예정</span>'
       + '<span style="justify-self:end;">On FCST</span><span style="justify-self:end;">Off FCST</span>'
       + '<span style="justify-self:end;">채택수요</span><span style="justify-self:end;">Days</span></div>'
       + '</div>'
