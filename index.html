@@ -4017,6 +4017,7 @@ const STOCK_IN_EXTRA = {
 };
 // 가용 시점은 '통관 완료' 기준이다. 데일리스탁은 통관분만 담으므로 미통관분은 재고에 없다.
 // 과거 1,437건 중앙값: 여주입고 → 통관 3일, ETA → 통관 12일.
+const STOCK_IN_SCHEMA   = 2;    // 1: 입고일 기준(통관 개념 없음) / 2: 통관 기준 + 통관대기 분리
 const STOCK_IN_LEAD_IN  = 3;    // 여주입고일만 있을 때 통관 추정
 const STOCK_IN_LEAD_ETA = 12;   // ETA만 있을 때 통관 추정
 
@@ -4071,7 +4072,8 @@ async function parseInboundExcel(file, cutoff) {
     if (kept) sheets.push(sn + '(' + kept + ')');
   }
   if (!rows.length) throw new Error('기준일(' + cut + ') 이후 반입 건이 없습니다. 시트 형식을 확인하세요.');
-  return { file: file.name, cutoff: cut, sheets, rows, excluded, seen, unmapped: [...unmapped] };
+  // v는 파서 스키마 버전. 스냅샷이 구 버전이면 화면에서 경고한다(조용히 0으로 보이는 게 제일 나쁘다).
+  return { v: STOCK_IN_SCHEMA, file: file.name, cutoff: cut, sheets, rows, excluded, seen, unmapped: [...unmapped] };
 }
 
 // 표시 단위 — 'hl'(기본) | 'qty'. 재고 원본은 QTY라 QTY가 실물 감각에 맞고,
@@ -4109,6 +4111,7 @@ async function renderSumStock() {
   catch (e) { console.warn('Off 수요 로드 실패 — On 수요만으로 판정합니다:', e); }
   const inbound = DASHBOARD_DATA.inbound;
   const hasInb  = !!(inbound && inbound.rows && inbound.rows.length);
+  const staleInb = hasInb && (inbound.v || 1) < STOCK_IN_SCHEMA;   // 구 파서로 저장된 스냅샷
   const { rows, elapsed: elapsedDays, dim: daysInMonth } = _stockCompute(stock, offDem, inbound);
   const nS = rows.filter(r => r.status === 'short').length;
   const nW = rows.filter(r => r.status === 'watch').length;
@@ -4152,6 +4155,12 @@ async function renderSumStock() {
     + '기준일 ' + stock.as_of
     + (hasInb ? ' · 반입 ' + inbound.cutoff + ' 이후' : '')
     + (offDem ? '' : ' · <span style="color:#fbbf24;">Off 수요 미반영</span>') + '</span></div>';
+
+  if (staleInb) html += '<div style="font-size:10.5px;color:#fbbf24;background:rgba(251,191,36,.08);'
+    + 'border:1px solid rgba(251,191,36,.25);border-radius:5px;padding:6px 10px;margin-bottom:8px;line-height:1.6;">'
+    + '입고 데이터가 <strong style="font-weight:600;">구 형식으로 저장돼 있습니다</strong>(통관 반영 전 업로드분). '
+    + '창고에 들어왔지만 통관 전인 물량이 통째로 빠져 <strong style="font-weight:600;">통관대기가 0으로 나옵니다</strong>. '
+    + 'Data Update 탭에서 반입일정을 다시 업로드해 주세요.</div>';
 
   // 반입일정 미업로드 안내 — 통관대기·입고예정이 비면 쇼트가 실제보다 많이 잡힌다
   if (!hasInb) html += '<div style="font-size:10.5px;color:#fbbf24;background:rgba(251,191,36,.08);'
