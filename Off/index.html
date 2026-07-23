@@ -155,6 +155,10 @@ console.log('[Off] 시드 로드:', OFF.channels.length, '채널,', (OFF.total.a
   --text-muted: #6b7280;
   --radius: 8px;
   --shadow: 0 1px 4px rgba(0,0,0,.1);
+  /* Keynote 배경 — On과 동일한 그린 그라디언트 로직 */
+  --kn-bg: radial-gradient(1200px 700px at 18% -10%, rgba(32,85,39,.55), transparent 60%),
+           radial-gradient(1000px 800px at 100% 110%, rgba(20,60,30,.45), transparent 55%),
+           linear-gradient(160deg, #0c1410 0%, #0e1f15 45%, #0a0f0c 100%);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 13px; }
@@ -554,8 +558,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
 /* ── Keynote Summary Overlay ── */
 .kn-stage { position:fixed; inset:0; overflow:hidden; font-family:'Inter','Segoe UI',system-ui,sans-serif; z-index:9998; word-break:keep-all; overflow-wrap:break-word; }
 .kn-stage strong { word-break:keep-all; }
-.kn-bg { position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,rgba(0,0,0,0.5) 100%), url('https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1400&q=80') center/cover no-repeat; animation:knBgShift 20s ease-in-out infinite alternate; }
-@keyframes knBgShift { 0%{background-position:center 40%} 100%{background-position:center 60%} }
+.kn-bg { position:absolute; inset:0; background:var(--kn-bg); background-attachment:fixed; }
+.kn-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(1100px 600px at 50% 8%, rgba(74,222,128,.06), transparent 60%); animation:knBgDrift 24s ease-in-out infinite alternate; pointer-events:none; }
+@keyframes knBgDrift { 0%{transform:translate3d(-1.5%,-1%,0)} 100%{transform:translate3d(1.5%,1.5%,0)} }
 .kn-track { position:absolute; inset:0; display:flex; width:300%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
 .kn-slide { flex:0 0 33.3333%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
 .kn-slide.is-active { opacity:1; }
@@ -1170,16 +1175,18 @@ td:first-child, td:nth-child(2) { text-align: left; }
         +'<span style="color:rgba(255,255,255,.75);"><strong style="color:'+bC+';">'+fHL(tAct)+' HL</strong> · RoFo 대비 <strong style="color:'+bC+';">'+fPct(mtdRofoT)+'</strong> (vs WD Baseline <strong style="color:'+bC+';">'+_pp(tGap)+'</strong>) · WD 기대 <strong style="color:#fff;">'+fHL(expTtl)+' HL</strong>'+(gapHLttl!=null?' (<span style="color:'+gapCttl+';font-weight:700;">'+(gapHLttl>=0?'+':'')+gapHLttl.toFixed(0)+' HL</span>)':'')+(tAct>0?'':' — 실적 집계 전')+'</span>'
         +'</div>';
       dhtml+='<div style="display:flex;flex-direction:column;gap:8px;">';
-      chans.forEach(function(c){
+      // Off 전체(코어채널 합계 = OFF.total, 배너와 동일 수치)를 CVS 위 맨 앞에 총계 행으로 추가
+      var offTtlRow = { key:'Off 전체', label:'Off 전체', m:(OFF.total||{}), accounts:[], _ttl:true };
+      [offTtlRow].concat(chans).forEach(function(c){
         var cm=c.m||{}; var cRo=mv(cm,'rofo_m'), cFc=mv(cm,'fcst_m'), cAc=mv(cm,'act_m');
         var mRo=cRo?cAc/cRo:null, mFc=cFc?cAc/cFc:null;
         var achRo=cRo?cFc/cRo:null;   // FCST 달성률(FCST÷RoFo) — 도넛에서 옮겨온 지표
         var gap=(cAc>0&&cRo)?cAc/cRo-wdPct:null, st=_stGap(gap);
         var roW=Math.min((mRo||0)*100,100).toFixed(1), fcW=Math.min((mFc||0)*100,100).toFixed(1);
         var cExp=(cRo!=null)?cRo*wdPct:null, cGapHL=(cAc>0&&cExp!=null)?cAc-cExp:null, cGapC=(cGapHL!=null&&cGapHL>=0)?'#4ade80':'#f87171';  // 채널 WD 기대 MTD & 갭
-        dhtml+='<div style="background:rgba(0,0,0,.5);border:1px solid '+st.border+';border-left:3px solid '+st.color+';border-radius:8px;padding:11px 18px;display:flex;flex-direction:column;gap:7px;">'
+        dhtml+='<div style="background:'+(c._ttl?'rgba(74,222,128,.06)':'rgba(0,0,0,.5)')+';border:1px solid '+(c._ttl?'rgba(74,222,128,.35)':st.border)+';border-left:3px solid '+st.color+';border-radius:8px;padding:11px 18px;display:flex;flex-direction:column;gap:7px;'+(c._ttl?'margin-bottom:8px;':'')+'">'
           +'<div style="display:grid;grid-template-columns:132px 118px 1fr 178px;align-items:center;gap:14px;font-size:13.5px;white-space:nowrap;">'
-          +'<span style="font-weight:700;color:#fff;">'+(c.label||c.key)+'</span>'
+          +'<span style="font-weight:700;color:#fff;">'+(c.label||c.key)+(c._ttl?' <span style="font-size:9px;font-weight:700;color:#4ade80;border:1px solid rgba(74,222,128,.5);border-radius:8px;padding:1px 6px;letter-spacing:.5px;vertical-align:middle;">TOTAL</span>':'')+'</span>'
           +'<span style="color:'+st.color+';font-weight:600;font-size:12px;display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+st.color+';flex-shrink:0;"></span>'+st.label+'</span>'
           +'<span style="font-size:12px;color:rgba(255,255,255,.6);text-align:right;padding-right:14px;">'
             +'RoFo <strong style="color:#fff;font-weight:700;font-size:13px;">'+fHL(cRo)+'</strong> HL'
@@ -10279,7 +10286,8 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
 
   function triggerAnim(slideIdx) {
     if (slideIdx === 0) {          // 월별 트렌드가 Overview로 합쳐졌다
-      try { if (typeof _sumChartD !== 'undefined' && _sumChartD) _sumChartD.resize(); } catch(_) {}
+      try { if (window._sumChartDOff) window._sumChartDOff.resize(); } catch(_) {}
+      try { (window._sumChartDChanOff||[]).forEach(function(inst){ if(inst) inst.resize(); }); } catch(_) {}
       var wrap = document.querySelector('.kn-chart-reveal');
       if (wrap) {
         wrap.style.transition = 'none';
@@ -10311,6 +10319,18 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
   }
   function next() { go(idx + 1); }
   function prev() { go(idx - 1); }
+
+  // 오버레이가 '처음 열릴 때'는 go()가 안 불려 triggerAnim(0)이 실행되지 않는다 →
+  // Overview 트렌드 차트가 .kn-chart-reveal(clip-path)에 가려진 채 안 뜨는 문제.
+  // On과 동일하게 display 변화를 관찰해, 표시되는 순간 현재 슬라이드를 재생(clip 해제 + 차트 resize)한다.
+  function _knEnter() { triggerAnim(idx); }
+  var _knOpen = !!(overlay.style.display && overlay.style.display !== 'none');
+  if (_knOpen) setTimeout(_knEnter, 80);
+  new MutationObserver(function() {
+    var vis = overlay.style.display && overlay.style.display !== 'none';
+    if (vis && !_knOpen) { _knOpen = true; setTimeout(_knEnter, 80); }
+    else if (!vis) { _knOpen = false; }
+  }).observe(overlay, { attributes: true, attributeFilter: ['style'] });
 
   if (btnNext) btnNext.addEventListener('click', next);
   dots.forEach(function(d){
