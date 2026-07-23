@@ -578,8 +578,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .kn-dot.is-active { background:rgba(255,255,255,.95); width:24px; border-radius:4px; }
 
 /* Chart D wrapper — left→right reveal via clip-path */
-.kn-chart-reveal { clip-path: inset(0 100% 0 0); -webkit-clip-path: inset(0 100% 0 0); transition: clip-path 1.4s cubic-bezier(.4,0,.2,1), -webkit-clip-path 1.4s cubic-bezier(.4,0,.2,1); }
-.kn-chart-reveal.is-on { clip-path: inset(0 0 0 0); -webkit-clip-path: inset(0 0 0 0); }
+/* 리빌 애니메이션 제거 — clip-path 타이밍 이슈로 트렌드 차트가 안 뜨던 문제. 항상 표시. */
+.kn-chart-reveal { clip-path: none; -webkit-clip-path: none; }
 
 /* Weather widget (top-right) */
 .kn-weather { position:absolute; right:24px; top:24px; width:158px; background:rgba(0,0,0,.4); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 4px; -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); z-index:20; }
@@ -10285,17 +10285,9 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
   var idx = 0, total = slides.length;
 
   function triggerAnim(slideIdx) {
-    if (slideIdx === 0) {          // 월별 트렌드가 Overview로 합쳐졌다
+    if (slideIdx === 0) {          // 월별 트렌드 — 리빌 애니메이션 제거, 차트 resize만 수행
       try { if (window._sumChartDOff) window._sumChartDOff.resize(); } catch(_) {}
       try { (window._sumChartDChanOff||[]).forEach(function(inst){ if(inst) inst.resize(); }); } catch(_) {}
-      var wrap = document.querySelector('.kn-chart-reveal');
-      if (wrap) {
-        wrap.style.transition = 'none';
-        wrap.classList.remove('is-on');
-        void wrap.getBoundingClientRect();
-        wrap.style.transition = '';
-        wrap.classList.add('is-on');
-      }
     }
     if (slideIdx === 1) {          // 채널 진척률 바 애니메이션(도넛 제거됨)
       var bars = document.querySelectorAll('.kn-bar-fill');
@@ -10320,9 +10312,8 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
   function next() { go(idx + 1); }
   function prev() { go(idx - 1); }
 
-  // 오버레이가 '처음 열릴 때'는 go()가 안 불려 triggerAnim(0)이 실행되지 않는다 →
-  // Overview 트렌드 차트가 .kn-chart-reveal(clip-path)에 가려진 채 안 뜨는 문제.
-  // On과 동일하게 display 변화를 관찰해, 표시되는 순간 현재 슬라이드를 재생(clip 해제 + 차트 resize)한다.
+  // 오버레이가 '처음 열릴 때'는 go()가 안 불려 triggerAnim(0)이 실행되지 않는다.
+  // display 변화를 관찰해, 표시되는 순간 현재 슬라이드의 차트를 resize(0크기로 생성된 경우 교정).
   function _knEnter() { triggerAnim(idx); }
   var _knOpen = !!(overlay.style.display && overlay.style.display !== 'none');
   if (_knOpen) setTimeout(_knEnter, 80);
