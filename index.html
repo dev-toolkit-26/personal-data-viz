@@ -3780,7 +3780,10 @@ const STOCK_SKU_MAP = {
 const STOCK_SHELF_OFF_CH = { CVS: 210, HYPER: 210, SM: 210, 'C&C': 180, ALSM: 180 };
 const STOCK_SHELF_OFF_HI  = 210;   // 7개월 채널 기준
 const STOCK_SHELF_OFF_LO  = 180;   // 6개월 채널 기준(= OFF 최소 출고 조건)
-const STOCK_SHELF_ON      = 90;    // ON 규격 기준
+const STOCK_SHELF_ON      = 90;    // ON 규격 기준(3개월)
+// ON은 유통기한 여유가 있어도 잔여 3개월 미만은 출고를 지양한다. 그 전에 대비하도록
+// 5개월(150일) 이내로 들어온 재고를 '3개월 임박'으로 예고 표시한다(가용에서 빼지는 않음).
+const STOCK_SHELF_ON_WARN = 150;
 // 특수 SKU(채널 전용 에디션·대용량)는 일반 출고룰을 적용하지 않는다.
 const STOCK_SHELF_EXEMPT = new Set(['SU ORI 1000 Can', 'SU ORI 618 Can']);
 // 판매 불가 제품유형 — 출고보류는 유통기한 이슈로 잡힌 것이라 가용재고에서 뺀다.
@@ -3912,15 +3915,19 @@ function _stockCompute(stock, offDem, inbound) {
     const m = STOCK_SKU_MAP[lot.code]; if (!m) continue;
     const sku = m[0];
     const isOn = m[2] === 'ON';
-    const s = sup[sku] || (sup[sku] = { hl: m[1], ch: m[2], total: 0, hi: 0, lo: 0, near: 0, blocked: 0, lots: [] });
+    const s = sup[sku] || (sup[sku] = { hl: m[1], ch: m[2], total: 0, hi: 0, lo: 0, soon: 0, near: 0, blocked: 0, lots: [] });
     s.total += lot.qty;
     const days = lot.exp ? Math.round((new Date(lot.exp + 'T00:00:00') - asOf) / 86400000) : 9999;
     const limit = isOn ? STOCK_SHELF_ON : STOCK_SHELF_OFF_LO;
     let state;
     if (STOCK_NON_SELLABLE.has(lot.type) || m[3] === 'EXPORT') { s.blocked += lot.qty; state = 'blocked'; }
     else if (STOCK_SHELF_EXEMPT.has(sku)) { s.hi += lot.qty; state = 'hi'; }          // 특수 SKU — 룰 면제
-    else if (isOn) { if (days >= STOCK_SHELF_ON) { s.hi += lot.qty; state = 'hi'; }
-                     else { s.near += lot.qty; state = 'near'; } }
+    else if (isOn) {
+      if (days >= STOCK_SHELF_ON) {                     // 출고 가능(가용) — 단 3개월 임박은 예고
+        s.hi += lot.qty;
+        if (days < STOCK_SHELF_ON_WARN) { s.soon += lot.qty; state = 'soon'; } else state = 'hi';
+      } else { s.near += lot.qty; state = 'near'; }
+    }
     else if (days >= STOCK_SHELF_OFF_HI) { s.hi += lot.qty; state = 'hi'; }           // 전 채널 출고 가능
     else if (days >= STOCK_SHELF_OFF_LO) { s.lo += lot.qty; state = 'lo'; }           // 6개월 채널에만 가능
     else { s.near += lot.qty; state = 'near'; }
@@ -4001,7 +4008,7 @@ function _stockCompute(stock, offDem, inbound) {
       byRegion: onByRegion[sku] || {},
       byCh: (offDem && offDem[sku] && offDem[sku].byCh) || {},
       byAcct: (offDem && offDem[sku] && offDem[sku].byAcct) || {},
-      hi: s.hi, lo: s.lo, loIdle, loShare,
+      hi: s.hi, lo: s.lo, soon: s.soon, loIdle, loShare,
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, rofo, basis,
       use, rest, cover, gap: Math.max(rest - avail - pend - inCur, 0),
@@ -4212,7 +4219,7 @@ async function renderSumStock() {
   // 로트 상세 — 유통일자 오름차순. 임박/차단 로트에 표시를 달아 어느 물량이
   // 왜 가용에서 빠졌는지 행을 펼치면 바로 확인된다.
   const lotHtml = r => {
-    const LC = { hi: C.ok, lo: '#60a5fa', near: C.watch, blocked: 'rgba(255,255,255,.45)' };
+    const LC = { hi: C.ok, lo: '#60a5fa', soon: '#fb923c', near: C.watch, blocked: 'rgba(255,255,255,.45)' };
     const LG = '78px 52px minmax(0,1fr) 84px 92px';
     let h = '<div style="padding:6px 10px 8px 10px;background:rgba(0,0,0,.28);border-top:1px solid rgba(255,255,255,.08);">'
       + '<div style="display:grid;grid-template-columns:' + LG + ';gap:8px;font-size:9.5px;color:rgba(255,255,255,.45);'
@@ -4227,12 +4234,15 @@ async function renderSumStock() {
         ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:600;background:rgba(255,255,255,.07);color:' + c + ';white-space:nowrap;">' + (l.type || '차단') + '</span>'
         : l.state === 'lo'
         ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:700;background:rgba(96,165,250,.16);color:' + c + ';white-space:nowrap;" title="CVS·HYPER·SM은 잔여 7개월(210일) 이상만 받는다">6개월 채널만</span>'
-        : '<span style="font-size:9.5px;color:' + c + ';">전 채널</span>';
+        : l.state === 'soon'
+        ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:700;background:rgba(251,146,60,.16);color:' + c + ';white-space:nowrap;" title="잔여 3~5개월 — 3개월 미만 전에 소진 권장">3개월 임박</span>'
+        : '<span style="font-size:9.5px;color:' + c + ';">출고 가능</span>';
       return '<div style="display:grid;grid-template-columns:' + LG + ';gap:8px;align-items:baseline;font-size:11px;'
         + 'line-height:1.7;padding:0 0 0 2px;' + (l.state === 'near' ? 'background:rgba(251,191,36,.05);'
-          : l.state === 'lo' ? 'background:rgba(96,165,250,.05);' : '') + '">'
+          : l.state === 'lo' ? 'background:rgba(96,165,250,.05);'
+          : l.state === 'soon' ? 'background:rgba(251,146,60,.05);' : '') + '">'
         + '<span style="color:' + (l.state === 'hi' ? '#fff' : c) + ';">' + (l.exp || '—') + '</span>'
-        + '<span style="justify-self:end;color:' + (l.state === 'near' || l.state === 'lo' ? c : 'rgba(255,255,255,.72)') + ';">' + l.days + '일</span>'
+        + '<span style="justify-self:end;color:' + (l.state === 'near' || l.state === 'lo' || l.state === 'soon' ? c : 'rgba(255,255,255,.72)') + ';">' + l.days + '일</span>'
         + '<span style="padding-left:8px;color:rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (l.type || '') + '</span>'
         + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
         + '<span style="justify-self:end;">' + tag + '</span></div>';
@@ -4385,7 +4395,11 @@ async function renderSumStock() {
       + (r.loIdle * r.hl >= 0.5
       ? '<span style="margin-left:5px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(96,165,250,.16);color:#60a5fa;white-space:nowrap;"'
         + ' title="잔여 7개월 미만이라 CVS·HYPER·SM에 못 나가고, 6개월 채널 수요도 넘어선 물량">채널제한 '
-        + nU(r.loIdle, r.hl) + '</span>' : '');
+        + nU(r.loIdle, r.hl) + '</span>' : '')
+      + (r.soon * r.hl >= 0.5
+      ? '<span style="margin-left:5px;padding:0 5px;border-radius:7px;font-size:9px;font-weight:700;background:rgba(251,146,60,.16);color:#fb923c;white-space:nowrap;"'
+        + ' title="잔여 유통기한 3~5개월. 아직 출고 가능하나 3개월 미만이 되면 출고 지양 대상이라 미리 소진 필요">3개월임박 '
+        + nU(r.soon, r.hl) + '</span>' : '');
     return '<div onclick="_stockToggleLot(&quot;' + lid + '&quot;, event)" title="클릭 — 유통기한별 재고 펼치기"'
       + ' style="display:grid;grid-template-columns:' + GC + ';gap:' + GAP + ';align-items:baseline;font-size:12px;cursor:pointer;'
       + 'line-height:1.8;padding:3px 10px 3px 7px;border-top:1px solid rgba(255,255,255,.06);' + tint
@@ -4493,6 +4507,7 @@ async function renderSumStock() {
     + '재고는 전국 단일 풀이라 채널·지역으로 나누지 않고 SKU 단위로 본다. 수요는 On+Off 합산 — 한쪽만 보면 상대 채널 수요가 빠져 안전해 보인다. · '
     + '출고 가능 잔여 유통기한 — OFF: CVS·HYPER·SM 210일(7개월), C&amp;C·ALSM·기타 180일(6개월) / ON(병·생·케그) 90일. '
     + '잔여 180~209일 재고는 6개월 채널에만 나가므로 그 채널 수요를 넘는 몫은 가용에서 제외한다. 설화 1L·618ml은 특수 SKU라 면제 · '
+    + '<span style="color:#fb923c;">3개월임박</span> = ON 제품 중 잔여 3~5개월 물량. 출고는 가능하나 3개월 미만이 되면 출고 지양 대상이라 미리 소진 필요 · '
     + '주의 = 당월(' + daysInMonth + '일)을 못 넘기는 SKU · '
     + '<span style="color:rgba(255,255,255,.55);">FCST 없음</span> = FCST·실적 어디에도 안 잡힌 SKU(행사 반입 등). '
     + '근거가 없어 비워두며 FCST가 반영되면 자동으로 채워진다 · '
