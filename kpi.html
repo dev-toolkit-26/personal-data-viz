@@ -963,6 +963,21 @@ td.sr-cell{white-space:nowrap}
     </div>
   </div>
 
+  <!-- WS JBP (Seoul) -->
+  <div class="si-section" style="margin-top:8px">WS JBP (Seoul) — 도매상별 Snow 인센티브</div>
+  <div style="font-size:12px;color:var(--muted);margin:-6px 0 12px">서울 지점 도매상(WS)별 3~6월 Snow 아울렛 인센티브 배정 현황 · 서울 전용</div>
+  <div id="wsJbpCards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px"></div>
+  <div class="box">
+    <div class="ow"><table class="utable">
+      <thead><tr>
+        <th>No</th><th>도매상 (WS)</th><th>담당 SR</th><th class="r">아울렛</th>
+        <th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th>
+        <th class="r">합계(BOX)</th><th class="r">인센티브 비용</th>
+      </tr></thead>
+      <tbody id="wsJbpBody"></tbody>
+    </table></div>
+  </div>
+
   <div class="si-section">팀(지점)별 진행 현황</div>
   <div class="si-team-grid" id="teamGrid"></div>
 
@@ -2285,6 +2300,50 @@ const SNOW_REGION_NORM={'Seoul':'서울','seoul':'서울','Busan':'부산','busa
 function normalizeSnowRegion(r){return SNOW_REGION_NORM[r]||r;}
 
 // ══════════════════════════════════════════
+//  WS JBP (Seoul) — 도매상별 Snow 인센티브
+//  Source: 26Y Snow Incentive_WS0713_Seoul BD.xlsx (서울 전용, 도매상 단위 집계)
+// ══════════════════════════════════════════
+const WS_JBP_DATA = [
+  { ws:'(유)미라클수입주류상사', sr:'김민석', outlets:52, m3:0,  m4:245, m5:60, m6:215, total:520, cost:1560000 },
+  { ws:'㈜성학주류',             sr:'김민석', outlets:17, m3:0,  m4:20,  m5:95, m6:25,  total:140, cost:420000 },
+  { ws:'주식회사 판다주류',       sr:'김민석', outlets:13, m3:0,  m4:70,  m5:20, m6:30,  total:120, cost:360000 },
+  { ws:'(자)중국주류',           sr:'모정호', outlets:32, m3:11, m4:31,  m5:22, m6:15,  total:79,  cost:219000 },
+  { ws:'(주)서정주류',           sr:'정구영', outlets:9,  m3:0,  m4:40,  m5:34, m6:0,   total:74,  cost:120000 },
+  { ws:'(합)청도코리아',         sr:'채영한', outlets:7,  m3:0,  m4:0,   m5:39, m6:0,   total:39,  cost:117000 },
+  { ws:'주식회사 미소주류',       sr:'김민석', outlets:3,  m3:0,  m4:20,  m5:5,  m6:0,   total:25,  cost:75000 },
+  { ws:'(주)사가명주',           sr:'정구영', outlets:1,  m3:0,  m4:2,   m5:0,  m6:0,   total:2,   cost:6000 },
+];
+function renderWsJbp(){
+  const body=document.getElementById('wsJbpBody'); if(!body) return;
+  const t={outlets:0,m3:0,m4:0,m5:0,m6:0,total:0,cost:0};
+  const cell=v=>v?siFmt(v):'<span style="color:var(--muted)">—</span>';
+  body.innerHTML = WS_JBP_DATA.map((r,i)=>{
+    t.outlets+=r.outlets; t.m3+=r.m3; t.m4+=r.m4; t.m5+=r.m5; t.m6+=r.m6; t.total+=r.total; t.cost+=r.cost;
+    return `<tr>
+      <td>${i+1}</td>
+      <td style="font-weight:600">${r.ws}</td>
+      <td style="color:var(--muted)">${r.sr}</td>
+      <td class="r">${r.outlets}</td>
+      <td class="r">${cell(r.m3)}</td><td class="r">${cell(r.m4)}</td><td class="r">${cell(r.m5)}</td><td class="r">${cell(r.m6)}</td>
+      <td class="r" style="font-weight:600">${siFmt(r.total)}</td>
+      <td class="r" style="color:var(--accent);font-weight:600">${siFmt(r.cost)}원</td>
+    </tr>`;
+  }).join('') + `<tr style="border-top:2px solid var(--border);font-weight:700;background:rgba(147,51,234,.06)">
+      <td></td><td>합계 (${WS_JBP_DATA.length}곳)</td><td></td>
+      <td class="r">${t.outlets}</td>
+      <td class="r">${siFmt(t.m3)}</td><td class="r">${siFmt(t.m4)}</td><td class="r">${siFmt(t.m5)}</td><td class="r">${siFmt(t.m6)}</td>
+      <td class="r">${siFmt(t.total)}</td><td class="r" style="color:var(--accent)">${siFmt(t.cost)}원</td>
+    </tr>`;
+  const cards=document.getElementById('wsJbpCards');
+  if(cards) cards.innerHTML=[
+    ['도매상', WS_JBP_DATA.length+'곳'],
+    ['참여 아울렛', siFmt(t.outlets)+'개'],
+    ['총 판매량', siFmt(t.total)+' BOX'],
+    ['총 인센티브 비용', siFmt(t.cost)+'원'],
+  ].map(([l,v])=>`<div class="si-card" style="text-align:center;padding:14px"><div class="si-lbl" style="justify-content:center;color:var(--muted)">${l}</div><div class="si-bignum" style="margin-top:6px;color:#9333ea">${v}</div></div>`).join('');
+}
+
+// ══════════════════════════════════════════
 //  Snow Incentive localStorage
 // ══════════════════════════════════════════
 const SI_KEY = 'si_incentive_2026';
@@ -2529,6 +2588,7 @@ siRspAll = rspData;
 siCcAll  = ccData;
 renderSIRspTable();
 renderSICCTable();
+renderWsJbp();
 
   } catch(e) { console.error("Snow Incentive error:", e); }
 }
