@@ -912,7 +912,7 @@ td.sr-cell{white-space:nowrap}
 <div class="page" id="page-incentive">
 
   <div class="si-section">전체 현황</div>
-  <div class="si-grid3">
+  <div class="si-grid3" style="grid-template-columns:repeat(2,1fr)">
     <div class="si-card">
       <div class="si-lbl"><span class="si-dot" style="background:#3b6ef5"></span>RSP Setting</div>
       <div style="display:flex;gap:18px;margin-bottom:4px">
@@ -938,30 +938,10 @@ td.sr-cell{white-space:nowrap}
       <div class="si-bar-wrap"><div class="si-bar-fill" id="ccBar" style="width:0%"></div></div>
       <div class="si-bar-lbl"><span id="ccPct">0%</span><span id="ccCount">0건</span></div>
     </div>
-    <div class="si-card">
-      <div class="si-lbl"><span class="si-dot" style="background:#9333ea"></span>WS Incentive</div>
-      <div class="si-month-row">
-        <div class="si-month">
-          <div class="ml">3월</div>
-          <div class="si-msub"><div class="msl">아울렛</div><div class="msv" id="wsOut3">0</div></div>
-          <div class="si-msub"><div class="msl">판매량</div><div class="msv" id="wsVol3">0</div></div>
-          <div class="si-msub"><div class="msl">비용</div><div class="msv" id="wsCost3">0</div></div>
-        </div>
-        <div class="si-month">
-          <div class="ml">4월</div>
-          <div class="si-msub"><div class="msl">아울렛</div><div class="msv" id="wsOut4">0</div></div>
-          <div class="si-msub"><div class="msl">판매량</div><div class="msv" id="wsVol4">0</div></div>
-          <div class="si-msub"><div class="msl">비용</div><div class="msv" id="wsCost4">0</div></div>
-        </div>
-        <div class="si-month">
-          <div class="ml">5월</div>
-          <div class="si-msub"><div class="msl">아울렛</div><div class="msv" id="wsOut5">0</div></div>
-          <div class="si-msub"><div class="msl">판매량</div><div class="msv" id="wsVol5">0</div></div>
-          <div class="si-msub"><div class="msl">비용</div><div class="msv" id="wsCost5">0</div></div>
-        </div>
-      </div>
-    </div>
   </div>
+
+  <div class="si-section">팀(지점)별 진행 현황</div>
+  <div class="si-team-grid" id="teamGrid"></div>
 
   <!-- WS JBP (Seoul) -->
   <div class="si-section" style="margin-top:8px">WS JBP (Seoul) — 도매상별 Snow 인센티브</div>
@@ -977,9 +957,6 @@ td.sr-cell{white-space:nowrap}
       <tbody id="wsJbpBody"></tbody>
     </table></div>
   </div>
-
-  <div class="si-section">팀(지점)별 진행 현황</div>
-  <div class="si-team-grid" id="teamGrid"></div>
 
   <div class="si-section">25Y CC 실적 vs 26Y 현재 — 팀별 CC 건수 비교</div>
   <div class="si-chart-box"><canvas id="compareChart"></canvas></div>
