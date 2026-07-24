@@ -10,6 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="off_ingest.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
+<!-- Vanta BIRDS (Select Channel 배경 3D) — three 0.134 / vanta 0.5.24 고정 -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/vanta@0.5.24/dist/vanta.birds.min.js"></script>
 <script src="tts-dictionary.js"></script>
 <!-- Motion (framer-motion 계열의 바닐라 JS 빌드). ESM이라 defer 실행되므로,
      로드 실패/지연해도 화면은 정적으로 완전히 동작해야 한다 → .kn-motion 클래스로 게이팅. -->
@@ -667,6 +670,10 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
 #channel-overlay { display:none; position:fixed; inset:0; z-index:10000; font-family:'Inter','Segoe UI',sans-serif; align-items:center; justify-content:center; overflow:hidden; background:#0b1f14; }
 #channel-overlay .ch-bg { position:absolute; inset:0; background:linear-gradient(135deg,#0b1f14 0%,#123524 45%,#0e2a1c 100%); }
 #channel-overlay .ch-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(circle at 25% 20%,rgba(74,222,128,0.10),transparent 45%),radial-gradient(circle at 80% 80%,rgba(56,189,248,0.08),transparent 45%); }
+/* Vanta BIRDS 3D 배경 (그라데이션 위, 텍스트 아래) */
+#channel-overlay .ch-vanta { position:absolute; inset:0; z-index:1; }
+/* 텍스트 가독성 확보용 어두운 오버레이 */
+#channel-overlay .ch-scrim { position:absolute; inset:0; z-index:1; pointer-events:none; background:linear-gradient(180deg,rgba(6,18,12,0.40) 0%,rgba(6,18,12,0.15) 42%,rgba(6,18,12,0.78) 100%); }
 #channel-overlay .ch-inner { position:relative; z-index:2; width:min(880px,92vw); text-align:center; padding:0 20px; }
 #channel-overlay .ch-pill { display:inline-flex; align-items:center; gap:8px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.18); border-radius:999px; padding:7px 18px; font-size:12px; font-weight:300; color:rgba(255,255,255,0.85); letter-spacing:1px; backdrop-filter:blur(10px); margin-bottom:26px; }
 #channel-overlay .ch-pill-dot { width:6px; height:6px; border-radius:50%; background:#4ade80; animation:pwPulse 2s ease-in-out infinite; }
@@ -687,6 +694,8 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
 </style>
 <div id="channel-overlay">
   <div class="ch-bg"></div>
+  <div class="ch-vanta" id="ch-vanta"></div>
+  <div class="ch-scrim"></div>
   <div class="ch-inner">
     <div class="ch-pill"><div class="ch-pill-dot"></div>FCST Dashboard</div>
     <h1><span class="bold">Select</span> Channel</h1>
@@ -707,6 +716,60 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     </div>
   </div>
 </div>
+<script>
+/* Select Channel 배경 Vanta BIRDS 생명주기 관리
+   - 오버레이 표시 시 초기화, 채널 선택/이탈 시 destroy()
+   - IntersectionObserver + visibilitychange 로 화면 밖/백그라운드면 정지 (성능)
+   - prefers-reduced-motion 이면 미초기화 → CSS 그라데이션 배경 유지
+   - 모바일은 scaleMobile / quantity 축소 */
+(function(){
+  var effect = null, io = null;
+  var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches:false };
+  var isMobile = window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : false;
+  function canRun(){ return !mqReduce.matches && window.VANTA && window.VANTA.BIRDS && window.THREE; }
+  function start(){
+    if (effect || !canRun()) return;
+    var el = document.getElementById('ch-vanta'); if (!el) return;
+    try {
+      effect = window.VANTA.BIRDS({
+        el: el, THREE: window.THREE,
+        mouseControls: true, touchControls: false, gyroControls: false,
+        minHeight: 200.0, minWidth: 200.0,
+        scale: 1.0, scaleMobile: isMobile ? 0.5 : 1.0,
+        backgroundColor: 0x0b1f14, backgroundAlpha: 0.0,
+        color1: 0x4ade80, color2: 0x38bdf8, colorMode: 'lerpGradient',
+        quantity: isMobile ? 2.0 : 3.0,
+        birdSize: 1.1, wingSpan: 24.0, speedLimit: 4.0,
+        separation: 42.0, alignment: 30.0, cohesion: 22.0
+      });
+    } catch (e) { /* 로드 실패 시 그라데이션 배경 유지 */ }
+  }
+  function stop(){ if (effect) { try { effect.destroy(); } catch(e){} effect = null; } }
+  window._initChannelVanta = function(){
+    if (mqReduce.matches) return;      // 정적 배경 유지
+    start();
+    if (!io && 'IntersectionObserver' in window) {
+      var host = document.getElementById('ch-vanta');
+      if (host) {
+        io = new IntersectionObserver(function(entries){
+          var e = entries[0]; if (!e) return;
+          if (e.isIntersecting) start(); else stop();
+        }, { threshold: 0.05 });
+        io.observe(host);
+      }
+    }
+  };
+  window._destroyChannelVanta = function(){
+    if (io) { try { io.disconnect(); } catch(e){} io = null; }
+    stop();
+  };
+  document.addEventListener('visibilitychange', function(){
+    var co = document.getElementById('channel-overlay');
+    if (!co || co.style.display === 'none' || mqReduce.matches) return;
+    if (document.hidden) stop(); else start();
+  });
+})();
+</script>
 
 <!-- ── Password Overlay (New Design) ── -->
 <style>
@@ -914,6 +977,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     window._showChooser = !directDashboard;
     if (window._showChooser) {
       document.getElementById('channel-overlay').style.display = 'flex';
+      if (window._initChannelVanta) window._initChannelVanta();
     }
     if (authed) {
       sessionStorage.setItem('channel', 'on');
@@ -927,6 +991,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
   })();
   // 채널 선택 핸들러: On=현 대시보드 진행, Off=Off 사이트로 이동
   function chooseChannel(ch) {
+    if (window._destroyChannelVanta) window._destroyChannelVanta();
     if (ch === 'off') {
       location.href = 'Off/index.html';
       return;
