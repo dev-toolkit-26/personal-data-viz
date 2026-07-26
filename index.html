@@ -509,6 +509,45 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
   .kn-slide { padding:50px 12px 80px; }
 }
 
+/* ── Weekly Report (슬라이드4 내부 컴포넌트) ── */
+.wr-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:var(--kn-card); border:1px solid var(--kn-border); font-size:12px; font-weight:600; color:var(--kn-text-mute); }
+.wr-chip b { color:var(--kn-text); font-weight:700; }
+.wr-tbl-wrap { overflow-x:auto; border-radius:14px; }
+.wr-tbl { width:100%; border-collapse:collapse; font-size:12.5px; min-width:640px; }
+.wr-tbl th { text-align:right; padding:10px 12px; font-size:10.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--kn-text-mute); border-bottom:1px solid var(--kn-border-strong); white-space:nowrap; background:transparent; cursor:default; }
+.wr-tbl thead th::after { content:none !important; }   /* 전역 정렬 화살표(↕) 제거 */
+.wr-tbl th:first-child, .wr-tbl td:first-child { text-align:left; }
+.wr-tbl td { padding:11px 12px; border-bottom:1px solid var(--kn-border); color:var(--kn-text-dim); white-space:nowrap; font-variant-numeric:tabular-nums; background:transparent; }
+/* 전역 라이트테마 zebra(tbody tr:nth-child(even){background:#f9fafb}) 무력화 */
+.wr-tbl tbody tr, .wr-tbl tbody tr:nth-child(even), .wr-tbl tbody tr:nth-child(even) td { background:transparent; }
+.wr-tbl tbody tr:hover, .wr-tbl tbody tr:nth-child(even):hover { background:var(--kn-card-2); }
+.wr-tbl tr.is-ttl td, .wr-tbl tbody tr.is-ttl:nth-child(even) td { font-weight:700; color:var(--kn-text); border-top:1px solid var(--kn-border-strong); background:rgba(255,255,255,.04); }
+.wr-tbl .wr-reg { color:var(--kn-text); font-weight:600; }
+.wr-delta { font-weight:700; }
+.wr-pill { display:inline-block; padding:2px 9px; border-radius:11px; font-size:11px; font-weight:700; }
+.wr-kpi-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:14px; }
+.wr-kpi-card { background:var(--kn-card); border:1px solid var(--kn-border); border-top:2px solid var(--kn-border-strong); border-radius:14px; padding:16px 18px; position:relative; }
+.wr-kpi-card.is-good { border-top-color:var(--kn-accent); }
+.wr-kpi-card.is-warn { border-top-color:#fbbf24; }
+.wr-kpi-card.is-risk { border-top-color:#f87171; }
+.wr-kpi-card .k-label { font-size:11px; color:var(--kn-text-dim); text-transform:uppercase; letter-spacing:.6px; margin-bottom:9px; font-weight:600; }
+.wr-kpi-card .k-value { font-size:24px; font-weight:800; color:var(--kn-text); letter-spacing:-.4px; line-height:1.1; }
+.wr-kpi-card .k-sub { font-size:11.5px; color:var(--kn-text-mute); margin-top:6px; line-height:1.5; }
+.wr-kpi-card .k-link { position:absolute; top:14px; right:14px; font-size:11px; color:var(--kn-text-mute); text-decoration:none; opacity:.6; }
+.wr-kpi-card .k-link:hover { opacity:1; color:var(--kn-accent); }
+.wr-bullets { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:11px; }
+.wr-bullets li { display:flex; gap:11px; align-items:flex-start; font-size:13px; line-height:1.7; color:var(--kn-text-dim); }
+.wr-bullets li .wr-b-ico { flex:0 0 auto; margin-top:1px; }
+/* 분석리포트 블록 */
+.wr-rep-block { padding:14px 0; border-top:1px solid var(--kn-border); }
+.wr-rep-block:first-child { border-top:none; padding-top:2px; }
+.wr-rep-h { font-size:12.5px; font-weight:700; color:var(--kn-text); letter-spacing:.3px; margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+.wr-rep-note { font-size:11px; color:var(--kn-text-mute); margin-top:8px; line-height:1.55; }
+.wr-rep-lead { font-size:13px; line-height:1.75; color:var(--kn-text-dim); }
+.wr-risk-row { display:flex; align-items:baseline; gap:8px; font-size:12.5px; line-height:1.6; padding:3px 0; flex-wrap:wrap; }
+.wr-risk-row .r-sku { color:var(--kn-text); font-weight:600; min-width:150px; }
+.wr-tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:10.5px; font-weight:700; }
+
 .upload-zone { display:inline-flex; align-items:center; gap:8px; border-left:1px solid var(--border); padding-left:14px; margin-left:4px; }
 .upload-file-btn { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; font-size:12px; font-weight:600; border:1px solid var(--border); border-radius:4px; cursor:pointer; background:var(--surface); color:var(--text); transition:background .15s; }
 .upload-file-btn:hover { background:var(--surface-raised); }
@@ -884,9 +923,9 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <button class="kn-side-btn" type="button" onclick="window.open('kpi.html','_blank')"><span class="kn-side-num">↗</span><span>KPI</span></button>
     </div>
     <button class="kn-side-btn is-active" type="button" data-slide="0"><span class="kn-side-num">01</span><span>Overview</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Regional</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Stock</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Summary</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Weekly</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Regional</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Stock</span></button>
   </div>
 
   <div class="kn-track" id="kn-track">
@@ -912,8 +951,22 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       </div>
     </section>
 
-    <!-- Slide 2: Regional × Diagnosis — 지점 축으로 도넛+진척을 한 행에 통합 -->
+    <!-- Slide 2: Weekly Report — 전주대비 FCST 변동 · 지점별 · 주간 요약 (구 Monthly Summary 교체) -->
     <section class="kn-slide" data-slide="1">
+      <div class="kn-content" style="max-width:1280px;width:90%;">
+        <h2 class="kn-apex">Weekly Report — 전주대비 요약</h2>
+        <div id="wr-wow-headline" class="kn-card" style="padding:18px 22px;margin-bottom:20px;border-left:3px solid #4ade80;"></div>
+
+        <div class="kn-section-label">지점별 전주대비 FCST 변동</div>
+        <div id="wr-regional-body" style="margin-bottom:24px;"></div>
+
+        <div class="kn-section-label">이번 주 업데이트 요약</div>
+        <div id="wr-weekly-body" class="kn-card" style="padding:18px 22px;"></div>
+      </div>
+    </section>
+
+    <!-- Slide 3: Regional × Diagnosis — 지점 축으로 도넛+진척을 한 행에 통합 -->
+    <section class="kn-slide" data-slide="2">
       <div class="kn-content" style="max-width:1280px;width:90%;">
         <h2 class="kn-apex">Regional × Diagnosis</h2>
         <div class="kn-sec" data-sec="diag">
@@ -927,19 +980,11 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       </div>
     </section>
 
-    <!-- Slide 3: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
-    <section class="kn-slide" data-slide="2">
+    <!-- Slide 4: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
+    <section class="kn-slide" data-slide="3">
       <div class="kn-content">
         <h2 class="kn-apex">Stock Coverage</h2>
         <div id="sum-stock-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
-      </div>
-    </section>
-
-    <!-- Slide 4: Monthly Summary (TTS 내러티브) — 클로징 -->
-    <section class="kn-slide" data-slide="3">
-      <div class="kn-content">
-        <h2 class="kn-apex">Monthly Summary</h2>
-        <div id="sum-overview-narrative" class="kn-card" style="border-left:3px solid #4ade80;padding:20px 24px;color:rgba(255,255,255,.88);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
       </div>
     </section>
 
@@ -1695,7 +1740,400 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
 
     // ── MTD Progress Diagnosis ──
     renderSumMTDDiagnosis();
+
+    // ── Slide 4: Weekly Report (전주대비 요약 · 지점별 WoW · 주간 요약 · KPI) ──
+    renderWoWHeadline();
+    renderRegionalWoW();
+    renderWeeklyUpdateSummary();
+    renderCloseRiskAnalysis();   // async — 쇼트/폐기 위험(재고 커버리지)
   }
+
+  // ═══════════════════════════════════════════════
+  //  WEEKLY REPORT (Slide 4) — 렌더 함수들
+  // ═══════════════════════════════════════════════
+
+  // ① TTL 전주대비(WoW) 헤드라인
+  function renderWoWHeadline() {
+    var box = document.getElementById('wr-wow-headline');
+    if (!box) return;
+    var hl   = DASHBOARD_DATA.wk10_summary?.hl || {};
+    var ttl  = hl['TTL']; if (!ttl) { box.innerHTML = ''; return; }
+    var meta = DASHBOARD_DATA.wk_meta;
+    var wd   = DASHBOARD_DATA.wd_progress || {};
+    var mon  = (meta && meta.month) ? meta.month : _UP_FCST_MONTH;
+    var monName = _UP_MONTH_NAMES[mon] || '';
+    var f1   = function(v){ return v!=null ? (+v).toLocaleString('ko-KR',{maximumFractionDigits:1}) : '—'; };
+    var pctd = function(v){ return v==null ? '—' : (v>=0?'+':'')+(v*100).toFixed(1)+'%'; };
+
+    var w = ttl.differ_vs_last, lw = ttl.last_week_fcst;
+    var wPct = (lw!=null && lw>0 && w!=null) ? w/lw : null;
+    var wc = (w==null) ? '#9ca3af' : w>0 ? '#4ade80' : w<0 ? '#f87171' : '#9ca3af';
+    var wIco = (w==null) ? '🆕' : w>0 ? '⬆' : w<0 ? '⬇' : '➖';
+    var wTxt = (w==null) ? '신규 월 (전주 비교 없음)' : (w>0?'+':'')+f1(w)+' HL'+(wPct!=null?' ('+(w>=0?'+':'')+(wPct*100).toFixed(1)+'%)':'');
+
+    var rofo = ttl.rofo_monthly ? ttl.rofo_monthly[mon-1] : null;
+    var baseName = (rofo!=null && rofo>0) ? 'RoFo' : 'AP';
+    var baseVal  = (rofo!=null && rofo>0) ? rofo : ttl.ap;
+    var baseAch  = (rofo!=null && rofo>0 && ttl.this_week_fcst!=null) ? ttl.this_week_fcst/rofo : ttl.ap_fcst_ach;
+    var ac = baseAch==null ? '#9ca3af' : baseAch>=0.95 ? '#4ade80' : baseAch>=0.9 ? '#fbbf24' : '#f87171';
+    var mtdC = (ttl.fcst_mtd_ach||0) >= (wd.pct||0) ? '#4ade80' : '#fbbf24';
+    var lymC = (ttl.fcst_growth_lym||0) >= 0 ? '#4ade80' : '#f87171';
+
+    box.innerHTML =
+        '<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;">'
+      +   '<span style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px;">' + monName + ' FCST ' + f1(ttl.this_week_fcst) + ' HL</span>'
+      +   '<span style="font-size:15px;font-weight:700;color:' + wc + ';">' + wIco + ' 전주대비 ' + wTxt + '</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      +   '<span class="wr-chip">FCST 달성률 <b style="color:' + ac + ';">' + (baseAch!=null?(baseAch*100).toFixed(1)+'%':'—') + '</b> <span style="color:var(--kn-text-mute);">' + baseName + ' ' + f1(baseVal) + ' HL</span></span>'
+      +   '<span class="wr-chip">MTD 달성률 <b style="color:' + mtdC + ';">' + ((ttl.fcst_mtd_ach||0)*100).toFixed(0) + '%</b> <span style="color:var(--kn-text-mute);">경과율 ' + Math.round((wd.pct||0)*100) + '%</span></span>'
+      +   '<span class="wr-chip">vs LY <b style="color:' + lymC + ';">' + pctd(ttl.fcst_growth_lym) + '</b> <span style="color:var(--kn-text-mute);">LY ' + f1(ttl.ly_month) + ' HL</span></span>'
+      +   '<span class="wr-chip">Last Wk <b>' + f1(lw) + ' HL</b> → This Wk <b>' + f1(ttl.this_week_fcst) + ' HL</b></span>'
+      + '</div>';
+  }
+
+  // ② 지점별 전주대비(WoW) 변동 표
+  function renderRegionalWoW() {
+    var box = document.getElementById('wr-regional-body');
+    if (!box) return;
+    var hl   = DASHBOARD_DATA.wk10_summary?.hl || {};
+    var meta = DASHBOARD_DATA.wk_meta;
+    var mon  = (meta && meta.month) ? meta.month : _UP_FCST_MONTH;
+
+    var REGIONS = [
+      { key:'Seoul',        label:'Seoul' },
+      { key:'Busan',        label:'Busan' },
+      { key:'DaeGu & JeJu', label:'DaeGu & JeJu' },
+      { key:'DaeJeon',      label:'DaeJeon' },
+      { key:'GwangJu',      label:'GwangJu' },
+    ];
+    var fmt1  = function(v){ return v != null ? (+v).toLocaleString('ko-KR',{maximumFractionDigits:1}) : '—'; };
+    var fmtPct= function(v){ return v != null ? (v*100).toFixed(1)+'%' : '—'; };
+
+    function baseOf(d){
+      var rofo = d.rofo_monthly ? d.rofo_monthly[mon-1] : null;
+      if (rofo != null && rofo > 0) return { name:'RoFo', val:rofo, ach:(d.this_week_fcst!=null ? d.this_week_fcst/rofo : null) };
+      return { name:'AP', val:d.ap, ach:d.ap_fcst_ach };
+    }
+    function achCol(v){ return v==null ? '#9ca3af' : v>=1.0 ? '#4ade80' : v>=0.9 ? '#fbbf24' : '#f87171'; }
+    function wowCell(d){
+      var w = d.differ_vs_last, lw = d.last_week_fcst;
+      if (w == null) return '<span style="color:#9ca3af;">신규 월</span>';
+      var pct = (lw != null && lw > 0) ? w/lw : null;
+      var c = w > 0 ? '#4ade80' : w < 0 ? '#f87171' : '#9ca3af';
+      var arw = w > 0 ? '▲' : w < 0 ? '▼' : '–';
+      return '<span class="wr-delta" style="color:'+c+';">'+arw+' '+(w>0?'+':'')+fmt1(w)+' HL'
+           + (pct!=null ? ' <span style="opacity:.75;">('+(w>=0?'+':'')+(pct*100).toFixed(1)+'%)</span>' : '')+'</span>';
+    }
+    function row(d, label, isTtl){
+      var b = baseOf(d);
+      var ac = achCol(b.ach);
+      var lym = d.fcst_growth_lym;
+      var lymC = (lym||0) >= 0 ? '#4ade80' : '#f87171';
+      var mtdC = achCol(d.fcst_mtd_ach);
+      return '<tr'+(isTtl?' class="is-ttl"':'')+'>'
+        + '<td class="wr-reg">'+label+'</td>'
+        + '<td>'+fmt1(d.this_week_fcst)+'</td>'
+        + '<td style="color:var(--kn-text-mute);">'+fmt1(d.last_week_fcst)+'</td>'
+        + '<td>'+wowCell(d)+'</td>'
+        + '<td><span class="wr-pill" style="background:'+(b.ach==null?'rgba(255,255,255,.06)':'rgba(0,0,0,.28)')+';color:'+ac+';">'+fmtPct(b.ach)+'</span> <span style="color:var(--kn-text-mute);font-size:10.5px;">'+b.name+'</span></td>'
+        + '<td style="color:'+mtdC+';">'+fmtPct(d.fcst_mtd_ach)+'</td>'
+        + '<td style="color:'+lymC+';">'+(lym==null?'—':(lym>=0?'+':'')+(lym*100).toFixed(1)+'%')+'</td>'
+        + '</tr>';
+    }
+
+    // WoW 변동폭(절대값) 큰 순 — 회의에서 "많이 움직인 지점"부터.
+    var rows = REGIONS.filter(function(r){ return hl[r.key]; })
+      .map(function(r){ return { d:hl[r.key], label:r.label, mv:Math.abs(hl[r.key].differ_vs_last||0) }; })
+      .sort(function(a,b){ return b.mv - a.mv; });
+
+    var head = '<thead><tr>'
+      + '<th>지점</th><th>This Wk<br>FCST</th><th>Last Wk<br>FCST</th><th>전주대비 (WoW)</th><th>FCST 달성률</th><th>MTD</th><th>vs LY</th>'
+      + '</tr></thead>';
+    var body = rows.map(function(x){ return row(x.d, x.label, false); }).join('');
+    var ttlRow = hl['TTL'] ? row(hl['TTL'], 'On Trade TTL', true) : '';
+
+    box.innerHTML = '<div class="wr-tbl-wrap kn-card" style="padding:6px 4px;">'
+      + '<table class="wr-tbl">'+head+'<tbody>'+body+ttlRow+'</tbody></table></div>'
+      + '<div style="margin-top:8px;font-size:11px;color:var(--kn-text-mute);">WoW = 이번 주 FCST − 지난 주 FCST · 달성률 = This Wk FCST ÷ (RoFo 있으면 RoFo, 없으면 AP) · 변동폭 큰 지점 순 정렬</div>';
+  }
+
+  // 발주패턴(Order Pattern) 기반 누적 진행률 — 완료된 월들의 주차별 발주분포 '연평균'으로
+  // 현재 '발주 누적비율(cumFrac)' 산출. 단일월은 특수성(공휴일·프로모션)이 커서 연평균이 안정적.
+  // 마지막 주(W5)는 발주가 급감하므로 선형(mtd/영업일경과율)은 예상 마감을 과대추정 → 패턴 가중이 현실적.
+  function _wrPatternClose(op, mon, total, elapsed) {
+    if (!op || !Array.isArray(op.weekly_labels) || !op.weekly_labels.length) return null;
+    var byMon = {};   // 월 → [W1,W2,… HL]
+    op.weekly_labels.forEach(function(lbl, i){
+      var sp = lbl.split(' '); var mo = sp[0]; var wk = parseInt((sp[1]||'W0').slice(1)) || 0;
+      if (!wk) return;
+      var s = 0;
+      (op.groups||[]).forEach(function(g){ (op.skus||[]).forEach(function(sk){ var a = op.weekly_hl[g] && op.weekly_hl[g][sk]; if (a) s += a[i]||0; }); });
+      (byMon[mo] = byMon[mo] || [])[wk-1] = (byMon[mo][wk-1] || 0) + s;
+    });
+    // 기준 = 현재월 제외한 '완료' 월 전체(연중 누적). 각 월의 주차별 비중을 평균.
+    var curName = _UP_MONTH_NAMES[mon];
+    var refNames = Object.keys(byMon).filter(function(nm){ return nm !== curName && byMon[nm].reduce(function(a,b){return a+(b||0);},0) > 0; });
+    if (!refNames.length) return null;
+    var N = Math.max.apply(null, refNames.map(function(nm){ return byMon[nm].length; })) || 5;
+    var fracByMonth = refNames.map(function(nm){
+      var arr = byMon[nm]; var tot = arr.reduce(function(a,b){return a+(b||0);},0);
+      var v = []; for (var k=0;k<N;k++) v.push(tot>0 ? (arr[k]||0)/tot : 0); return v;
+    });
+    var frac = [];   // 연평균 주차 비중
+    for (var k=0;k<N;k++){ var s2=0; fracByMonth.forEach(function(v){ s2+=v[k]; }); frac.push(s2/fracByMonth.length); }
+    // 주차별 영업일 폭: W1~W(N-1)=5일, 마지막주=나머지. total이 작으면 균등분할 폴백.
+    var widths = [], j;
+    if (total >= 5*(N-1) + 1) { for (j=0;j<N;j++) widths.push(j<N-1 ? 5 : total-5*(N-1)); }
+    else { for (j=0;j<N;j++) widths.push(total/N); }
+    var cumWD = [], run=0; widths.forEach(function(w){ run+=w; cumWD.push(run); });
+    function cumFracOf(fr){
+      if (elapsed >= cumWD[N-1]) return 1;
+      var kk = 0; while (kk < N && elapsed > cumWD[kk]) kk++;
+      var low = kk>0 ? cumWD[kk-1] : 0;
+      var wkProg = widths[kk] > 0 ? (elapsed - low)/widths[kk] : 1;
+      var before = 0; for (var jj=0;jj<kk;jj++) before += fr[jj];
+      return Math.max(0.01, Math.min(1, before + fr[kk]*Math.max(0, Math.min(1, wkProg))));
+    }
+    var cumFrac = cumFracOf(frac);
+    var perCum = fracByMonth.map(cumFracOf);   // 월별 편차 → 신뢰구간
+    var completedWeeks = cumWD.filter(function(w){ return elapsed >= w; }).length;   // 완전히 끝난 주차 수(진행중 주 제외)
+    return { cumFrac: cumFrac, frac: frac, refCount: refNames.length,
+      refLabel: '연평균('+refNames.length+'개월)',
+      cumFracLo: Math.min.apply(null, perCum), cumFracHi: Math.max.apply(null, perCum),
+      completedWeeks: completedWeeks, byMon: byMon, curName: curName };
+  }
+
+  // ③ 이번 주 업데이트 — 분석리포트 (주요 SKU 변동 · 예상 마감 분석 · 쇼트/폐기 위험)
+  function renderWeeklyUpdateSummary() {
+    var box = document.getElementById('wr-weekly-body');
+    if (!box) return;
+    var hl   = DASHBOARD_DATA.wk10_summary?.hl || {};
+    var meta = DASHBOARD_DATA.wk_meta;
+    var wd   = DASHBOARD_DATA.wd_progress || {};
+    var mon  = (meta && meta.month) ? meta.month : _UP_FCST_MONTH;
+    var monName = _UP_MONTH_NAMES[mon] || '';
+    var ttl  = hl['TTL'] || {};
+    var f1   = function(v){ return v!=null ? (+v).toLocaleString('ko-KR',{maximumFractionDigits:1}) : '—'; };
+    var f0   = function(v){ return v!=null ? Math.round(+v).toLocaleString('ko-KR') : '—'; };
+    var hi   = function(v,c){ return '<b style="color:'+(c||'#fff')+';">'+v+'</b>'; };
+    var ico  = function(e){ return '<span class="wr-b-ico">'+e+'</span>'; };
+
+    // ── 블록① 주요 SKU 전주대비 변동 (SKU 단위, HL 환산, 지점별 숫자 포함) ──
+    var skuRoot = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
+    var skuList = [];
+    skuRoot.forEach(function(b){
+      (b.skus||[]).forEach(function(s){
+        var d = s.data||{}; var f = (d.hl_factor!=null)?d.hl_factor:0.0792;
+        skuList.push({ sku:s.sku, brand:b.brand, dHL:(typeof d.differ_vs_last==='number'?d.differ_vs_last*f:0), fcstHL:(d.this_week_fcst||0)*f });
+      });
+    });
+    // 지점별 SKU 맵 (This Wk FCST + WoW delta, HL)
+    var REGION_LABELS = [['Seoul','서울'],['BuSan','부산'],['DaeGu&JeJu','대구·제주'],['DaeJeon','대전'],['GwangJu','광주']];
+    var regionSku = {};
+    REGION_LABELS.forEach(function(rl){
+      regionSku[rl[0]] = {};
+      ((DASHBOARD_DATA.sku_detail || {})[rl[0]] || []).forEach(function(b){
+        (b.skus||[]).forEach(function(s){
+          var d=s.data||{}; var f=(d.hl_factor!=null)?d.hl_factor:0.0792;
+          regionSku[rl[0]][s.sku] = { fcstHL:(d.this_week_fcst||0)*f, dHL:(typeof d.differ_vs_last==='number'?d.differ_vs_last*f:0) };
+        });
+      });
+    });
+    function regionLine(skuName){
+      var parts = REGION_LABELS.map(function(rl){
+        var e = regionSku[rl[0]][skuName]; return { lbl:rl[1], v:e?e.fcstHL:0, d:e?e.dHL:0 };
+      }).filter(function(p){ return p.v>0.05 || Math.abs(p.d)>0.05; }).sort(function(a,b){ return b.v-a.v; });
+      if (!parts.length) return '';
+      return '<div style="margin-top:3px;font-size:11px;color:var(--kn-text-mute);">지점별 This Wk: '
+        + parts.map(function(p){ var dt = Math.abs(p.d)>=0.5 ? ' <span style="color:'+(p.d>0?'#4ade80':'#f87171')+';">('+(p.d>0?'+':'')+f1(p.d)+')</span>' : ''; return '<b style="color:var(--kn-text-dim);">'+p.lbl+'</b> '+f1(p.v)+dt; }).join(' · ') + ' HL</div>';
+    }
+    var movers = skuList.filter(function(x){ return Math.abs(x.dHL) >= 0.5; })
+      .sort(function(a,b){ return Math.abs(b.dHL) - Math.abs(a.dHL); }).slice(0,6);
+    var block1;
+    if (movers.length) {
+      block1 = '<ul class="wr-bullets">' + movers.map(function(x){
+        var up = x.dHL>0; var c = up?'#4ade80':'#f87171';
+        var arrow = '<span class="wr-b-ico" style="color:'+c+';font-weight:700;">'+(up?'▲':'▼')+'</span>';
+        return '<li style="border-left:2px solid '+c+';padding-left:10px;">'+arrow+'<div><span>'+hi(x.sku, c)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · 전주대비 '+hi((up?'+':'')+f1(x.dHL)+' HL', c)+' <span style="color:var(--kn-text-mute);">(This Wk '+f1(x.fcstHL)+' HL)</span></span>'+regionLine(x.sku)+'</div></li>';
+      }).join('') + '</ul>';
+    } else {
+      // 변동이 없으면(월 롤오버·seed) 규모 상위 SKU를 대신 표기
+      var topBig = skuList.filter(function(x){ return x.fcstHL>0; }).sort(function(a,b){ return b.fcstHL - a.fcstHL; }).slice(0,5);
+      block1 = '<div class="wr-rep-lead" style="margin-bottom:8px;">전주대비 SKU 단위 유의미한 변동 없음 (전월 롤오버 또는 미미). 이번 주 FCST 규모 상위 SKU:</div>'
+        + '<ul class="wr-bullets">' + topBig.map(function(x){ return '<li>'+ico('•')+'<div><span>'+hi(x.sku)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · '+hi(f1(x.fcstHL)+' HL')+'</span>'+regionLine(x.sku)+'</div></li>'; }).join('') + '</ul>';
+    }
+
+    // ── 블록② MTD 진행 → 예상 마감 분석 (발주패턴 가중, 연평균) ──
+    var pct = wd.pct||0, elapsed = wd.elapsed||0, total = wd.total||0, remain = Math.max(total-elapsed,0);
+    var mtd = ttl.mtd_actual, fcst = ttl.this_week_fcst;
+    var rofoTtl = ttl.rofo_monthly ? ttl.rofo_monthly[mon-1] : null;
+    var baseName = (rofoTtl!=null && rofoTtl>0) ? 'RoFo' : 'AP';
+    var baseVal  = (rofoTtl!=null && rofoTtl>0) ? rofoTtl : ttl.ap;
+    var pat = _wrPatternClose(DASHBOARD_DATA.order_pattern, mon, total, elapsed);
+    var cumFrac = pat ? pat.cumFrac : pct;                       // 패턴 없으면 영업일 경과율로 폴백
+    var projPat = (cumFrac>0 && mtd!=null) ? mtd/cumFrac : null; // 패턴 가중 예상 마감
+    var projLin = (pct>0 && mtd!=null) ? mtd/pct : null;         // 선형(참고)
+    var projAch = (projPat!=null && baseVal>0) ? projPat/baseVal : null;   // vs RoFo/AP (기준선)
+    var projGap = (projPat!=null && fcst!=null) ? projPat-fcst : null;
+    var fcstAch = (projPat!=null && fcst!=null && fcst>0) ? projPat/fcst : projAch;   // vs 제출 FCST — 판정/색상 기준
+    var pc = fcstAch==null ? '#9ca3af' : fcstAch>=1.0 ? '#4ade80' : fcstAch>=0.97 ? '#fbbf24' : '#f87171';
+    // #4 신뢰구간 — 월별 패턴 편차(cumFracLo/Hi) → proj는 반비례
+    var projLo = (pat && mtd!=null && pat.cumFracHi>0) ? mtd/pat.cumFracHi : null;
+    var projHi = (pat && mtd!=null && pat.cumFracLo>0) ? mtd/pat.cumFracLo : null;
+    // 지점별 예상 마감 (전 지점, 동일 cumFrac)
+    var REGI = [['Seoul','서울'],['Busan','부산'],['DaeGu & JeJu','대구·제주'],['DaeJeon','대전'],['GwangJu','광주']];
+    var regProj = REGI.filter(function(r){ return hl[r[0]]; }).map(function(r){
+      var d = hl[r[0]]; var pr = (cumFrac>0 && d.mtd_actual!=null) ? d.mtd_actual/cumFrac : null;
+      var rf = d.rofo_monthly?d.rofo_monthly[mon-1]:null; var bv = (rf!=null&&rf>0)?rf:d.ap;
+      return { k:r[1], ach:(pr!=null&&bv>0)?pr/bv:null };
+    });
+    var block2 = '', verdict='', worst=null;
+    if (projPat != null) {
+      verdict = fcstAch>=1.0 ? 'FCST 초과 마감 예상' : fcstAch>=0.97 ? 'FCST 근접 마감 예상' : 'FCST 미달 마감 예상';
+      var srcTxt = pat ? pat.refLabel+' 발주패턴 가중' : '영업일 경과율(패턴데이터 없음)';
+      block2 = '<div class="wr-rep-lead">'
+        + 'MTD 실적 '+hi(f1(mtd)+' HL')+' · 영업일 '+hi(elapsed+'/'+total+'일')+' 경과('+Math.round(pct*100)+'%). '
+        + srcTxt+' 시 <b style="color:'+pc+';">'+monName+' 예상 마감 '+f1(projPat)+' HL</b>'
+        + (projLo!=null && projHi!=null ? ' <span style="color:var(--kn-text-mute);font-size:11.5px;">(범위 '+f1(projLo)+'~'+f1(projHi)+' HL)</span>' : '')+' → '
+        + baseName+'('+f1(baseVal)+' HL) 대비 '+hi((projAch*100).toFixed(1)+'%', pc)+', '
+        + 'FCST('+f1(fcst)+' HL) 대비 '+hi((projGap>=0?'+':'')+f1(projGap)+' HL', projGap>=0?'#4ade80':'#f87171')+' → '+hi(verdict, pc)+'.'
+        + '</div>';
+      if (pat) {
+        var distTxt = pat.frac.map(function(fr,i){ return 'W'+(i+1)+' '+Math.round(fr*100)+'%'; }).join(' · ');
+        block2 += '<div class="wr-rep-note">발주패턴('+pat.refLabel+', 완료월 평균): '+distTxt+' → 현재 <b style="color:var(--kn-text-dim);">발주 누적 진행 '+(cumFrac*100).toFixed(0)+'%</b> (영업일 경과율 '+Math.round(pct*100)+'%와 별개). '
+          + '단순 선형 추정은 '+f1(projLin)+' HL이나 <b style="color:#f87171;">마지막주 발주 급감</b> 미반영으로 과대추정.</div>';
+        var patRemain = Math.max(projPat - mtd, 0);
+        var needRemain = fcst!=null ? Math.max(fcst - mtd, 0) : null;
+        if (needRemain != null) {
+          var shortHL = needRemain - patRemain;
+          block2 += '<div class="wr-rep-note">잔여 '+remain+'영업일 — 패턴상 예상 추가발주 '+hi(f1(patRemain)+' HL')+' vs FCST 달성 필요 '+hi(f1(needRemain)+' HL', shortHL>0.5?'#f87171':'#4ade80')
+            + (shortHL>0.5 ? ' → <b style="color:#f87171;">'+f1(shortHL)+' HL 추가 확보(선주문·프로모션) 필요</b>' : ' → 패턴상 달성 무난')+'.</div>';
+        }
+      }
+      block2 += '<div class="wr-rep-note">지점별 예상 마감: '+regProj.map(function(x){
+        var c = x.ach==null?'#9ca3af':x.ach>=1?'#4ade80':x.ach>=0.97?'#fbbf24':'#f87171';
+        return '<b style="color:var(--kn-text-dim);">'+x.k+'</b> <span style="color:'+c+';">'+(x.ach!=null?(x.ach*100).toFixed(0)+'%':'—')+'</span>';
+      }).join(' · ')+' <span style="color:var(--kn-text-mute);">(RoFo/AP 대비)</span></div>';
+      worst = regProj.filter(function(x){ return x.ach!=null; }).sort(function(a,b){ return a.ach-b.ach; })[0];
+    } else {
+      block2 = '<div class="wr-rep-lead" style="color:var(--kn-text-mute);">MTD/영업일 데이터가 없어 예상 마감을 산출할 수 없습니다.</div>';
+    }
+
+    // ── 블록③ 발주 트래킹 · MoM/YoY · RoFo 갭 ──
+    var extra = [];
+    // #2 이번달 주차별 발주 vs 패턴 기대 (완료된 주차만 — 진행중 주는 partial이라 제외)
+    if (pat && fcst!=null) {
+      var curW = pat.byMon[pat.curName] || [];
+      var doneW = Math.min(pat.completedWeeks!=null ? pat.completedWeeks : curW.length, curW.length);
+      var trk = [], nAhead = 0;
+      for (var wi=0; wi<doneW; wi++) {
+        if (curW[wi]==null) continue;
+        var exp = fcst * (pat.frac[wi]||0); var a = curW[wi]; var dd = a-exp;
+        if (dd>=0) nAhead++;
+        trk.push('<b style="color:var(--kn-text-dim);">W'+(wi+1)+'</b> '+f1(a)+' <span style="color:'+(dd>=0?'#4ade80':'#f87171')+';">('+(dd>=0?'+':'')+f1(dd)+')</span>');
+      }
+      if (trk.length) {
+        var inProg = (curW.length>doneW) ? ' · <span style="color:var(--kn-text-mute);">W'+(doneW+1)+' 진행중 '+f1(curW[doneW]||0)+' HL</span>' : '';
+        extra.push('<div class="wr-rep-note">📦 완료 주차 발주(vs 패턴기대): '+trk.join(' · ')+' HL'+inProg+' <span style="color:var(--kn-text-mute);">— +는 패턴 상회(강세), '+nAhead+'/'+trk.length+'주 강세</span></div>');
+      }
+    }
+    // #3 MoM / YoY (예상 마감 기준)
+    var md0 = DASHBOARD_DATA.monthly;
+    var priorAct = (md0 && Array.isArray(md0.act_2026)) ? md0.act_2026[mon-2] : null;
+    var lyM = ttl.ly_month;
+    if (projPat!=null && ((priorAct!=null&&priorAct>0) || (lyM!=null&&lyM>0))) {
+      var pieces = [];
+      if (priorAct!=null && priorAct>0) { var mom=(projPat-priorAct)/priorAct; pieces.push('전월('+(_UP_MONTH_NAMES[mon-1]||'')+') 실적 '+f1(priorAct)+' HL 대비 <b style="color:'+(mom>=0?'#4ade80':'#f87171')+';">'+(mom>=0?'+':'')+(mom*100).toFixed(1)+'%</b>'); }
+      if (lyM!=null && lyM>0) { var yoy=(projPat-lyM)/lyM; pieces.push('전년 동월 '+f1(lyM)+' HL 대비 <b style="color:'+(yoy>=0?'#4ade80':'#f87171')+';">'+(yoy>=0?'+':'')+(yoy*100).toFixed(1)+'%</b>'); }
+      extra.push('<div class="wr-rep-note">📈 예상 마감 성장성: '+pieces.join(' · ')+'.</div>');
+    }
+    // #5 제출 FCST ↔ RoFo 갭 및 전주대비 변화
+    if (rofoTtl!=null && rofoTtl>0 && fcst!=null) {
+      var gap = fcst - rofoTtl;                                   // +면 FCST가 RoFo 상회
+      var lastGap = (ttl.last_week_fcst!=null) ? ttl.last_week_fcst - rofoTtl : null;
+      var absMove = lastGap!=null ? (Math.abs(gap) - Math.abs(lastGap)) : null;   // |갭| 변화: -면 격차 축소(수렴)
+      var moveTxt = '';
+      if (absMove!=null) {
+        if (Math.abs(absMove) < 0.5) moveTxt = ', 전주 대비 갭 유지';
+        else if (absMove < 0) moveTxt = ', 전주 대비 <b style="color:#4ade80;">격차 '+f1(-absMove)+' HL 축소(RoFo로 수렴)</b>';
+        else moveTxt = ', 전주 대비 <b style="color:#f87171;">격차 '+f1(absMove)+' HL 확대</b>';
+      }
+      extra.push('<div class="wr-rep-note">🎯 제출 FCST가 RoFo 대비 <b style="color:'+(gap>=0?'#4ade80':'#f87171')+';">'+(gap>=0?'+':'')+f1(gap)+' HL</b> ('+(gap>=0?'상회':'미달')+')'+moveTxt+'.</div>');
+    }
+    var block3 = extra.length ? extra.join('') : '<div class="wr-rep-note" style="color:var(--kn-text-mute);">발주패턴·성장성 데이터가 없습니다.</div>';
+
+    box.innerHTML =
+        '<div class="wr-rep-block"><div class="wr-rep-h">📦 주요 SKU 전주대비 변동</div>'+block1+'</div>'
+      + '<div class="wr-rep-block"><div class="wr-rep-h">📊 MTD 진행 · 예상 마감 분석 <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">(발주패턴 연평균 가중 · 마지막주 급감 반영)</span></div>'+block2+'</div>'
+      + '<div class="wr-rep-block"><div class="wr-rep-h">🔀 발주 트래킹 · 성장성 · RoFo 갭</div>'+block3+'</div>'
+      + '<div class="wr-rep-block" id="wr-risk-block"><div class="wr-rep-h">⚠️ 예상 마감 기준 쇼트 / 폐기 위험 SKU</div>'
+      +   '<div id="wr-risk-body" class="wr-rep-lead" style="color:var(--kn-text-mute);">재고 데이터 분석 중…</div></div>';
+  }
+
+  // ③-3 쇼트/폐기 위험 SKU 분석 (재고 커버리지 — _stockCompute 재사용, async)
+  async function renderCloseRiskAnalysis() {
+    var body = document.getElementById('wr-risk-body');
+    if (!body) return;
+    var stock = DASHBOARD_DATA.stock;
+    if (!stock || !stock.lots || !stock.lots.length || typeof _stockCompute !== 'function') {
+      body.innerHTML = '재고 파일 미업로드 — 쇼트/폐기 위험 분석 불가. <span style="color:var(--kn-text-mute);">Data Update 탭에서 Daily stock 업로드 시 자동 분석.</span>';
+      return;
+    }
+    var offDem = {};
+    try { if (typeof _stockOffDemand === 'function') offDem = await _stockOffDemand(); } catch(e){ offDem = {}; }
+    var res;
+    try { res = _stockCompute(stock, offDem, DASHBOARD_DATA.inbound); } catch(e){ body.innerHTML = '재고 분석 오류: '+e.message; return; }
+    var rows = res.rows || [];
+    var hlv  = function(cases, hl){ return (cases||0)*(hl||0.0792); };
+    var f1   = function(v){ return (+v).toLocaleString('ko-KR',{maximumFractionDigits:1}); };
+
+    var tag = function(txt,bg,c){ return '<span class="wr-tag" style="background:'+bg+';color:'+c+';">'+txt+'</span>'; };
+    var riskRow = function(name, right){ return '<div class="wr-risk-row"><span class="r-sku">'+name+'</span><span>'+right+'</span></div>'; };
+
+    // On/Off 채널규격(재고 맵의 ch)별로 나눠 각각 4개 위험 카테고리를 렌더한다.
+    function catBlocks(subset){
+      var shorts = subset.filter(function(r){ return r.status==='short'; }).sort(function(a,b){ return b.gap-a.gap; }).slice(0,6);
+      var incoming = subset.filter(function(r){ return r.status==='incoming'; }).slice(0,4);
+      var expiring = subset.filter(function(r){ return (r.near||0) > 0; }).sort(function(a,b){ return b.near-a.near; }).slice(0,6);
+      var overstock = subset.filter(function(r){ return r.status!=='short' && r.status!=='nofcst' && r.cover!=null && r.cover>=3 && r.use>0; }).sort(function(a,b){ return b.cover-a.cover; }).slice(0,5);
+      var B = [];
+      if (shorts.length) {
+        B.push('<div style="margin-bottom:6px;">'+tag('SHORT '+shorts.length,'rgba(248,113,113,.15)','#f87171')+' <span style="color:var(--kn-text-dim);font-size:12px;">예상 마감 수요를 재고+당월 입고로 못 채움</span></div>');
+        shorts.forEach(function(r){ B.push(riskRow(r.sku, '부족 <b style="color:#f87171;">'+f1(hlv(r.gap,r.hl))+' HL</b> <span style="color:var(--kn-text-mute);">· 가용 '+f1(hlv(r.avail,r.hl))+' HL / 잔여수요 '+f1(hlv(r.rest,r.hl))+' HL'+(r.days!=null?' · 커버 '+Math.round(r.days)+'일':'')+'</span>')); });
+      }
+      if (incoming.length) {
+        B.push('<div style="margin:10px 0 6px;">'+tag('입고대기 '+incoming.length,'rgba(251,191,36,.14)','#fbbf24')+' <span style="color:var(--kn-text-dim);font-size:12px;">당월 통관 입고로만 커버 — 통관 지연 시 쇼트 전이</span></div>');
+        incoming.forEach(function(r){ B.push(riskRow(r.sku, '<span style="color:var(--kn-text-mute);">잔여수요 '+f1(hlv(r.rest,r.hl))+' HL · 당월 입고 '+f1(hlv(r.inCur,r.hl))+' HL</span>')); });
+      }
+      if (expiring.length) {
+        B.push('<div style="margin:12px 0 6px;">'+tag('폐기 임박 '+expiring.length,'rgba(168,85,247,.16)','#c084fc')+' <span style="color:var(--kn-text-dim);font-size:12px;">유통기한 미달로 가용 제외 — 미소진 시 폐기</span></div>');
+        expiring.forEach(function(r){ B.push(riskRow(r.sku, '유통기한 임박 <b style="color:#c084fc;">'+f1(hlv(r.near,r.hl))+' HL</b> <span style="color:var(--kn-text-mute);">· 총재고 '+f1(hlv(r.total,r.hl))+' HL</span>')); });
+      }
+      if (overstock.length) {
+        B.push('<div style="margin:12px 0 6px;">'+tag('과잉 재고 '+overstock.length,'rgba(96,165,250,.14)','#60a5fa')+' <span style="color:var(--kn-text-dim);font-size:12px;">커버리지 3개월↑ — 소진 지연 시 폐기 리스크 선행</span></div>');
+        overstock.forEach(function(r){ B.push(riskRow(r.sku, '<span style="color:var(--kn-text-mute);">커버 <b style="color:#60a5fa;">'+r.cover.toFixed(1)+'개월</b> · 가용 '+f1(hlv(r.avail,r.hl))+' HL / 월수요 '+f1(hlv(r.use,r.hl))+' HL</span>')); });
+      }
+      return B;
+    }
+    function group(title, sub, subset){
+      var blk = catBlocks(subset);
+      var inner = blk.length ? blk.join('') : '<div style="color:#4ade80;font-size:12px;padding:2px 0;">위험 SKU 없음 (수급 양호).</div>';
+      return '<div style="margin-bottom:16px;"><div style="font-size:12.5px;font-weight:700;color:var(--kn-text);margin-bottom:9px;padding-bottom:5px;border-bottom:1px solid var(--kn-border-strong);">'
+        + title + ' <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">' + sub + '</span></div>' + inner + '</div>';
+    }
+
+    var onRows  = rows.filter(function(r){ return r.ch==='ON'; });
+    var offRows = rows.filter(function(r){ return r.ch!=='ON'; });
+    var H = [];
+    H.push(group('🍺 On-Trade 규격 SKU', '출고 3개월(90일) 기준 · '+onRows.length+'종', onRows));
+    H.push(group('🛒 Off-Trade 규격 SKU', '출고 6개월(180일) 기준 · '+offRows.length+'종', offRows));
+    H.push('<div class="wr-rep-note">기준: 채택수요 max(당월 FCST, MTD 런레이트)+쇼트 시 RoFo · 가용재고=유통기한 충족분(On규격 90일↑/Off규격 180일↑) · 재고·입고='+(stock.as_of||'')+' · On+Off 합산 수요. 실버바틀(HE SLV 330 Bottle)은 On규격이라 3개월 기준으로 폐기 임박에 잡힘.</div>');
+    body.innerHTML = H.join('');
+  }
+
+  // (구 ④ KPI Update 섹션 제거 — KPI 원천이 누적/월 스냅샷이라 주간 리포트에 부적합.
+  //  KPI는 상단 고정 nav의 KPI↗ 버튼으로 kpi.html에서 확인.)
 </script>
 
 <div class="header">
