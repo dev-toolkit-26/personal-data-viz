@@ -1939,17 +1939,18 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       ((DASHBOARD_DATA.sku_detail || {})[rl[0]] || []).forEach(function(b){
         (b.skus||[]).forEach(function(s){
           var d=s.data||{}; var f=(d.hl_factor!=null)?d.hl_factor:0.0792;
-          regionSku[rl[0]][s.sku] = { fcstHL:(d.this_week_fcst||0)*f, dHL:(typeof d.differ_vs_last==='number'?d.differ_vs_last*f:0) };
+          regionSku[rl[0]][s.sku] = { fcstHL:(d.this_week_fcst||0)*f, dHL:(typeof d.differ_vs_last==='number'?d.differ_vs_last*f:0),
+            fcstCS:(d.this_week_fcst||0), dCS:(typeof d.differ_vs_last==='number'?d.differ_vs_last:0) };
         });
       });
     });
     function regionLine(skuName){
       var parts = REGION_LABELS.map(function(rl){
-        var e = regionSku[rl[0]][skuName]; return { lbl:rl[1], v:e?e.fcstHL:0, d:e?e.dHL:0 };
+        var e = regionSku[rl[0]][skuName]; return { lbl:rl[1], v:e?e.fcstHL:0, d:e?e.dHL:0, cs:e?e.fcstCS:0 };
       }).filter(function(p){ return p.v>0.05 || Math.abs(p.d)>0.05; }).sort(function(a,b){ return b.v-a.v; });
       if (!parts.length) return '';
-      return '<div style="margin-top:3px;font-size:11px;color:var(--kn-text-mute);">지점별 This Wk: '
-        + parts.map(function(p){ var dt = Math.abs(p.d)>=0.5 ? ' <span style="color:'+(p.d>0?'#4ade80':'#f87171')+';">('+(p.d>0?'+':'')+f1(p.d)+')</span>' : ''; return '<b style="color:var(--kn-text-dim);">'+p.lbl+'</b> '+f1(p.v)+dt; }).join(' · ') + ' HL</div>';
+      return '<div style="margin-top:3px;font-size:11px;color:var(--kn-text-mute);line-height:1.7;">지점별 This Wk: '
+        + parts.map(function(p){ var dt = Math.abs(p.d)>=0.5 ? ' · <span style="color:'+(p.d>0?'#4ade80':'#f87171')+';">'+(p.d>0?'+':'')+f1(p.d)+' HL</span>' : ''; return '<b style="color:var(--kn-text-dim);">'+p.lbl+'</b> '+f1(p.v)+' HL ('+qf(p.cs)+' CS'+dt+')'; }).join(' · ') + '</div>';
     }
     var movers = skuList.filter(function(x){ return Math.abs(x.dHL) >= 0.5; })
       .sort(function(a,b){ return Math.abs(b.dHL) - Math.abs(a.dHL); }).slice(0,6);
