@@ -1443,6 +1443,40 @@ td:first-child, td:nth-child(2) { text-align: left; }
           +'<ul class="wr-bullets">'+topBig.map(function(x){ return '<li><span class="wr-b-ico">•</span><div><span>'+hi(x.name)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.chLabel+'</span> · '+hi(f1(x.w.thisWk)+' HL')+'</span></div></li>'; }).join('')+'</ul>';
       }
 
+      // 블록1b: 변동폭 큰 SKU 전주대비 — 계정 주간(W1~W5)을 SKU 월 FCST 비중으로 안분해 SKU별 주차 합산(FCST 탭 드릴다운과 동일 방식)
+      var skuMap = {};   // 정규화 SKU명 → { weekly:[5], brand }
+      (OFF.channels||[]).forEach(function(c){
+        (c.accounts||[]).forEach(function(a){
+          var accW = acctWeekly(c.key, a.name); if(!accW) return;
+          var accMon = 0; (a.skus||[]).forEach(function(s){ accMon += (s.fcst_m && s.fcst_m[ci]) || 0; });
+          if (accMon <= 0) return;
+          (a.skus||[]).forEach(function(s){
+            var share = (((s.fcst_m && s.fcst_m[ci]) || 0)) / accMon;
+            if (share <= 0) return;
+            var nm = _offNormalizeSku(s);
+            var e = skuMap[nm] || (skuMap[nm] = { weekly:[0,0,0,0,0], brand:_offNormalizeBrandName(s) });
+            for (var w=0; w<5; w++) e.weekly[w] += (accW[w]||0)*share;
+          });
+        });
+      });
+      var skuMovers = Object.keys(skuMap).map(function(nm){ var e=skuMap[nm]; return { sku:nm, brand:e.brand, w:wow(e.weekly) }; })
+        .filter(function(x){ return x.w.differ!=null && Math.abs(x.w.differ)>=0.5; })
+        .sort(function(a,b){ return Math.abs(b.w.differ)-Math.abs(a.w.differ); }).slice(0,6);
+      var block1b;
+      if (skuMovers.length) {
+        block1b = '<ul class="wr-bullets">' + skuMovers.map(function(x){
+          var up=x.w.differ>0, c=up?'#4ade80':'#f87171';
+          return '<li style="border-left:2px solid '+c+';padding-left:10px;"><span class="wr-b-ico" style="color:'+c+';font-weight:700;">'+(up?'▲':'▼')+'</span>'
+            +'<div><span>'+hi(x.sku,c)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · 전주대비 '+hi((up?'+':'')+f1(x.w.differ)+' HL',c)
+            +' <span style="color:var(--kn-text-mute);">('+pwLabel+' '+f1(x.w.lastWk)+' → '+cwLabel+' '+f1(x.w.thisWk)+' HL)</span></span></div></li>';
+        }).join('') + '</ul>';
+      } else {
+        var topSku = Object.keys(skuMap).map(function(nm){ var e=skuMap[nm]; return { sku:nm, brand:e.brand, w:wow(e.weekly) }; })
+          .filter(function(x){ return x.w.thisWk>0; }).sort(function(a,b){ return b.w.thisWk-a.w.thisWk; }).slice(0,5);
+        block1b = '<div class="wr-rep-lead" style="margin-bottom:8px;">전주대비 유의미한 SKU 변동 없음. 이번 주('+cwLabel+') 규모 상위 SKU:</div>'
+          +'<ul class="wr-bullets">'+topSku.map(function(x){ return '<li><span class="wr-b-ico">•</span><div><span>'+hi(x.sku)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · '+hi(f1(x.w.thisWk)+' HL')+'</span></div></li>'; }).join('')+'</ul>';
+      }
+
       // 블록2: MTD 진행 → 예상 마감 (주간 FCST 분포 가중)
       var _wdY = (window.OFF_SEED && OFF_SEED.meta && OFF_SEED.meta.year) || 2026;
       var _wd = (function(y,mi){
@@ -1498,6 +1532,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       box3.innerHTML =
           '<div class="wr-rep-block"><div class="wr-rep-h">📦 주요 거래처 전주대비 변동 <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">(주간 FCST 계정 단위)</span></div>'+block1+'</div>'
+        + '<div class="wr-rep-block"><div class="wr-rep-h">🍺 변동폭 큰 SKU 전주대비 변동 <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">(계정 주간을 SKU 월 FCST 비중으로 안분)</span></div>'+block1b+'</div>'
         + '<div class="wr-rep-block"><div class="wr-rep-h">📊 MTD 진행 · 예상 마감 분석 <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">(주간 FCST 분포 가중)</span></div>'+block2+'</div>'
         + '<div class="wr-rep-block"><div class="wr-rep-h">🔀 주간 발주 트래킹 · RoFo 갭 · 성장성</div>'+block3+'</div>'
         + '<div class="wr-rep-block" id="off-wr-risk-block"><div class="wr-rep-h">⚠️ 예상 마감 기준 쇼트 / 폐기 위험 SKU</div>'
