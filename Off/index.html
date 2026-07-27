@@ -561,12 +561,45 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .kn-bg { position:absolute; inset:0; background:var(--kn-bg); background-attachment:fixed; }
 .kn-bg::after { content:''; position:absolute; inset:0; background:radial-gradient(1100px 600px at 50% 8%, rgba(74,222,128,.06), transparent 60%); animation:knBgDrift 24s ease-in-out infinite alternate; pointer-events:none; }
 @keyframes knBgDrift { 0%{transform:translate3d(-1.5%,-1%,0)} 100%{transform:translate3d(1.5%,1.5%,0)} }
-.kn-track { position:absolute; inset:0; display:flex; width:300%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
-.kn-slide { flex:0 0 33.3333%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
+.kn-track { position:absolute; inset:0; display:flex; width:400%; height:100%; transition:transform 1100ms cubic-bezier(.4,0,.2,1); }
+.kn-slide { flex:0 0 25%; height:100%; overflow-y:auto; padding:clamp(24px,2.6vh,40px) clamp(180px,14vw,240px) clamp(40px,4vh,70px) clamp(180px,14vw,240px); display:flex; flex-direction:column; align-items:center; justify-content:flex-start; opacity:0; transition:opacity 750ms ease; }
 .kn-slide.is-active { opacity:1; }
 .kn-slide > .kn-content { width:85%; max-width:1320px; }
 .kn-card { background:rgba(0,0,0,.5); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px); border:1px solid rgba(255,255,255,.1); border-radius:16px; }
 .kn-section-label { font-size:11px; letter-spacing:3px; text-transform:uppercase; color:rgba(255,255,255,.5); font-weight:600; margin-bottom:12px; }
+
+/* ── Weekly Report 슬라이드용 변수·컴포넌트 (On 대시보드에서 이식) ── */
+:root {
+  --kn-accent: #4ade80; --kn-accent-soft: rgba(74,222,128,.16);
+  --kn-card: rgba(18,26,20,.55); --kn-card-2: rgba(255,255,255,.04);
+  --kn-border: rgba(255,255,255,.10); --kn-border-strong: rgba(255,255,255,.16);
+  --kn-text: #f3f5f3; --kn-text-dim: rgba(255,255,255,.72); --kn-text-mute: rgba(255,255,255,.5);
+}
+.wr-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:20px; background:var(--kn-card); border:1px solid var(--kn-border); font-size:12px; font-weight:600; color:var(--kn-text-mute); }
+.wr-chip b { color:var(--kn-text); font-weight:700; }
+.wr-tbl-wrap { overflow-x:auto; border-radius:14px; }
+.wr-tbl { width:100%; border-collapse:collapse; font-size:12.5px; min-width:640px; }
+.wr-tbl th { text-align:right; padding:10px 12px; font-size:10.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; color:var(--kn-text-mute); border-bottom:1px solid var(--kn-border-strong); white-space:nowrap; background:transparent; cursor:default; }
+.wr-tbl thead th::after { content:none !important; }
+.wr-tbl th:first-child, .wr-tbl td:first-child { text-align:left; }
+.wr-tbl td { padding:11px 12px; border-bottom:1px solid var(--kn-border); color:var(--kn-text-dim); white-space:nowrap; font-variant-numeric:tabular-nums; background:transparent; }
+.wr-tbl tbody tr, .wr-tbl tbody tr:nth-child(even), .wr-tbl tbody tr:nth-child(even) td { background:transparent; }
+.wr-tbl tbody tr:hover, .wr-tbl tbody tr:nth-child(even):hover { background:var(--kn-card-2); }
+.wr-tbl tr.is-ttl td, .wr-tbl tbody tr.is-ttl:nth-child(even) td { font-weight:700; color:var(--kn-text); border-top:1px solid var(--kn-border-strong); background:rgba(255,255,255,.04); }
+.wr-tbl .wr-reg { color:var(--kn-text); font-weight:600; }
+.wr-delta { font-weight:700; }
+.wr-pill { display:inline-block; padding:2px 9px; border-radius:11px; font-size:11px; font-weight:700; }
+.wr-bullets { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:11px; }
+.wr-bullets li { display:flex; gap:11px; align-items:flex-start; font-size:13px; line-height:1.7; color:var(--kn-text-dim); }
+.wr-bullets li .wr-b-ico { flex:0 0 auto; margin-top:1px; }
+.wr-rep-block { padding:14px 0; border-top:1px solid var(--kn-border); }
+.wr-rep-block:first-child { border-top:none; padding-top:2px; }
+.wr-rep-h { font-size:12.5px; font-weight:700; color:var(--kn-text); letter-spacing:.3px; margin-bottom:10px; display:flex; align-items:center; gap:7px; }
+.wr-rep-note { font-size:11px; color:var(--kn-text-mute); margin-top:8px; line-height:1.55; }
+.wr-rep-lead { font-size:13px; line-height:1.75; color:var(--kn-text-dim); }
+.wr-risk-row { display:flex; align-items:baseline; gap:8px; font-size:12.5px; line-height:1.6; padding:3px 0; flex-wrap:wrap; }
+.wr-risk-row .r-sku { color:var(--kn-text); font-weight:600; min-width:150px; }
+.wr-tag { display:inline-block; padding:1px 8px; border-radius:10px; font-size:10.5px; font-weight:700; }
 .kn-apex { font-size:clamp(15px,1.5vw,20px); font-weight:700; color:#fff; letter-spacing:.5px; line-height:1.1; margin:0 0 16px; text-transform:uppercase; }
 .kn-headline { font-size:clamp(24px,3.4vw,38px); font-weight:200; color:rgba(255,255,255,.95); letter-spacing:-.5px; line-height:1.18; margin:0; }
 .kn-sub { font-size:clamp(13px,1.2vw,15px); color:rgba(255,255,255,.7); line-height:1.6; font-weight:300; margin:0; }
@@ -877,7 +910,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
     </div>
     <button class="kn-side-btn is-active" type="button" data-slide="0"><span class="kn-side-num">01</span><span>Overview</span></button>
     <button class="kn-side-btn"            type="button" data-slide="1"><span class="kn-side-num">02</span><span>Channel</span></button>
-    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Stock</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="2"><span class="kn-side-num">03</span><span>Weekly</span></button>
+    <button class="kn-side-btn"            type="button" data-slide="3"><span class="kn-side-num">04</span><span>Stock</span></button>
   </div>
 
   <div class="kn-track" id="kn-track">
@@ -914,8 +948,22 @@ td:first-child, td:nth-child(2) { text-align: left; }
       </div>
     </section>
 
-    <!-- Slide 3: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
+    <!-- Slide 3: Weekly Report — 월내 주차 전주대비(WoW) · 채널별 · 주간 요약 (On 대시보드 이식) -->
     <section class="kn-slide" data-slide="2">
+      <div class="kn-content" style="max-width:1280px;width:90%;">
+        <h2 class="kn-apex">Weekly Report — vs Last Week</h2>
+        <div id="off-wr-wow-headline" class="kn-card" style="padding:18px 22px;margin-bottom:20px;border-left:3px solid #4ade80;"></div>
+
+        <div class="kn-section-label">채널별 전주대비 주간 FCST 변동</div>
+        <div id="off-wr-channel-body" style="margin-bottom:24px;"></div>
+
+        <div class="kn-section-label">이번 주 업데이트 요약</div>
+        <div id="off-wr-weekly-body" class="kn-card" style="padding:18px 22px;"></div>
+      </div>
+    </section>
+
+    <!-- Slide 4: 재고 수급 — 현재고로 수요를 맞출 수 있는가 (SKU 단위, On+Off 합산 수요) -->
+    <section class="kn-slide" data-slide="3">
       <div class="kn-content">
         <h2 class="kn-apex">Stock Coverage</h2>
         <div id="sum-stock-card" class="kn-card" style="padding:20px 24px;color:rgba(255,255,255,.85);font-size:13.5px;line-height:1.85;font-weight:300;"></div>
@@ -932,6 +980,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     <button class="kn-dot is-active" type="button" data-slide="0" aria-label="Slide 1"></button>
     <button class="kn-dot"            type="button" data-slide="1" aria-label="Slide 2"></button>
     <button class="kn-dot"            type="button" data-slide="2" aria-label="Slide 3"></button>
+    <button class="kn-dot"            type="button" data-slide="3" aria-label="Slide 4"></button>
   </div>
 </div>
 
@@ -1238,11 +1287,276 @@ td:first-child, td:nth-child(2) { text-align: left; }
       mtdEl.innerHTML=dhtml;
     }
 
-    // ── Slide 5: 재고 수급 — 비동기(On 스냅샷 조회)라 렌더만 걸어두고 진행 ──
+    // ── Slide 3: Weekly Report — 월내 주차 전주대비(WoW) ──
+    renderOffWeekly();
+
+    // ── Slide 4: 재고 수급 — 비동기(On 스냅샷 조회)라 렌더만 걸어두고 진행 ──
     renderSumStock();
 
     // (On에서 복사돼 온 도넛·차트·진척 블록이 여기 있었다. Off에는 DASHBOARD_DATA가 없어
     //  한 번도 실행된 적 없는 죽은 코드였다 — 실제 렌더는 위쪽 Off 전용 코드가 이미 끝냈다.)
+  }
+
+  // ═══════════════════════════════════════════════
+  //  OFF WEEKLY REPORT (Slide index 2) — 월내 주차 전주대비(WoW)
+  //  On은 '이번주 제출 FCST vs 지난주 제출 FCST'로 WoW를 잡지만, Off는 지난주 제출본을
+  //  보존하지 않는다. 대신 주간 FCST(W1~W5) 분포에서 '값이 있는 마지막 주'(예: W4)를
+  //  직전 주(W3)와 비교해 전주대비를 만든다.
+  // ═══════════════════════════════════════════════
+  function renderOffWeekly() { try { _renderOffWeekly(); } catch(e){ console.error('[Off] weekly 오류:', e); } }
+  function _renderOffWeekly() {
+    var box1 = document.getElementById('off-wr-wow-headline');
+    var box2 = document.getElementById('off-wr-channel-body');
+    var box3 = document.getElementById('off-wr-weekly-body');
+    if (!OFF || !OFF.channels || (!box1 && !box2 && !box3)) return;
+
+    var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var T = OFF.total || {};
+    var am = _OFF_ACT_MONTHS || 4;
+    var ci = am - 1;
+    for (var _fi=11; _fi>=0; _fi--){ if (((T.fcst_m||[])[_fi]||0) > 0){ ci = _fi; break; } }  // 예측월(FCST 탭과 동일)
+    var monName = MON[ci] || '';
+    var pat = (window.OFF_SEED && OFF_SEED.pattern) || {};
+    var wf = pat.weekly_fcst || {};
+
+    // 주차 배열(W1~W5, HL) 헬퍼
+    function acctWeekly(ch, acct){ var a = wf[ch] && wf[ch][acct] && wf[ch][acct][ci]; return Array.isArray(a) ? a : null; }
+    function chanWeekly(ch, accts){
+      var sum=[0,0,0,0,0], any=false;
+      (accts||[]).forEach(function(n){ var a=acctWeekly(ch,n); if(a){ for(var w=0;w<5;w++){ sum[w]+=(a[w]||0); if(a[w]) any=true; } } });
+      return any ? sum : null;
+    }
+    var coreChans = (OFF.channels||[]).filter(function(c){ return _offInTtl(c); });
+    var ttlWeekly = (function(){
+      var sum=[0,0,0,0,0], any=false;
+      coreChans.forEach(function(c){ var w=chanWeekly(c.key,(c.accounts||[]).map(function(a){return a.name;})); if(w){ for(var i=0;i<5;i++){ sum[i]+=w[i]; if(w[i]) any=true; } } });
+      return any ? sum : null;
+    })();
+
+    // 주간 FCST 미업로드 → 안내만
+    if (!ttlWeekly) {
+      if (box1) box1.innerHTML = '<div style="color:var(--kn-text-mute);font-size:13px;line-height:1.7;">주간 FCST(W1~W5) 데이터가 없습니다. Data Update 탭에서 <b style="color:var(--kn-text-dim);">주간 FCST 파일(② 슬롯)</b>을 업로드하면 전주대비 분석이 표시됩니다.</div>';
+      if (box2) box2.innerHTML = '';
+      if (box3) box3.innerHTML = '';
+      return;
+    }
+    // 현재 주 = TTL 주차 배열의 마지막 비영 주. 직전 주와 비교.
+    var cwIdx = 0; for (var w2=4; w2>=0; w2--){ if ((ttlWeekly[w2]||0) > 0){ cwIdx = w2; break; } }
+    var pwIdx = cwIdx - 1;
+    var cwLabel = 'W'+(cwIdx+1), pwLabel = pwIdx>=0 ? 'W'+(pwIdx+1) : '—';
+
+    var f1 = function(v){ return v!=null ? (+v).toLocaleString('ko-KR',{maximumFractionDigits:1}) : '—'; };
+    var pctd = function(v){ return v==null ? '—' : (v>=0?'+':'')+(v*100).toFixed(1)+'%'; };
+    var hi = function(v,c){ return '<b style="color:'+(c||'#fff')+';">'+v+'</b>'; };
+    var mv = function(m,fld){ return (m && m[fld] && m[fld][ci]!=null) ? m[fld][ci] : 0; };
+    function achCol(v){ return v==null?'#9ca3af':v>=1?'#4ade80':v>=0.9?'#fbbf24':'#f87171'; }
+    function wow(arr){
+      if (!arr) return { thisWk:null, lastWk:null, differ:null, pct:null };
+      var tw = arr[cwIdx]!=null ? arr[cwIdx] : 0;
+      var lw = pwIdx>=0 ? (arr[pwIdx]!=null?arr[pwIdx]:0) : null;
+      var d  = (lw!=null) ? tw-lw : null;
+      var p  = (lw!=null && lw>0) ? d/lw : null;
+      return { thisWk:tw, lastWk:lw, differ:d, pct:p };
+    }
+
+    // ── ① 헤드라인 (Off TTL, 현재 주 vs 직전 주) ──
+    var tw = wow(ttlWeekly);
+    var tFcstM = mv(T,'fcst_m'), tRofoM = mv(T,'rofo_m'), tActM = mv(T,'act_m'), tLyM = mv(T,'ly_m');
+    var fcstRofo = tRofoM ? tFcstM/tRofoM : null;
+    var yoy = (tLyM && tFcstM) ? tFcstM/tLyM - 1 : null;
+    var wc = tw.differ==null ? '#9ca3af' : tw.differ>0 ? '#4ade80' : tw.differ<0 ? '#f87171' : '#9ca3af';
+    var wIco = tw.differ==null ? '🆕' : tw.differ>0 ? '⬆' : tw.differ<0 ? '⬇' : '➖';
+    var wTxt = tw.differ==null ? '직전 주 없음(첫 주)' : (tw.differ>0?'+':'')+f1(tw.differ)+' HL'+(tw.pct!=null?' ('+(tw.differ>=0?'+':'')+(tw.pct*100).toFixed(1)+'%)':'');
+    var lymC = (yoy||0) >= 0 ? '#4ade80' : '#f87171';
+    var wkTrend = ttlWeekly.slice(0,cwIdx+1).map(function(v,i){ return 'W'+(i+1)+' '+f1(v); }).join(' · ');
+    if (box1) box1.innerHTML =
+        '<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;">'
+      +   '<span style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px;">'+monName+' '+cwLabel+' 주간 FCST '+f1(tw.thisWk)+' HL</span>'
+      +   '<span style="font-size:15px;font-weight:700;color:'+wc+';">'+wIco+' 전주('+pwLabel+') 대비 '+wTxt+'</span>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+      +   '<span class="wr-chip">월 FCST <b>'+f1(tFcstM)+' HL</b> <span style="color:var(--kn-text-mute);">vs RoFo '+f1(tRofoM)+' HL</span></span>'
+      +   '<span class="wr-chip">FCST 달성률 <b style="color:'+achCol(fcstRofo)+';">'+(fcstRofo!=null?(fcstRofo*100).toFixed(1)+'%':'—')+'</b></span>'
+      +   '<span class="wr-chip">MTD <b>'+f1(tActM)+' HL</b></span>'
+      +   '<span class="wr-chip">vs LY <b style="color:'+lymC+';">'+pctd(yoy)+'</b> <span style="color:var(--kn-text-mute);">LY '+f1(tLyM)+' HL</span></span>'
+      +   '<span class="wr-chip">주차 추이 <span style="color:var(--kn-text-dim);">'+wkTrend+'</span></span>'
+      + '</div>';
+
+    // ── ② 채널별 전주대비 표 ──
+    function wowCell(w){
+      if (w.differ==null) return '<span style="color:#9ca3af;">첫 주</span>';
+      var c = w.differ>0?'#4ade80':w.differ<0?'#f87171':'#9ca3af';
+      var arw = w.differ>0?'▲':w.differ<0?'▼':'–';
+      return '<span class="wr-delta" style="color:'+c+';">'+arw+' '+(w.differ>0?'+':'')+f1(w.differ)+' HL'
+           + (w.pct!=null?' <span style="opacity:.75;">('+(w.differ>=0?'+':'')+(w.pct*100).toFixed(1)+'%)</span>':'')+'</span>';
+    }
+    var chanRows = (OFF.channels||[]).map(function(c){
+      var wArr = chanWeekly(c.key,(c.accounts||[]).map(function(a){return a.name;}));
+      var w = wow(wArr);
+      var ro = mv(c.m,'rofo_m'), fc = mv(c.m,'fcst_m'), acv = mv(c.m,'act_m'), ly = mv(c.m,'ly_m');
+      return { label:c.label||c.key, w:w, hasWk:!!wArr, fc:fc,
+               fcstRofo: ro? fc/ro : null, mtdRofo: ro? acv/ro : null, yoy: ly? fc/ly-1 : null,
+               absMv: Math.abs(w.differ||0) };
+    }).filter(function(r){ return r.hasWk || r.fc>0.01; })
+      .sort(function(a,b){ return b.absMv - a.absMv; });
+    function rowHtml(r, isTtl){
+      var yc = (r.yoy==null)?'#9ca3af':(r.yoy>=0?'#4ade80':'#f87171');
+      return '<tr'+(isTtl?' class="is-ttl"':'')+'>'
+        +'<td class="wr-reg">'+r.label+'</td>'
+        +'<td>'+f1(r.w.thisWk)+'</td>'
+        +'<td style="color:var(--kn-text-mute);">'+(r.w.lastWk!=null?f1(r.w.lastWk):'—')+'</td>'
+        +'<td>'+wowCell(r.w)+'</td>'
+        +'<td>'+f1(r.fc)+'</td>'
+        +'<td><span class="wr-pill" style="background:'+(r.fcstRofo==null?'rgba(255,255,255,.06)':'rgba(0,0,0,.28)')+';color:'+achCol(r.fcstRofo)+';">'+(r.fcstRofo!=null?(r.fcstRofo*100).toFixed(1)+'%':'—')+'</span></td>'
+        +'<td style="color:'+achCol(r.mtdRofo)+';">'+(r.mtdRofo!=null?(r.mtdRofo*100).toFixed(1)+'%':'—')+'</td>'
+        +'<td style="color:'+yc+';">'+pctd(r.yoy)+'</td>'
+        +'</tr>';
+    }
+    var ttlRow = { label:'Off TTL', w:tw, fc:tFcstM, fcstRofo:fcstRofo, mtdRofo:(tRofoM?tActM/tRofoM:null), yoy:yoy };
+    var head = '<thead><tr><th>채널</th><th>This Wk<br>'+cwLabel+'</th><th>Last Wk<br>'+pwLabel+'</th><th>전주대비 (WoW)</th><th>월 FCST</th><th>FCST 달성률</th><th>MTD</th><th>vs LY</th></tr></thead>';
+    if (box2) box2.innerHTML = '<div class="wr-tbl-wrap kn-card" style="padding:6px 4px;"><table class="wr-tbl">'+head+'<tbody>'+chanRows.map(function(r){return rowHtml(r,false);}).join('')+rowHtml(ttlRow,true)+'</tbody></table></div>'
+      + '<div style="margin-top:8px;font-size:11px;color:var(--kn-text-mute);">WoW = 이번 주('+cwLabel+') 주간 FCST − 직전 주('+pwLabel+') · 달성률 = 월 FCST ÷ RoFo · 변동폭 큰 채널 순 정렬 · 주간 FCST(W1~W5, HL) 기준 · TTL은 코어 채널 합계(E-com·DF·Military 제외)</div>';
+
+    // ── ③ 이번 주 업데이트 요약 ──
+    if (box3) {
+      // 블록1: 주요 거래처 전주대비 변동 (계정=주간 FCST의 원자 단위)
+      var acctList = [];
+      (OFF.channels||[]).forEach(function(c){
+        (c.accounts||[]).forEach(function(a){
+          var wArr = acctWeekly(c.key, a.name); if(!wArr) return;
+          acctList.push({ name:a.name, chLabel:c.label||c.key, w:wow(wArr) });
+        });
+      });
+      var movers = acctList.filter(function(x){ return x.w.differ!=null && Math.abs(x.w.differ)>=0.5; })
+        .sort(function(a,b){ return Math.abs(b.w.differ)-Math.abs(a.w.differ); }).slice(0,6);
+      var block1;
+      if (movers.length) {
+        block1 = '<ul class="wr-bullets">' + movers.map(function(x){
+          var up=x.w.differ>0, c=up?'#4ade80':'#f87171';
+          return '<li style="border-left:2px solid '+c+';padding-left:10px;"><span class="wr-b-ico" style="color:'+c+';font-weight:700;">'+(up?'▲':'▼')+'</span>'
+            +'<div><span>'+hi(x.name,c)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.chLabel+'</span> · 전주대비 '+hi((up?'+':'')+f1(x.w.differ)+' HL',c)
+            +' <span style="color:var(--kn-text-mute);">('+pwLabel+' '+f1(x.w.lastWk)+' → '+cwLabel+' '+f1(x.w.thisWk)+' HL)</span></span></div></li>';
+        }).join('') + '</ul>';
+      } else {
+        var topBig = acctList.filter(function(x){ return x.w.thisWk>0; }).sort(function(a,b){ return b.w.thisWk-a.w.thisWk; }).slice(0,5);
+        block1 = '<div class="wr-rep-lead" style="margin-bottom:8px;">전주대비 유의미한 거래처 변동 없음. 이번 주('+cwLabel+') 규모 상위 거래처:</div>'
+          +'<ul class="wr-bullets">'+topBig.map(function(x){ return '<li><span class="wr-b-ico">•</span><div><span>'+hi(x.name)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.chLabel+'</span> · '+hi(f1(x.w.thisWk)+' HL')+'</span></div></li>'; }).join('')+'</ul>';
+      }
+
+      // 블록2: MTD 진행 → 예상 마감 (주간 FCST 분포 가중)
+      var _wdY = (window.OFF_SEED && OFF_SEED.meta && OFF_SEED.meta.year) || 2026;
+      var _wd = (function(y,mi){
+        var last=new Date(y,mi+1,0).getDate(), today=new Date();
+        var isCur=(today.getFullYear()===y && today.getMonth()===mi);
+        var upto=isCur?today.getDate()-1:(new Date(y,mi,1)<today?last:0);
+        var total=0, el=0;
+        for(var d=1;d<=last;d++){ var wd=new Date(y,mi,d).getDay(); if(wd===0||wd===6) continue; total++; if(d<=upto) el++; }
+        return {elapsed:el,total:total,pct:total?el/total:0};
+      })(_wdY, ci);
+      var wdPct=_wd.pct;
+      var totWk = ttlWeekly.reduce(function(a,b){return a+(b||0);},0);
+      var frac = totWk>0 ? ttlWeekly.map(function(v){return (v||0)/totWk;}) : [.2,.2,.2,.2,.2];
+      var N=5, widths=[], jj;
+      if(_wd.total>=5*(N-1)+1){ for(jj=0;jj<N;jj++) widths.push(jj<N-1?5:_wd.total-5*(N-1)); }
+      else { for(jj=0;jj<N;jj++) widths.push(_wd.total/N); }
+      var cumWD=[], run=0; widths.forEach(function(x){ run+=x; cumWD.push(run); });
+      function cumFracOf(el){
+        if(el>=cumWD[N-1]) return 1;
+        var kk=0; while(kk<N && el>cumWD[kk]) kk++;
+        var low=kk>0?cumWD[kk-1]:0; var wkProg=widths[kk]>0?(el-low)/widths[kk]:1;
+        var before=0; for(var q=0;q<kk;q++) before+=frac[q];
+        return Math.max(0.01, Math.min(1, before+frac[kk]*Math.max(0,Math.min(1,wkProg))));
+      }
+      var cumFrac = cumFracOf(_wd.elapsed);
+      var mtd=tActM, fcst=tFcstM, rofo=tRofoM;
+      var projPat = (cumFrac>0 && mtd>0) ? mtd/cumFrac : null;
+      var projLin = (wdPct>0 && mtd>0) ? mtd/wdPct : null;
+      var projAchRofo = (projPat!=null && rofo>0) ? projPat/rofo : null;
+      var projAchFcst = (projPat!=null && fcst>0) ? projPat/fcst : null;
+      var pc = projAchFcst==null?'#9ca3af':projAchFcst>=1?'#4ade80':projAchFcst>=0.97?'#fbbf24':'#f87171';
+      var block2;
+      if (projPat!=null) {
+        var verdict = projAchFcst>=1?'FCST 초과 마감 예상':projAchFcst>=0.97?'FCST 근접 마감 예상':'FCST 미달 마감 예상';
+        var projGap = projPat - fcst;
+        block2 = '<div class="wr-rep-lead">MTD 실적 '+hi(f1(mtd)+' HL')+' · 영업일 '+hi(_wd.elapsed+'/'+_wd.total+'일')+' 경과('+Math.round(wdPct*100)+'%). '
+          +'주간 FCST 분포 가중 시 <b style="color:'+pc+';">'+monName+' 예상 마감 '+f1(projPat)+' HL</b> → '
+          +'RoFo('+f1(rofo)+' HL) 대비 '+hi(projAchRofo!=null?(projAchRofo*100).toFixed(1)+'%':'—',pc)+', '
+          +'FCST('+f1(fcst)+' HL) 대비 '+hi((projGap>=0?'+':'')+f1(projGap)+' HL',projGap>=0?'#4ade80':'#f87171')+' → '+hi(verdict,pc)+'.</div>';
+        var distTxt = frac.map(function(fr,i){ return 'W'+(i+1)+' '+Math.round(fr*100)+'%'; }).join(' · ');
+        block2 += '<div class="wr-rep-note">주간 FCST 분포: '+distTxt+' → 현재 <b style="color:var(--kn-text-dim);">누적 진행 '+(cumFrac*100).toFixed(0)+'%</b> (영업일 경과율 '+Math.round(wdPct*100)+'%). 단순 선형 추정은 '+f1(projLin)+' HL.</div>';
+      } else {
+        block2 = '<div class="wr-rep-lead" style="color:var(--kn-text-mute);">MTD 실적이 없어 예상 마감을 산출할 수 없습니다.</div>';
+      }
+
+      // 블록3: 주차별 트래킹 · RoFo 갭 · 성장성
+      var extra = [];
+      var trk = []; for (var wi=0; wi<=cwIdx; wi++){ var dd=wi>0?ttlWeekly[wi]-ttlWeekly[wi-1]:null; trk.push('<b style="color:var(--kn-text-dim);">W'+(wi+1)+'</b> '+f1(ttlWeekly[wi])+(dd!=null?' <span style="color:'+(dd>=0?'#4ade80':'#f87171')+';">('+(dd>=0?'+':'')+f1(dd)+')</span>':'')); }
+      extra.push('<div class="wr-rep-note">📦 주차별 주간 FCST(전주대비): '+trk.join(' · ')+' HL</div>');
+      if (rofo>0) { var gap=fcst-rofo; extra.push('<div class="wr-rep-note">🎯 월 FCST가 RoFo 대비 <b style="color:'+(gap>=0?'#4ade80':'#f87171')+';">'+(gap>=0?'+':'')+f1(gap)+' HL</b> ('+(gap>=0?'상회':'미달')+').</div>'); }
+      if (tLyM>0 && projPat!=null) { var g2=projPat/tLyM-1; extra.push('<div class="wr-rep-note">📈 예상 마감 성장성: 전년 동월 '+f1(tLyM)+' HL 대비 <b style="color:'+(g2>=0?'#4ade80':'#f87171')+';">'+(g2>=0?'+':'')+(g2*100).toFixed(1)+'%</b>.</div>'); }
+      var block3 = extra.join('');
+
+      box3.innerHTML =
+          '<div class="wr-rep-block"><div class="wr-rep-h">📦 주요 거래처 전주대비 변동 <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">(주간 FCST 계정 단위)</span></div>'+block1+'</div>'
+        + '<div class="wr-rep-block"><div class="wr-rep-h">📊 MTD 진행 · 예상 마감 분석 <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">(주간 FCST 분포 가중)</span></div>'+block2+'</div>'
+        + '<div class="wr-rep-block"><div class="wr-rep-h">🔀 주간 발주 트래킹 · RoFo 갭 · 성장성</div>'+block3+'</div>'
+        + '<div class="wr-rep-block" id="off-wr-risk-block"><div class="wr-rep-h">⚠️ 예상 마감 기준 쇼트 / 폐기 위험 SKU</div>'
+        +   '<div id="off-wr-risk-body" class="wr-rep-lead" style="color:var(--kn-text-mute);">재고 데이터 분석 중…</div></div>';
+      renderOffWeeklyRisk();
+    }
+  }
+
+  // ③-4 쇼트/폐기 위험 SKU (On 스냅샷 재고 재사용 — renderSumStock과 동일 소스, async)
+  async function renderOffWeeklyRisk() {
+    var body = document.getElementById('off-wr-risk-body');
+    if (!body) return;
+    if (typeof _stockLoadSnap === 'function') { try { await _stockLoadSnap(); } catch(e){} }
+    var snap = (typeof _stockSnap === 'function') ? _stockSnap() : null;
+    var stock = snap && snap.stock;
+    if (!stock || !stock.lots || !stock.lots.length || typeof _stockCompute !== 'function') {
+      body.innerHTML = '재고 파일 미업로드 — 쇼트/폐기 위험 분석 불가. <span style="color:var(--kn-text-mute);">On 대시보드 Data Update에서 Daily stock 업로드 시 자동 분석.</span>';
+      return;
+    }
+    var offDem = {}; try { offDem = _stockOffDemand(); } catch(e){ offDem = {}; }
+    var res; try { res = _stockCompute(stock, offDem, snap.inbound); } catch(e){ body.innerHTML = '재고 분석 오류: '+e.message; return; }
+    var rows = res.rows || [];
+    var f1 = function(v){ return (+v).toLocaleString('ko-KR',{maximumFractionDigits:1}); };
+    var qf = function(v){ return Math.round(+v).toLocaleString('ko-KR'); };
+    var hq = function(cs,hl){ return f1((cs||0)*(hl||0.0792))+' HL <span style="color:var(--kn-text-mute);">('+qf(cs)+' CS)</span>'; };
+    var tag = function(t,bg,c){ return '<span class="wr-tag" style="background:'+bg+';color:'+c+';">'+t+'</span>'; };
+    var riskRow = function(n,r){ return '<div class="wr-risk-row"><span class="r-sku">'+n+'</span><span>'+r+'</span></div>'; };
+    function cat(subset){
+      var shorts = subset.filter(function(r){ return r.status==='short'; }).sort(function(a,b){ return b.gap-a.gap; }).slice(0,5);
+      var incoming = subset.filter(function(r){ return r.status==='incoming'; }).slice(0,3);
+      var expiring = subset.filter(function(r){ return (r.near||0)>0; }).sort(function(a,b){ return b.near-a.near; }).slice(0,5);
+      var B = [];
+      if (shorts.length) {
+        B.push('<div style="margin-bottom:6px;">'+tag('SHORT '+shorts.length,'rgba(248,113,113,.15)','#f87171')+' <span style="color:var(--kn-text-dim);font-size:12px;">예상 마감 수요를 재고+당월 입고로 못 채움</span></div>');
+        shorts.forEach(function(r){ B.push(riskRow(r.sku, '부족 <b style="color:#f87171;">'+hq(r.gap,r.hl)+'</b> <span style="color:var(--kn-text-mute);">· 가용 '+hq(r.avail,r.hl)+(r.days!=null?' · 커버 '+Math.round(r.days)+'일':'')+'</span>')); });
+      }
+      if (incoming.length) {
+        B.push('<div style="margin:10px 0 6px;">'+tag('입고대기 '+incoming.length,'rgba(251,191,36,.14)','#fbbf24')+' <span style="color:var(--kn-text-dim);font-size:12px;">당월 통관 입고로만 커버</span></div>');
+        incoming.forEach(function(r){ B.push(riskRow(r.sku, '<span style="color:var(--kn-text-mute);">잔여수요 '+hq(r.rest,r.hl)+' · 당월 입고 '+hq(r.inCur,r.hl)+'</span>')); });
+      }
+      if (expiring.length) {
+        B.push('<div style="margin:12px 0 6px;">'+tag('폐기 임박 '+expiring.length,'rgba(168,85,247,.16)','#c084fc')+' <span style="color:var(--kn-text-dim);font-size:12px;">유통기한 미달로 가용 제외</span></div>');
+        expiring.forEach(function(r){ B.push(riskRow(r.sku, '유통기한 임박 <b style="color:#c084fc;">'+hq(r.near,r.hl)+'</b> <span style="color:var(--kn-text-mute);">· 총재고 '+hq(r.total,r.hl)+'</span>')); });
+      }
+      return B;
+    }
+    function group(title, sub, subset){
+      var blk = cat(subset);
+      var inner = blk.length ? blk.join('') : '<div style="color:#4ade80;font-size:12px;padding:2px 0;">위험 SKU 없음 (수급 양호).</div>';
+      return '<div style="margin-bottom:16px;"><div style="font-size:12.5px;font-weight:700;color:var(--kn-text);margin-bottom:9px;padding-bottom:5px;border-bottom:1px solid var(--kn-border-strong);">'
+        + title + ' <span style="font-weight:400;color:var(--kn-text-mute);font-size:11px;">' + sub + '</span></div>' + inner + '</div>';
+    }
+    var offRows = rows.filter(function(r){ return r.ch!=='ON'; });
+    var onRows  = rows.filter(function(r){ return r.ch==='ON'; });
+    var H = [];
+    H.push(group('🛒 Off-Trade 규격 SKU', '출고 6개월(180일) 기준 · '+offRows.length+'종', offRows));
+    H.push(group('🍺 On-Trade 규격 SKU', '출고 3개월(90일) 기준 · '+onRows.length+'종', onRows));
+    H.push('<div class="wr-rep-note">기준: 채택수요 max(당월 FCST, MTD 런레이트)+쇼트 시 RoFo · 재고·입고='+(stock.as_of||'')+' · On+Off 합산 수요. 상세 로트·규격은 <b style="color:var(--kn-text-dim);">Stock Coverage</b> 슬라이드 참고.</div>');
+    body.innerHTML = H.join('');
   }
 </script>
 
@@ -10325,7 +10639,7 @@ console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
   }
   function go(n) {
     idx = (n + total) % total;
-    track.style.transform = 'translateX(-' + (idx * 33.3333) + '%)';
+    track.style.transform = 'translateX(-' + (idx * (100 / total)) + '%)';
     slides.forEach(function(s, i){ s.classList.toggle('is-active', i === idx); });
     dots.forEach(function(d, i){ d.classList.toggle('is-active', i === idx); });
     sideBtns.forEach(function(b, i){ b.classList.toggle('is-active', i === idx); });
