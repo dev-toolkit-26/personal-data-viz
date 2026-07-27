@@ -8139,7 +8139,15 @@ async function renderSumStock() {
       + 'letter-spacing:.5px;padding:0 0 4px 2px;"><span>유통일자</span><span style="justify-self:end;">잔여</span>'
       + '<span style="padding-left:8px;">제품유형</span><span style="justify-self:end;">수량</span>'
       + '<span style="justify-self:end;">상태</span></div>';
-    h += r.lots.map(l => {
+    // 같은 유통일자(+유형·상태)의 로트들을 합산 — 동일 로트가 여러 줄로 흩어지면 총 재고량 파악이 어렵다.
+    const smap = {};
+    r.lots.forEach(l => {
+      const k = (l.exp || '—') + '|' + (l.type || '') + '|' + l.state;
+      const g = smap[k] || (smap[k] = { exp: l.exp, type: l.type, state: l.state, days: l.days, qty: 0, n: 0 });
+      g.qty += l.qty; g.n++;
+    });
+    const sLots = Object.keys(smap).map(k => smap[k]).sort((a, b) => (a.exp || '').localeCompare(b.exp || ''));
+    h += sLots.map(l => {
       const c = LC[l.state];
       const tag = l.state === 'near'
         ? '<span style="padding:1px 6px;border-radius:8px;font-size:9.5px;font-weight:700;background:rgba(251,191,36,.18);color:' + c + ';white-space:nowrap;">임박 · 출고불가</span>'
@@ -8154,7 +8162,7 @@ async function renderSumStock() {
         + 'line-height:1.7;padding:0 0 0 2px;' + (l.state === 'near' ? 'background:rgba(251,191,36,.05);'
           : l.state === 'lo' ? 'background:rgba(96,165,250,.05);'
           : l.state === 'soon' ? 'background:rgba(251,146,60,.05);' : '') + '">'
-        + '<span style="color:' + (l.state === 'hi' ? '#fff' : c) + ';">' + (l.exp || '—') + '</span>'
+        + '<span style="color:' + (l.state === 'hi' ? '#fff' : c) + ';">' + (l.exp || '—') + (l.n > 1 ? ' <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:700;">×' + l.n + '</span>' : '') + '</span>'
         + '<span style="justify-self:end;color:' + (l.state === 'near' || l.state === 'lo' || l.state === 'soon' ? c : 'rgba(255,255,255,.72)') + ';">' + l.days + '일</span>'
         + '<span style="padding-left:8px;color:rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (l.type || '') + '</span>'
         + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
@@ -8234,19 +8242,33 @@ async function renderSumStock() {
       + '<span>' + (sail ? '통관예정' : '소비기한') + '</span><span style="justify-self:end;">수량</span>'
       + '<span style="justify-self:end;">' + (pend ? '대기' : sail ? '남은일수' : '잔여') + '</span></div>';
     const asOf = stock.as_of;
-    h += lots.map(l => {
+    // 같은 기준일(입고/통관/ETA)에 걸린 로트들을 하나로 합산 — 여러 줄로 나열되면 총 입고량 파악이 어렵다.
+    const dmap = {};
+    lots.forEach(l => {
       const base = pend ? (l.inn || l.arr) : sail ? (l.inn || etaOf(l)) : l.arr;
-      const rem  = l.exp ? Math.round((new Date(l.exp + 'T00:00:00') - new Date(l.arr + 'T00:00:00')) / 86400000) : null;
-      const wait = Math.round((new Date((sail ? l.arr : base) + 'T00:00:00') - new Date(asOf + 'T00:00:00')) / 86400000);
+      (dmap[base] || (dmap[base] = [])).push(l);
+    });
+    h += Object.keys(dmap).sort().map(base => {
+      const grp = dmap[base];
+      const qty = grp.reduce((a, l) => a + l.qty, 0);
+      const exps = Array.from(new Set(grp.map(l => l.exp || '').filter(Boolean))).sort();
+      const minExp = exps[0] || null, mixed = exps.length > 1;
+      const arrRep = grp[0].arr;                                    // sail의 통관예정(그룹 내 동일)
+      const innConf = grp.every(l => l.inn), innEta = grp.every(l => !l.inn);
+      const rem  = minExp ? Math.round((new Date(minExp + 'T00:00:00') - new Date(arrRep + 'T00:00:00')) / 86400000) : null;
+      const wait = Math.round((new Date((sail ? arrRep : base) + 'T00:00:00') - new Date(asOf + 'T00:00:00')) / 86400000);
       const warn = pend ? (new Date(asOf) - new Date(base)) / 86400000 > 30
                         : rem != null && rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI);
+      const nBadge = grp.length > 1 ? ' <span style="color:' + col + ';font-size:9px;font-weight:700;">×' + grp.length + '</span>' : '';
+      const midCol = sail ? arrRep
+        : (minExp ? (minExp + (mixed ? ' <span style="color:#fbbf24;font-size:9px;">외' + (exps.length - 1) + '</span>' : ''))
+                  : '<span style="color:#fbbf24;">미상</span>');
       return '<div style="display:grid;grid-template-columns:' + IG + ';gap:8px;align-items:baseline;font-size:11px;'
         + 'line-height:1.7;padding:0 0 0 2px;">'
-        + '<span style="color:#fff;">' + base + '</span>'
-        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (pend ? '' : l.inn ? '확정' : 'ETA') + '</span>'
-        + '<span style="color:rgba(255,255,255,.75);">'
-        + (sail ? l.arr : (l.exp || '<span style="color:#fbbf24;">미상</span>')) + '</span>'
-        + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(l.qty, r.hl) + '</span>'
+        + '<span style="color:#fff;">' + base + nBadge + '</span>'
+        + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (pend ? '' : innConf ? '확정' : innEta ? 'ETA' : '혼합') + '</span>'
+        + '<span style="color:rgba(255,255,255,.75);">' + midCol + '</span>'
+        + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(qty, r.hl) + '</span>'
         + '<span style="justify-self:end;color:' + (warn ? C.watch : 'rgba(255,255,255,.72)') + ';">'
         + (pend ? Math.round((new Date(asOf) - new Date(base)) / 86400000) + '일'
                 : sail ? 'D-' + Math.max(wait, 0)
