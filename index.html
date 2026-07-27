@@ -954,7 +954,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     <!-- Slide 2: Weekly Report — 전주대비 FCST 변동 · 지점별 · 주간 요약 (구 Monthly Summary 교체) -->
     <section class="kn-slide" data-slide="1">
       <div class="kn-content" style="max-width:1280px;width:90%;">
-        <h2 class="kn-apex">Weekly Report — 전주대비 요약</h2>
+        <h2 class="kn-apex">Weekly Report — vs Last Week</h2>
         <div id="wr-wow-headline" class="kn-card" style="padding:18px 22px;margin-bottom:20px;border-left:3px solid #4ade80;"></div>
 
         <div class="kn-section-label">지점별 전주대비 FCST 변동</div>
@@ -1919,13 +1919,16 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     var hi   = function(v,c){ return '<b style="color:'+(c||'#fff')+';">'+v+'</b>'; };
     var ico  = function(e){ return '<span class="wr-b-ico">'+e+'</span>'; };
 
-    // ── 블록① 주요 SKU 전주대비 변동 (SKU 단위, HL 환산, 지점별 숫자 포함) ──
+    // ── 블록① 주요 SKU 전주대비 변동 (SKU 단위, HL + QTY(CS) 병기, 지점별 숫자 포함) ──
+    var qf = function(v){ return Math.round(+v).toLocaleString('ko-KR'); };   // QTY = 케이스(CS) 정수
     var skuRoot = (DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total']) || [];
     var skuList = [];
     skuRoot.forEach(function(b){
       (b.skus||[]).forEach(function(s){
         var d = s.data||{}; var f = (d.hl_factor!=null)?d.hl_factor:0.0792;
-        skuList.push({ sku:s.sku, brand:b.brand, dHL:(typeof d.differ_vs_last==='number'?d.differ_vs_last*f:0), fcstHL:(d.this_week_fcst||0)*f });
+        var dcs = (typeof d.differ_vs_last==='number')?d.differ_vs_last:0;   // WoW delta (cases)
+        var fcs = d.this_week_fcst||0;                                       // This Wk FCST (cases)
+        skuList.push({ sku:s.sku, brand:b.brand, dHL:dcs*f, fcstHL:fcs*f, dCS:dcs, fcstCS:fcs });
       });
     });
     // 지점별 SKU 맵 (This Wk FCST + WoW delta, HL)
@@ -1955,13 +1958,13 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       block1 = '<ul class="wr-bullets">' + movers.map(function(x){
         var up = x.dHL>0; var c = up?'#4ade80':'#f87171';
         var arrow = '<span class="wr-b-ico" style="color:'+c+';font-weight:700;">'+(up?'▲':'▼')+'</span>';
-        return '<li style="border-left:2px solid '+c+';padding-left:10px;">'+arrow+'<div><span>'+hi(x.sku, c)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · 전주대비 '+hi((up?'+':'')+f1(x.dHL)+' HL', c)+' <span style="color:var(--kn-text-mute);">(This Wk '+f1(x.fcstHL)+' HL)</span></span>'+regionLine(x.sku)+'</div></li>';
+        return '<li style="border-left:2px solid '+c+';padding-left:10px;">'+arrow+'<div><span>'+hi(x.sku, c)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · 전주대비 '+hi((up?'+':'')+f1(x.dHL)+' HL', c)+' <span style="color:var(--kn-text-mute);">('+(x.dCS>0?'+':'')+qf(x.dCS)+' CS) · This Wk '+f1(x.fcstHL)+' HL ('+qf(x.fcstCS)+' CS)</span></span>'+regionLine(x.sku)+'</div></li>';
       }).join('') + '</ul>';
     } else {
       // 변동이 없으면(월 롤오버·seed) 규모 상위 SKU를 대신 표기
       var topBig = skuList.filter(function(x){ return x.fcstHL>0; }).sort(function(a,b){ return b.fcstHL - a.fcstHL; }).slice(0,5);
       block1 = '<div class="wr-rep-lead" style="margin-bottom:8px;">전주대비 SKU 단위 유의미한 변동 없음 (전월 롤오버 또는 미미). 이번 주 FCST 규모 상위 SKU:</div>'
-        + '<ul class="wr-bullets">' + topBig.map(function(x){ return '<li>'+ico('•')+'<div><span>'+hi(x.sku)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · '+hi(f1(x.fcstHL)+' HL')+'</span>'+regionLine(x.sku)+'</div></li>'; }).join('') + '</ul>';
+        + '<ul class="wr-bullets">' + topBig.map(function(x){ return '<li>'+ico('•')+'<div><span>'+hi(x.sku)+' <span style="color:var(--kn-text-mute);font-size:11px;">'+x.brand+'</span> · '+hi(f1(x.fcstHL)+' HL')+' <span style="color:var(--kn-text-mute);">('+qf(x.fcstCS)+' CS)</span></span>'+regionLine(x.sku)+'</div></li>'; }).join('') + '</ul>';
     }
 
     // ── 블록② MTD 진행 → 예상 마감 분석 (발주패턴 가중, 연평균) ──
