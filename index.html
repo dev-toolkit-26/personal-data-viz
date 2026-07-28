@@ -4616,7 +4616,7 @@ async function parseInboundExcel(file, cutoff) {
 
 // 표시 단위 — 'hl'(기본) | 'qty'. 재고 원본은 QTY라 QTY가 실물 감각에 맞고,
 // FCST·수요는 HL로 이야기하므로 둘 다 필요하다. 환산은 hl_factor 하나로만 한다.
-let _stockUnit = 'hl';
+let _stockUnit = 'qty';
 function setStockUnit(u) {
   if (_stockUnit === u) return;
   _stockUnit = u;
