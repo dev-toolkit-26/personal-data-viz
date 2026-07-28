@@ -8161,13 +8161,14 @@ const STOCK_IN_EXTRA = {
   511385: ['PA WHE 330 Bottle', 0.0792, 'ON'],    // 파울라너 위트 330병 — 대시보드에 없는 신규
   512870: ['TI RAD 500 Can',    0.12,   'OFF'],   // 베트남 생산 전환분(EXKR=한국향)
   512854: ['PA OKT 500 Can',    0.12,   'OFF'],   // 옥토버페스트 — 1회성 행사 물량, 신규 SKU
-  512860: ['PA OKT 20000 Keg',  0.2,    'ON'],    // 옥토버페스트 케그 — 신규
+  512860: ['PA OKT 24000 Keg',  0.24,   'ON'],    // 옥토버페스트 케그 — 신규(원본 'KEG OW Case 24L')
 };
 // 가용 시점은 '통관 완료' 기준이다. 데일리스탁은 통관분만 담으므로 미통관분은 재고에 없다.
 // 과거 1,437건 중앙값: 여주입고 → 통관 3일, ETA → 통관 12일.
 const STOCK_IN_SCHEMA   = 2;    // 1: 입고일 기준(통관 개념 없음) / 2: 통관 기준 + 통관대기 분리
 const STOCK_IN_LEAD_IN  = 3;    // 여주입고일만 있을 때 통관 추정
 const STOCK_IN_LEAD_ETA = 12;   // ETA만 있을 때 통관 추정
+const STOCK_PEND_STALE  = 30;   // 여주입고 후 이 일수를 넘도록 통관일자가 없으면 미기입 이력으로 본다
 
 // 반입일정 워크북 → {file, cutoff, rows:[{code, sku, hl, ch, arr, qty, exp, eta}]}
 // 워크북에 연도별 시트가 여러 장 있고 과거 이력이 더 크다. 시트를 고르지 않고 전부 읽은 뒤
@@ -8248,10 +8249,18 @@ function _stockCompute(stock, offDem, inbound) {
   const inStock = new Set(stock.lots.map(l => l.code + '|' + l.exp));
   const inb  = {};
   for (const r of ((inbound && inbound.rows) || [])) {
-    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, matched: 0, cur: 0, next: 0, sail: 0,
+    const o = inb[r.sku] || (inb[r.sku] = { pend: 0, matched: 0, stale: 0, cur: 0, next: 0, sail: 0,
                                             lots: [], pendLots: [], sailLots: [] });
     if (r.pending) {                                   // 입고 완료·통관 대기
       if (r.exp && inStock.has(r.code + '|' + r.exp)) { o.matched += r.qty; continue; }
+      // 통관은 여주입고 후 3일(중앙값)이다. 한 달이 넘도록 통관일자가 안 찍힌 건은
+      // 실제 대기가 아니라 통관 후 엑셀 미기입 이력 — 그 사이 다 팔려 재고에 로트가
+      // 남지 않으니 위 소비기한 매칭에도 안 걸린다. 공급에서 빼되 표시는 남긴다.
+      const age = Math.round((asOf - new Date((r.inn || r.arr) + 'T00:00:00')) / 86400000);
+      if (age > STOCK_PEND_STALE) {
+        o.stale += r.qty; o.pendLots.push(Object.assign({}, r, { stale: true }));
+        continue;
+      }
       o.pend += r.qty; o.pendLots.push(r);
       continue;
     }
@@ -8328,6 +8337,7 @@ function _stockCompute(stock, offDem, inbound) {
     const s = sup[sku], d = dem[sku] || { on: 0, off: 0, mtd: 0, next: 0, rofo: 0, hi: 0, lo: 0 };
     const pend  = (inb[sku] && inb[sku].pend) || 0;       // 창고 입고 완료·통관 대기(재고 반영분 제외)
     const pendM = (inb[sku] && inb[sku].matched) || 0;   // 이미 재고에 있어 제외한 몫(표시용)
+    const pendS = (inb[sku] && inb[sku].stale) || 0;     // 통관일자 미기입 추정으로 제외한 몫(표시용)
     const inCur = (inb[sku] && inb[sku].cur) || 0;        // 당월 잔여기간 통관 예정
     const inNext = (inb[sku] && inb[sku].next) || 0;      // 익월 통관 예정
     const inSail = (inb[sku] && inb[sku].sail) || 0;     // 익월 이후 도착분 전체(입항예정)
@@ -8363,7 +8373,7 @@ function _stockCompute(stock, offDem, inbound) {
       lots: s.lots.slice().sort((x, y) => (x.exp || '').localeCompare(y.exp || '')),
       fcstOn: d.on, fcstOff: d.off, fcst, mtd: d.mtd, rr, rofo, basis,
       use, rest, cover, gap: Math.max(rest - avail - pend - inCur, 0),
-      pend, pendM, inCur, inNext, inSail,
+      pend, pendM, pendS, inCur, inNext, inSail,
       inLots: (inb[sku] && inb[sku].lots) || [], pendLots: (inb[sku] && inb[sku].pendLots) || [],
       sailLots: (inb[sku] && inb[sku].sailLots) || [],
       days: use ? avail / (use / dim) : null,
@@ -8582,6 +8592,8 @@ async function renderSumStock() {
       + (pend ? '통관 대기 · ' + nU(r.pend, r.hl) + ' ' + UL + ' — 창고 입고 완료, 통관 전이라 데일리스탁에 없다'
               + (r.pendM * r.hl >= 0.5 ? ' · <span style="color:rgba(255,255,255,.5);">같은 유통기한이 재고에 있어 '
                  + nU(r.pendM, r.hl) + ' ' + UL + ' 제외(이미 반영)</span>' : '')
+              + (r.pendS ? ' · <span style="color:rgba(255,255,255,.5);">입고 후 ' + STOCK_PEND_STALE + '일 초과 '
+                 + nU(r.pendS, r.hl) + ' ' + UL + ' 제외(통관일자 미기입 추정)</span>' : '')
          : sail ? '입항 예정 · ' + nU(r.inSail, r.hl) + ' ' + UL + ' — 익월 이후 도착분(당월 판정에는 미반영)'
                 + ' · 익월 ' + nU(r.inNext, r.hl) + ' ' + UL
          : '통관 예정 · 당월 잔여 ' + nU(r.inCur, r.hl) + ' ' + UL)
@@ -8606,7 +8618,9 @@ async function renderSumStock() {
       const innConf = grp.every(l => l.inn), innEta = grp.every(l => !l.inn);
       const rem  = minExp ? Math.round((new Date(minExp + 'T00:00:00') - new Date(arrRep + 'T00:00:00')) / 86400000) : null;
       const wait = Math.round((new Date((sail ? arrRep : base) + 'T00:00:00') - new Date(asOf + 'T00:00:00')) / 86400000);
-      const warn = pend ? (new Date(asOf) - new Date(base)) / 86400000 > 30
+      // 스테일 판정은 로트별 inn으로 하고 그룹 키도 inn이라 그룹 전체가 같은 값이다
+      const stale = pend && !!grp[0].stale;
+      const warn = pend ? stale
                         : rem != null && rem < (r.ch === 'ON' ? STOCK_SHELF_ON : STOCK_SHELF_OFF_HI);
       const nBadge = grp.length > 1 ? ' <span style="color:' + col + ';font-size:9px;font-weight:700;">×' + grp.length + '</span>' : '';
       const midCol = sail ? arrRep
@@ -8617,15 +8631,19 @@ async function renderSumStock() {
         + '<span style="color:#fff;">' + base + nBadge + '</span>'
         + '<span style="color:rgba(255,255,255,.3);font-size:9px;">' + (pend ? '' : innConf ? '확정' : innEta ? 'ETA' : '혼합') + '</span>'
         + '<span style="color:rgba(255,255,255,.75);">' + midCol + '</span>'
-        + '<span style="justify-self:end;color:#fff;white-space:nowrap;">' + fU(qty, r.hl) + '</span>'
+        + '<span style="justify-self:end;white-space:nowrap;color:' + (stale ? 'rgba(255,255,255,.4)' : '#fff') + ';'
+        + (stale ? 'text-decoration:line-through;' : '') + '">' + fU(qty, r.hl) + '</span>'
         + '<span style="justify-self:end;color:' + (warn ? C.watch : 'rgba(255,255,255,.72)') + ';">'
         + (pend ? Math.round((new Date(asOf) - new Date(base)) / 86400000) + '일'
+                + (stale ? ' <span style="color:rgba(255,255,255,.4);font-size:9px;">제외</span>' : '')
                 : sail ? 'D-' + Math.max(wait, 0)
                 : rem == null ? '—' : rem + '일') + '</span></div>';
     }).join('');
     h += '<div style="font-size:9.5px;color:rgba(255,255,255,.35);padding:5px 0 0 2px;line-height:1.6;">'
       + (pend ? '통관되면 바로 가용재고가 된다. 반입일정에 통관일자가 비어 있어도 같은 제품코드·소비기한 '
-              + '로트가 데일리스탁에 있으면 이미 통관된 것으로 보고 제외한다(엑셀 미기입 건).'
+              + '로트가 데일리스탁에 있으면 이미 통관된 것으로 보고 제외한다(엑셀 미기입 건). '
+              + '통관은 입고 후 ' + STOCK_IN_LEAD_IN + '일(중앙값)이라 ' + STOCK_PEND_STALE
+              + '일이 넘도록 통관일자가 없으면 다 팔려 재고에도 안 남은 미기입 이력으로 보고 공급에서 뺀다.'
          : sail ? 'ETA가 잡혔다는 건 이미 선적돼 오고 있다는 뜻이다. 다만 해상 지연·통관 변수가 남아 '
                 + '당월 쇼트 판정에는 넣지 않는다. 통관예정 = ETA + ' + STOCK_IN_LEAD_ETA + '일(과거 리드타임 중앙값).'
          : '통관일자가 없으면 추정: 여주입고일 + ' + STOCK_IN_LEAD_IN + '일, 입고일도 없으면 ETA + '
