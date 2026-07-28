@@ -8248,7 +8248,11 @@ function _stockCompute(stock, offDem, inbound) {
   // — 안 그러면 통관대기가 재고와 이중 계상된다.
   const inStock = new Set(stock.lots.map(l => l.code + '|' + l.exp));
   const inb  = {};
-  for (const r of ((inbound && inbound.rows) || [])) {
+  for (const r0 of ((inbound && inbound.rows) || [])) {
+    // 스냅샷에는 업로드 시점의 SKU명·HL 계수가 행마다 굳어 있다. 매핑을 고쳐도
+    // 재업로드 전까지 옛 값이 남으므로 제품코드로 다시 풀어 현재 매핑을 우선한다.
+    const mp = STOCK_SKU_MAP[r0.code] || STOCK_IN_EXTRA[r0.code];
+    const r  = mp ? Object.assign({}, r0, { sku: mp[0], hl: mp[1], ch: mp[2] }) : r0;
     const o = inb[r.sku] || (inb[r.sku] = { pend: 0, matched: 0, stale: 0, cur: 0, next: 0, sail: 0,
                                             lots: [], pendLots: [], sailLots: [] });
     if (r.pending) {                                   // 입고 완료·통관 대기
