@@ -2433,6 +2433,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
           <button class="min-cat-btn"        data-cat="bottle"   onclick="minutesFilterByCategory('bottle')">Bottle</button>
           <button class="min-cat-btn"        data-cat="draught"  onclick="minutesFilterByCategory('draught')">Draught</button>
           <button class="min-cat-btn"        data-cat="can"      onclick="minutesFilterByCategory('can')">Can</button>
+          <button class="min-cat-btn"        data-cat="alsm"     onclick="minutesFilterByCategory('alsm')">ALSM</button>
         </div>
         <button onclick="minutesNew()" class="min-new-btn">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -8351,6 +8352,7 @@ const MINUTES_CATEGORIES = [
   { key: 'bottle',   label: 'Bottle' },
   { key: 'draught',  label: 'Draught' },
   { key: 'can',      label: 'Can' },
+  { key: 'alsm',     label: 'ALSM' },
 ];
 const MINUTES_CAT_LABEL = Object.fromEntries(MINUTES_CATEGORIES.map(c => [c.key, c.label]));
 const MINUTES_CAT_COLOR = {
@@ -8359,6 +8361,7 @@ const MINUTES_CAT_COLOR = {
   bottle:   '#0e7490',
   draught:  '#a16207',
   can:      '#b91c1c',
+  alsm:     '#4d7c0f',
 };
 const MINUTES_CAT_BG = {
   on_trade: '#fff7ed',
@@ -8366,6 +8369,7 @@ const MINUTES_CAT_BG = {
   bottle:   '#ecfeff',
   draught:  '#fefce8',
   can:      '#fef2f2',
+  alsm:     '#f7fee7',
 };
 let _minutesCurrentCategory = 'all'; // 'all' | category key
 
