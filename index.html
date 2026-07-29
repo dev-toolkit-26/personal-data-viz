@@ -2286,22 +2286,27 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     </div>
     <div id="branch-report-title" class="section-title" style="margin-top:4px;"></div>
     <div id="branch-kpi-grid" class="kpi-grid" style="margin-bottom:8px;"></div>
-    <div id="branch-insight" style="font-size:13px;color:var(--text-muted);margin:6px 2px 18px;line-height:1.6;"></div>
+    <!-- 전문가 코멘트 (지점장용 진단) -->
+    <div id="branch-commentary" style="margin:4px 0 20px;"></div>
+    <!-- 월별 추이 차트 (전체폭) -->
     <div class="chart-grid">
-      <div class="chart-card">
-        <div class="chart-title" id="branch-chartA-title">A. 월별 25Y vs 26Y</div>
+      <div class="chart-card full">
+        <div class="chart-title" id="branch-chartA-title">월별 25Y vs 26Y</div>
         <div class="chart-wrap"><canvas id="chartBR_A"></canvas></div>
       </div>
-      <div class="chart-card">
-        <div class="chart-title" id="branch-chartB-title">B. SKU Top 10 — 25Y vs 26Y (YTD)</div>
-        <div class="chart-wrap"><canvas id="chartBR_B"></canvas></div>
-      </div>
     </div>
-    <div class="section-title" id="branch-sku-title" style="margin-top:22px;">SKU별 25Y vs 26Y (YTD 동기간)</div>
+    <!-- 카테고리별 분석 -->
+    <div class="section-title" id="branch-cat-title" style="margin-top:22px;">카테고리별 — Bottle / Draught / Can (YTD 동기간)</div>
+    <div class="table-wrap"><table id="tbl-branch-cat"></table></div>
+    <div id="branch-cat-comment" style="font-size:12.5px;color:var(--text-secondary,#475569);margin:8px 2px 4px;line-height:1.7;"></div>
+    <!-- SKU 상세 -->
+    <div class="section-title" id="branch-sku-title" style="margin-top:24px;">SKU별 25Y vs 26Y (YTD 동기간)</div>
     <div class="table-wrap" style="max-height:60vh;overflow:auto"><table id="tbl-branch-sku"></table></div>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.5;">
-      · NSV = DSR Raw의 Net Sales Value(MKRW). 지점 합계 = 소속 SKU 합. Revenue 탭의 P&L Net Revenue와는 소스가 달라 값이 다를 수 있음.<br>
-      · NSV가 비어 있으면 Data Update 탭의 <b>💰 SKU NSV 백필</b>을 먼저 실행하세요. · 25Y는 전체월, 26Y는 실적 반영월까지 동기간으로 비교.
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.6;">
+      · <b>Mix%</b> = 해당 SKU(또는 카테고리)가 이 지점 <b>26Y YTD 합계</b>에서 차지하는 구성비(판매 비중). 합계 100%.<br>
+      · <b>Δ / Δ%</b> = 25Y 동기간 대비 증감액 / 증감률. · <b>Blade</b>는 26년 철수 제품 → YoY 감소는 정상이며 실질 성과 판단 시 제외.<br>
+      · <b>신규</b> = 작년 런칭 브랜드(Snow·Birra 등) → 25Y 기저가 낮아 YoY% 해석에 주의.<br>
+      · NSV = DSR Raw의 Net Sales Value(MKRW), 지점 합계 = 소속 SKU 합(Revenue 탭 P&L과 소스 상이). 비어 있으면 Data Update 탭 <b>💰 SKU NSV 백필</b> 먼저 실행. 25Y는 전체월, 26Y는 실적월까지 동기간 비교.
     </div>
   </div>
 
@@ -6865,26 +6870,39 @@ function renderBranchReport(branch){
   grid.style.gridTemplateColumns = `repeat(${Math.min(kpis.length,4)},1fr)`;
   grid.innerHTML = kpis.map(k => `<div class="kpi-card ${k.cls}"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.value}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
 
-  // 인사이트: NSV 미백필 안내 + Top gainer/decliner
+  // ── SKU별 YTD 집계 + 카테고리/Blade(철수)/신규 태그 ──
+  const NEW_BRANDS = new Set(['Snow','BirraMoretti']);   // 작년 런칭 → YoY% 해석 주의
+  const _isBlade = s => /blade/i.test(s);
+  const _catOf = s => /bottle/i.test(s) ? 'Bottle' : /can/i.test(s) ? 'Can'
+                    : /keg|blade|draught|tank/i.test(s) ? 'Draught' : '기타';
   const skuYtd = rows.map(r => {
-    const s26 = sum(r[unit+'26'], last), s25 = sum(r[unit+'25'], last);
-    return { sku: r.sku, brand: r.brand, y26: s26, y25: s25, delta: s26 - s25 };
+    const y26 = sum(r[unit+'26'], last), y25 = sum(r[unit+'25'], last);
+    const isNew = NEW_BRANDS.has(r.brand) || (y25 < (unit === 'nsv' ? 0.5 : 1) && y26 > 0);
+    return { sku: r.sku, brand: r.brand, cat: _catOf(r.sku), blade: _isBlade(r.sku), isNew, y26, y25, delta: y26 - y25 };
   }).filter(r => r.y26 > 0 || r.y25 > 0);
-  let insight = '';
-  if (unit === 'nsv' && !anyNsv){
-    insight = '⚠️ NSV 데이터가 아직 없습니다. Data Update 탭의 <b>💰 SKU NSV 백필</b>을 먼저 실행하세요. (물량 보기는 HL 토글)';
-  } else {
-    const gain = skuYtd.filter(r => r.delta > 0).sort((a,b) => b.delta - a.delta)[0];
-    const drop = skuYtd.filter(r => r.delta < 0).sort((a,b) => a.delta - b.delta)[0];
-    const parts = [`<b>${dispName}</b>의 26Y YTD ${unit === 'nsv' ? '매출' : '물량'}은 <b>${_brFmt(ytd26,unit)} ${uLbl}</b>${yoy != null ? ` (YoY <b style="color:${yoy>=0?'var(--positive)':'var(--negative)'}">${yoy>=0?'+':''}${(yoy*100).toFixed(1)}%</b>)` : ''}.`];
-    if (gain) parts.push(`증가 견인: <b>${gain.sku}</b> (+${_brFmt(gain.delta,unit)} ${uLbl}).`);
-    if (drop) parts.push(`감소: <b>${drop.sku}</b> (${_brFmt(drop.delta,unit)} ${uLbl}).`);
-    insight = parts.join(' ');
-  }
-  document.getElementById('branch-insight').innerHTML = insight;
+  const totYtd26 = skuYtd.reduce((a,r) => a + r.y26, 0) || 1;
+  const unitWord = unit === 'nsv' ? '매출' : '물량';
+  const nsvMissing = (unit === 'nsv' && !anyNsv);
 
-  // 차트 A: 월별 25 vs 26
-  document.getElementById('branch-chartA-title').textContent = `A. 월별 25Y vs 26Y (${uLbl})`;
+  const vfmt = v => `${_brFmt(v, unit)} ${uLbl}`;
+  const pctOf = (d, base) => base ? d / base : null;
+  const pfHtml = x => x == null ? '—' : `<b style="color:${x>=0?'var(--positive)':'var(--negative)'}">${x>=0?'+':''}${(x*100).toFixed(1)}%</b>`;
+
+  // Blade(철수) 제외 실질 YoY
+  const bl = skuYtd.filter(r => r.blade).reduce((a,r) => ({ y26:a.y26+r.y26, y25:a.y25+r.y25 }), { y26:0, y25:0 });
+  const yoyEx = pctOf((ytd26 - bl.y26) - (ytd25 - bl.y25), (ytd25 - bl.y25));
+
+  // 카테고리·브랜드 집계
+  const CATS = ['Bottle','Draught','Can'];
+  const catAgg = {}; CATS.forEach(c => catAgg[c] = { y26:0, y25:0 });
+  const brandAgg = {};
+  skuYtd.forEach(r => {
+    if (catAgg[r.cat]) { catAgg[r.cat].y26 += r.y26; catAgg[r.cat].y25 += r.y25; }
+    const b = (brandAgg[r.brand] = brandAgg[r.brand] || { y26:0, y25:0 }); b.y26 += r.y26; b.y25 += r.y25;
+  });
+
+  // 차트: 월별 25 vs 26 (전체폭)
+  document.getElementById('branch-chartA-title').textContent = `월별 25Y vs 26Y (${uLbl})`;
   destroyChart('chartBR_A');
   const dataA26 = ser26.map((v,i) => i <= last ? (v || 0) : null);
   const dsA = [
@@ -6900,30 +6918,73 @@ function renderBranchReport(branch){
       scales: { y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString('ko-KR', {maximumFractionDigits:0}) } } } }
   });
 
-  // 차트 B: SKU Top 10 (YTD 동기간)
-  document.getElementById('branch-chartB-title').textContent = `B. SKU Top 10 — 25Y vs 26Y YTD (${uLbl})`;
-  destroyChart('chartBR_B');
-  const top = skuYtd.slice().sort((a,b) => b.y26 - a.y26).slice(0, 10);
-  _charts.chartBR_B = new Chart(document.getElementById('chartBR_B'), {
-    type: 'bar',
-    data: { labels: top.map(r => r.sku), datasets: [
-      { label: `25Y`, data: top.map(r => r.y25), backgroundColor: '#94a3b8aa', borderColor: '#94a3b8', borderWidth: 1 },
-      { label: `26Y`, data: top.map(r => r.y26), backgroundColor: '#16a34aaa', borderColor: '#16a34a', borderWidth: 1 },
-    ] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_brFmt(ctx.raw, unit)} ${uLbl}` } } },
-      scales: { x: { beginAtZero: true, ticks: { callback: v => v.toLocaleString('ko-KR', {maximumFractionDigits:0}) } } } }
+  // ── 카테고리 테이블 (Bottle / Draught / Can) ──
+  document.getElementById('branch-cat-title').textContent = `카테고리별 — Bottle / Draught / Can · YTD 동기간 (Jan~${monName}, ${uLbl})`;
+  let cHtml = `<thead><tr><th>카테고리</th><th>25Y</th><th>26Y</th><th>Δ</th><th>Δ%</th><th>Mix%</th></tr></thead><tbody>`;
+  CATS.forEach(c => {
+    const a = catAgg[c], dd = a.y26 - a.y25, dp = pctOf(dd, a.y25);
+    const dc = dd > 0 ? 'var(--positive)' : dd < 0 ? 'var(--negative)' : 'inherit';
+    cHtml += `<tr><td style="text-align:left"><b>${c}</b>${c==='Draught'?' <span style="color:var(--text-muted);font-size:11px">(Keg·Blade)</span>':''}</td>`
+      + `<td>${_brFmt(a.y25,unit)}</td><td><b>${_brFmt(a.y26,unit)}</b></td>`
+      + `<td style="color:${dc}">${dd>=0?'+':''}${_brFmt(dd,unit)}</td>`
+      + `<td style="color:${dc}">${dp==null?'—':`${dp>=0?'+':''}${(dp*100).toFixed(1)}%`}</td>`
+      + `<td>${(a.y26/totYtd26*100).toFixed(1)}%</td></tr>`;
   });
+  const tDelta = ytd26 - ytd25, tPct = pctOf(tDelta, ytd25);
+  cHtml += `<tr style="border-top:2px solid var(--border,#cbd5e1);font-weight:700"><td style="text-align:left">합계</td>`
+    + `<td>${_brFmt(ytd25,unit)}</td><td>${_brFmt(ytd26,unit)}</td>`
+    + `<td style="color:${tDelta>=0?'var(--positive)':'var(--negative)'}">${tDelta>=0?'+':''}${_brFmt(tDelta,unit)}</td>`
+    + `<td style="color:${tPct>=0?'var(--positive)':'var(--negative)'}">${tPct==null?'—':`${tPct>=0?'+':''}${(tPct*100).toFixed(1)}%`}</td><td>100.0%</td></tr>`;
+  cHtml += '</tbody>';
+  document.getElementById('tbl-branch-cat').innerHTML = cHtml;
 
-  // SKU 테이블
+  const catLine = CATS.map(c => { const a = catAgg[c]; return `${c} ${pfHtml(pctOf(a.y26-a.y25, a.y25))} <span style="color:var(--text-muted)">(비중 ${(a.y26/totYtd26*100).toFixed(0)}%)</span>`; }).join(' · ');
+  const catLead = CATS.slice().sort((x,y) => catAgg[y].y26 - catAgg[x].y26)[0];
+  document.getElementById('branch-cat-comment').innerHTML =
+    nsvMissing ? '' : `카테고리 YoY: ${catLine}. 주력은 <b>${catLead}</b>(비중 ${(catAgg[catLead].y26/totYtd26*100).toFixed(0)}%).`;
+
+  // ── 전문가 진단 코멘트 (지점장용) ──
+  const cm = document.getElementById('branch-commentary');
+  if (nsvMissing) {
+    cm.innerHTML = `<div style="border:1px solid var(--border,#e2e8f0);border-left:4px solid var(--negative);border-radius:8px;padding:12px 16px;background:rgba(220,38,38,0.04);font-size:13px;">⚠️ <b>NSV(매출) 데이터가 아직 없습니다.</b> Data Update 탭의 <b>💰 SKU NSV 백필</b>을 먼저 실행하세요. 지금은 상단 <b>HL(물량)</b> 토글로 물량 기준 분석을 볼 수 있습니다.</div>`;
+  } else {
+    const verdict = apAch == null ? { t:'평가 보류', c:'var(--text-muted)' }
+      : apAch >= 100 ? { t:'목표 초과 달성 — 순항 중', c:'var(--positive)' }
+      : apAch >= 95  ? { t:'목표 근접 — 양호', c:'var(--positive)' }
+      : apAch >= 88  ? { t:'목표 하회 — 주의', c:'#d97706' }
+      : { t:'목표 크게 하회 — 부진, 집중 관리 필요', c:'var(--negative)' };
+    const decliners = skuYtd.filter(r => !r.blade && !r.isNew && r.delta < 0).sort((a,b) => a.delta - b.delta).slice(0,3);
+    const growers   = skuYtd.filter(r => !r.blade && r.delta > 0).sort((a,b) => b.delta - a.delta).slice(0,3);
+    const bladeActive = skuYtd.some(r => r.blade && (r.y25 > 0 || r.y26 > 0));
+    const watch = [['Paulaner','파울라너'],['Snow','Snow'],['BirraMoretti','Birra']]
+      .filter(([k]) => brandAgg[k]).map(([k,label]) => {
+        const b = brandAgg[k];
+        return `${label} 26Y ${vfmt(b.y26)}${NEW_BRANDS.has(k) ? ' <span style="color:var(--text-muted)">(신규)</span>' : ` (${pfHtml(pctOf(b.y26-b.y25,b.y25))})`}`;
+      });
+    const line = (label, body) => `<div style="margin:5px 0;"><span style="display:inline-block;min-width:80px;font-weight:700;color:var(--primary)">${label}</span>${body}</div>`;
+    let body = '';
+    body += line('종합 진단', `26Y YTD(Jan~${monName}) ${unitWord} <b>${vfmt(ytd26)}</b> · 전년동기 ${vfmt(ytd25)} 대비 ${pfHtml(yoy)}`
+      + `${bladeActive ? ` · Blade 철수분 제외 실질 ${pfHtml(yoyEx)}` : ''} · AP 달성률 <b>${apAch==null?'—':apAch.toFixed(1)+'%'}</b> → <b style="color:${verdict.c}">${verdict.t}</b>`);
+    body += line('카테고리', catLine);
+    if (growers.length)   body += line('성장 견인', growers.map(r => `<b>${r.sku}</b> ${pfHtml(pctOf(r.delta,r.y25))}(Δ +${vfmt(r.delta)})`).join(', '));
+    if (decliners.length) body += line('점검 필요', decliners.map(r => `<b>${r.sku}</b> ${pfHtml(pctOf(r.delta,r.y25))}(Δ ${vfmt(r.delta)})`).join(', ') + ' — 원인 파악·대응 권장');
+    if (watch.length)     body += line('전략 브랜드', watch.join(' · ') + ' — 파울라너·신규(Snow/Birra) 확대 여지 점검');
+    if (bladeActive)      body += line('Blade', `26년 철수 제품 → Draught YoY 하락은 정상. 실질 성과는 <b>Blade 제외 ${pfHtml(yoyEx)}</b>로 판단.`);
+    cm.innerHTML = `<div style="border:1px solid var(--border,#e2e8f0);border-left:4px solid var(--primary);border-radius:8px;padding:13px 16px;background:rgba(32,85,39,0.03);font-size:13px;line-height:1.7;">`
+      + `<div style="font-weight:700;margin-bottom:6px;font-size:14px;">🔎 ${dispName} 지점장 진단 코멘트</div>${body}</div>`;
+  }
+
+  // ── SKU 상세 테이블 (Cat 열 + 철수/신규 태그) ──
   document.getElementById('branch-sku-title').textContent = `SKU별 25Y vs 26Y — YTD 동기간 (Jan~${monName}, ${uLbl})`;
-  const totYtd26 = skuYtd.reduce((a,r) => a + r.y26, 0) || 1;
   const sorted = skuYtd.slice().sort((a,b) => b.y26 - a.y26);
-  let html = `<thead><tr><th>SKU</th><th>Brand</th><th>25Y</th><th>26Y</th><th>Δ</th><th>Δ%</th><th>Mix%</th></tr></thead><tbody>`;
+  let html = `<thead><tr><th>SKU</th><th>Cat</th><th>Brand</th><th>25Y</th><th>26Y</th><th>Δ</th><th>Δ%</th><th>Mix%</th></tr></thead><tbody>`;
   sorted.forEach(r => {
     const dpct = r.y25 ? (r.delta/r.y25*100) : null;
     const dc = r.delta > 0 ? 'var(--positive)' : r.delta < 0 ? 'var(--negative)' : 'inherit';
-    html += `<tr><td style="text-align:left">${r.sku}</td><td style="text-align:left;color:var(--text-muted)">${r.brand}</td>`
+    const tag = r.blade ? ' <span style="font-size:10px;background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px">철수</span>'
+              : r.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:4px">신규</span>' : '';
+    html += `<tr${r.blade?' style="opacity:.6"':''}><td style="text-align:left">${r.sku}${tag}</td>`
+      + `<td style="color:var(--text-muted)">${r.cat}</td><td style="text-align:left;color:var(--text-muted)">${r.brand}</td>`
       + `<td>${_brFmt(r.y25,unit)}</td><td><b>${_brFmt(r.y26,unit)}</b></td>`
       + `<td style="color:${dc}">${r.delta>=0?'+':''}${_brFmt(r.delta,unit)}</td>`
       + `<td style="color:${dc}">${dpct==null?'\u2014':`${dpct>=0?'+':''}${dpct.toFixed(1)}%`}</td>`
