@@ -1062,7 +1062,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
   var _sumChartA = null, _sumChartD = null;
 
-  function showSummary() { try { return showSummaryOff(); } catch(e){ console.error('[Off] summary 오류:', e); } }
+  async function showSummary() {
+    try { await _stockLoadSnap(); } catch(e) {}          // On wd_progress 등 공유 스냅샷 확보(있으면 사용)
+    try { return showSummaryOff(); } catch(e){ console.error('[Off] summary 오류:', e); }
+  }
 
   // Off 데이터(OFF.total / OFF.channels)로 On과 동일한 5슬라이드 키노트 렌더
   function showSummaryOff() {
@@ -1190,14 +1193,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
     if(mtdEl){
       // 영업일(WD) 진행률 — 활성월 기준(주말 제외; 휴일 미반영) → MTD 기대 기준선
       var _wdY=(window.OFF_SEED&&OFF_SEED.meta&&OFF_SEED.meta.year)||2026;
-      var _wd=(function(y,mi){
-        var last=new Date(y,mi+1,0).getDate(), today=new Date();
-        var isCur=(today.getFullYear()===y && today.getMonth()===mi);
-        var upto=isCur?today.getDate()-1:(new Date(y,mi,1)<today?last:0);
-        var total=0, el=0;
-        for(var d=1;d<=last;d++){ var w=new Date(y,mi,d).getDay(); if(w===0||w===6) continue; total++; if(d<=upto) el++; }
-        return {elapsed:el,total:total,pct:total?el/total:0};
-      })(_wdY, ci);
+      var _wd=_offWD(_wdY, ci);
       var wdPct=_wd.pct, wdW=Math.min(wdPct*100,100).toFixed(1);
       function _pp(v){ return v==null?'-':(v>=0?'+':'')+(v*100).toFixed(1)+'pp'; }
       function _stGap(gap){   // MTD(vs WD) 상태
@@ -1479,14 +1475,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
       // 블록2: MTD 진행 → 예상 마감 (주간 FCST 분포 가중)
       var _wdY = (window.OFF_SEED && OFF_SEED.meta && OFF_SEED.meta.year) || 2026;
-      var _wd = (function(y,mi){
-        var last=new Date(y,mi+1,0).getDate(), today=new Date();
-        var isCur=(today.getFullYear()===y && today.getMonth()===mi);
-        var upto=isCur?today.getDate()-1:(new Date(y,mi,1)<today?last:0);
-        var total=0, el=0;
-        for(var d=1;d<=last;d++){ var wd=new Date(y,mi,d).getDay(); if(wd===0||wd===6) continue; total++; if(d<=upto) el++; }
-        return {elapsed:el,total:total,pct:total?el/total:0};
-      })(_wdY, ci);
+      var _wd = _offWD(_wdY, ci);
       var wdPct=_wd.pct;
       var totWk = ttlWeekly.reduce(function(a,b){return a+(b||0);},0);
       var frac = totWk>0 ? ttlWeekly.map(function(v){return (v||0)/totWk;}) : [.2,.2,.2,.2,.2];
@@ -8179,6 +8168,23 @@ const STOCK_PEND_STALE  = 30;   // 여주입고 후 이 일수를 넘도록 통�
 let _STOCK_SNAP = null;
 function _stockSnap() { return _STOCK_SNAP || {}; }
 function _stockFcstMonth() { return (_stockSnap().wk_meta || {}).month || _OFF_ACT_MONTHS || 7; }
+
+// 영업일(WD) 진행률 — On과 '같은 기준'으로 맞춘다.
+// On은 데이터 기준일(월초~기준일 '포함')로 세어 wd_progress에 저장한다(예: 7월 21/23).
+// 그 값이 있으면 그대로 써서 On과 완전히 일치시키고, 없으면 로컬로 계산하되
+// 오늘을 '포함'해서 센다(종전 today-1은 오늘을 빼 하루가 부족했다).
+function _offWD(y, mi){
+  var on = (typeof _stockSnap === 'function') ? _stockSnap() : {};
+  if (on.wd_progress && on.wk_meta && on.wk_meta.month === (mi + 1) && on.wd_progress.total) {
+    return on.wd_progress;                                  // On과 동일 값(같은 달일 때만)
+  }
+  var last = new Date(y, mi + 1, 0).getDate(), today = new Date();
+  var isCur = (today.getFullYear() === y && today.getMonth() === mi);
+  var upto = isCur ? today.getDate() : (new Date(y, mi, 1) < today ? last : 0);   // 오늘 포함
+  var total = 0, el = 0;
+  for (var d = 1; d <= last; d++) { var w = new Date(y, mi, d).getDay(); if (w === 0 || w === 6) continue; total++; if (d <= upto) el++; }
+  return { elapsed: el, total: total, pct: total ? el / total : 0 };
+}
 async function _stockLoadSnap() {
   if (_STOCK_SNAP) return _STOCK_SNAP;
   const { data } = await _supabase.from('dashboard_snapshots').select('data').eq('id', 1).single();
