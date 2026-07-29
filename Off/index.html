@@ -4597,13 +4597,20 @@ async function _offRofoLoadComments(){
 async function _offRofoSaveComments(btn){
   const statusEl = document.querySelector('.off-rofo-cmt-status');
   const cm = _OFF_ROFO_COMMENTS, me = (sessionStorage.getItem('auth_label')||''), now = new Date().toISOString();
-  const ups=[], dels=[];
+  // (channel,account,month)로 정규화하며 중복 제거 — 같은 PK가 배치에 두 번 들어가면
+  // Postgres가 'ON CONFLICT ... cannot affect row a second time'로 저장 전체를 거부한다.
+  // (Off는 월 없는 레거시 키를 애초에 건너뛰어 On 같은 충돌은 없지만 방어적으로 dedup.)
+  const byKey=new Map();
   Object.keys(cm).forEach(k=>{
     const p=k.split('|'); if(p.length<3 || !/^\d+$/.test(p[0])) return;
     const month=parseInt(p[0],10), channel=p[1], account=p.slice(2).join('|');
-    if(cm[k]) ups.push({channel,account,month,comment:cm[k],updated_by:me,updated_at:now});
-    else dels.push({channel,account,month});
+    byKey.set(JSON.stringify([channel,account,month]), {channel,account,month,comment:cm[k]});
   });
+  const ups=[], dels=[];
+  for(const v of byKey.values()){
+    if(v.comment) ups.push({channel:v.channel,account:v.account,month:v.month,comment:v.comment,updated_by:me,updated_at:now});
+    else dels.push({channel:v.channel,account:v.account,month:v.month});
+  }
   if(statusEl) statusEl.textContent='Saving…';
   try{
     if(ups.length){ const {error}=await _supabase.from('off_rofo_comments').upsert(ups,{onConflict:'channel,account,month'}); if(error) throw error; }

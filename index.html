@@ -7306,15 +7306,25 @@ async function _rofoSaveComments(btn){
   const cm = DASHBOARD_DATA.rofo_comments || {};
   const me = (typeof _currentOwner === 'function') ? _currentOwner() : (sessionStorage.getItem('auth_label') || '');
   const nowIso = new Date().toISOString();
-  const ups = [], dels = [];
+  // (region,sku,month)로 정규화하며 중복 제거. 구형 'region|sku'(월 없음) 키와 신형
+  // 'month|region|sku' 키가 같은 (region,sku,6)로 겹치면 upsert 배치에 같은 PK가 두 번
+  // 들어가 Postgres가 'ON CONFLICT ... cannot affect row a second time'로 저장 전체를
+  // 거부한다(6월 스냅샷 레거시 키 1개 때문에 7월 저장까지 실패했다). 명시적 월 키를 우선한다.
+  const byKey = new Map();
   for (const k of Object.keys(cm)) {
-    // 키 형식: 'month|region|sku' (월별). 구형 'region|sku'(월 없음)은 6월로 간주.
     const parts = k.split('|'); if (parts.length < 2) continue;
-    let month, region, sku;
-    if (parts.length >= 3 && /^\d+$/.test(parts[0])) { month = parseInt(parts[0], 10); region = parts[1]; sku = parts.slice(2).join('|'); }
-    else { month = 6; region = parts[0]; sku = parts.slice(1).join('|'); }
-    if (cm[k]) ups.push({ region, sku, month, comment: cm[k], updated_by: me, updated_at: nowIso });
-    else dels.push({ region, sku, month });
+    let month, region, sku, explicit;
+    if (parts.length >= 3 && /^\d+$/.test(parts[0])) { month = parseInt(parts[0], 10); region = parts[1]; sku = parts.slice(2).join('|'); explicit = true; }
+    else { month = 6; region = parts[0]; sku = parts.slice(1).join('|'); explicit = false; }
+    const nk = JSON.stringify([region, sku, month]);
+    const prev = byKey.get(nk);
+    if (prev && prev.explicit && !explicit) continue;   // 명시적 월 값이 이미 있으면 레거시로 덮지 않음
+    byKey.set(nk, { region, sku, month, comment: cm[k], explicit });
+  }
+  const ups = [], dels = [];
+  for (const v of byKey.values()) {
+    if (v.comment) ups.push({ region: v.region, sku: v.sku, month: v.month, comment: v.comment, updated_by: me, updated_at: nowIso });
+    else dels.push({ region: v.region, sku: v.sku, month: v.month });
   }
   if (statusEl) statusEl.textContent = 'Saving…';
   try {
