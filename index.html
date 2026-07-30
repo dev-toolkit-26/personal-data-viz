@@ -2286,7 +2286,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     </div>
     <div id="branch-report-title" class="section-title" style="margin-top:4px;"></div>
     <div id="branch-kpi-grid" class="kpi-grid" style="margin-bottom:8px;"></div>
-    <!-- 전문가 코멘트 (지점장용 진단) -->
+    <!-- Branch Comment (diagnostic) -->
     <div id="branch-commentary" style="margin:4px 0 20px;"></div>
     <!-- 월별 추이 차트 (전체폭) -->
     <div class="chart-grid">
@@ -2296,11 +2296,11 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       </div>
     </div>
     <!-- 카테고리별 분석 -->
-    <div class="section-title" id="branch-cat-title" style="margin-top:22px;">카테고리별 — Bottle / Draught / Can (YTD 동기간)</div>
+    <div class="section-title" id="branch-cat-title" style="margin-top:22px;">Category — Bottle / Draught / Can (YTD)</div>
     <div class="table-wrap"><table id="tbl-branch-cat"></table></div>
     <div id="branch-cat-comment" style="font-size:12.5px;color:var(--text-secondary,#475569);margin:8px 2px 4px;line-height:1.7;"></div>
     <!-- SKU 상세 -->
-    <div class="section-title" id="branch-sku-title" style="margin-top:24px;">SKU별 25Y vs 26Y (YTD 동기간)</div>
+    <div class="section-title" id="branch-sku-title" style="margin-top:24px;">By category → SKU · 25Y vs 26Y (YTD)</div>
     <div class="table-wrap" style="max-height:60vh;overflow:auto"><table id="tbl-branch-sku"></table></div>
     <div style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.6;">
       · <b>Mix%</b> = 해당 SKU(또는 카테고리)가 이 지점 <b>26Y YTD 합계</b>에서 차지하는 구성비(판매 비중). 합계 100%.<br>
@@ -6788,6 +6788,9 @@ function _brHasAnyNsv(){
   }
   return false;
 }
+// 올해(26Y) 신규 도입 브랜드. 작년(25Y) 데이터가 있어도(오적재·부분연도) 무시하고
+// '신규'로 본다 — 비라모레띠·설화는 작년 1월부터 판매된 게 아니라 YoY 비교가 왜곡된다.
+const _BR_NEW_BRANDS = new Set(['Paulaner', 'Snow', 'BirraMoretti']);
 const _BR_TABS = [
   ['On Trade Total','전체'], ['Seoul','Seoul'], ['BuSan','Busan'],
   ['DaeGu&JeJu','DaeGu&JeJu'], ['DaeJeon','DaeJeon'], ['GwangJu','GwangJu'],
@@ -6807,8 +6810,10 @@ function _brAgg(tab){
   const rows = []; let anyNsv = false;
   detail.forEach(brand => (brand.skus || []).forEach(s => {
     const d = s.data || {}; const f = (d.hl_factor != null) ? d.hl_factor : 0.0792;
-    const n26 = d.nsv_monthly || [], n25 = d.nsv_2025_monthly || [], a26 = d.act_monthly || [], a25 = d.act_2025_monthly || [];
-    const row = { sku: s.sku, brand: brand.brand, nsv26:Array(12).fill(0), nsv25:Array(12).fill(0), hl26:Array(12).fill(0), hl25:Array(12).fill(0) };
+    const isNewBrand = _BR_NEW_BRANDS.has(brand.brand);   // 신규 브랜드는 25Y를 통째로 무시
+    const n26 = d.nsv_monthly || [], a26 = d.act_monthly || [];
+    const n25 = isNewBrand ? [] : (d.nsv_2025_monthly || []), a25 = isNewBrand ? [] : (d.act_2025_monthly || []);
+    const row = { sku: s.sku, brand: brand.brand, isNew: isNewBrand, nsv26:Array(12).fill(0), nsv25:Array(12).fill(0), hl26:Array(12).fill(0), hl25:Array(12).fill(0) };
     for (let i = 0; i < 12; i++){
       if (n26[i] != null){ cur.nsv.y26[i] += n26[i]; row.nsv26[i] = n26[i]; if (n26[i]) anyNsv = true; }
       if (n25[i] != null){ cur.nsv.y25[i] += n25[i]; row.nsv25[i] = n25[i]; if (n25[i]) anyNsv = true; }
@@ -6840,7 +6845,7 @@ function renderBranchReport(branch){
   document.getElementById('branch-btnbar').innerHTML = _BR_TABS.map(([k,label]) =>
     `<button class="month-btn ${k === tab ? '' : 'off'}" onclick="selectBranch('${k.replace(/'/g,"\\'")}')">${label}</button>`).join('');
   const dispName = (_BR_TABS.find(t => t[0] === tab) || [tab, tab])[1];
-  document.getElementById('branch-report-title').textContent = `${dispName} — 기업분석 (25Y vs 26Y)`;
+  document.getElementById('branch-report-title').textContent = `${dispName} \u2014 Business Analysis (25Y vs 26Y)`;
 
   const { cur, rows, anyNsv } = _brAgg(tab);
   // 실적 반영 마지막 월(HL 기준, 항상 존재) → YTD 동기간 경계
@@ -6871,13 +6876,12 @@ function renderBranchReport(branch){
   grid.innerHTML = kpis.map(k => `<div class="kpi-card ${k.cls}"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.value}</div><div class="kpi-sub">${k.sub}</div></div>`).join('');
 
   // ── SKU별 YTD 집계 + 카테고리/Blade(철수)/신규 태그 ──
-  const NEW_BRANDS = new Set(['Snow','BirraMoretti']);   // 작년 런칭 → YoY% 해석 주의
   const _isBlade = s => /blade/i.test(s);
   const _catOf = s => /bottle/i.test(s) ? 'Bottle' : /can/i.test(s) ? 'Can'
-                    : /keg|blade|draught|tank/i.test(s) ? 'Draught' : '기타';
+                    : /keg|blade|draught|tank/i.test(s) ? 'Draught' : 'Other';
   const skuYtd = rows.map(r => {
     const y26 = sum(r[unit+'26'], last), y25 = sum(r[unit+'25'], last);
-    const isNew = NEW_BRANDS.has(r.brand) || (y25 < (unit === 'nsv' ? 0.5 : 1) && y26 > 0);
+    const isNew = r.isNew || (y25 < (unit === 'nsv' ? 0.5 : 1) && y26 > 0);
     return { sku: r.sku, brand: r.brand, cat: _catOf(r.sku), blade: _isBlade(r.sku), isNew, y26, y25, delta: y26 - y25 };
   }).filter(r => r.y26 > 0 || r.y25 > 0);
   const totYtd26 = skuYtd.reduce((a,r) => a + r.y26, 0) || 1;
@@ -6894,6 +6898,7 @@ function renderBranchReport(branch){
 
   // 카테고리·브랜드 집계
   const CATS = ['Bottle','Draught','Can'];
+  const CATS_ALL = CATS.concat(['Other']);
   const catAgg = {}; CATS.forEach(c => catAgg[c] = { y26:0, y25:0 });
   const brandAgg = {};
   skuYtd.forEach(r => {
@@ -6919,8 +6924,8 @@ function renderBranchReport(branch){
   });
 
   // ── 카테고리 테이블 (Bottle / Draught / Can) ──
-  document.getElementById('branch-cat-title').textContent = `카테고리별 — Bottle / Draught / Can · YTD 동기간 (Jan~${monName}, ${uLbl})`;
-  let cHtml = `<thead><tr><th>카테고리</th><th>25Y</th><th>26Y</th><th>Δ</th><th>Δ%</th><th>Mix%</th></tr></thead><tbody>`;
+  document.getElementById('branch-cat-title').textContent = `Category \u2014 Bottle / Draught / Can \u00b7 YTD (Jan\u2013${monName}, ${uLbl})`;
+  let cHtml = `<thead><tr><th>Category</th><th>25Y</th><th>26Y</th><th>\u0394</th><th>\u0394%</th><th>Mix%</th></tr></thead><tbody>`;
   CATS.forEach(c => {
     const a = catAgg[c], dd = a.y26 - a.y25, dp = pctOf(dd, a.y25);
     const dc = dd > 0 ? 'var(--positive)' : dd < 0 ? 'var(--negative)' : 'inherit';
@@ -6931,69 +6936,128 @@ function renderBranchReport(branch){
       + `<td>${(a.y26/totYtd26*100).toFixed(1)}%</td></tr>`;
   });
   const tDelta = ytd26 - ytd25, tPct = pctOf(tDelta, ytd25);
-  cHtml += `<tr style="border-top:2px solid var(--border,#cbd5e1);font-weight:700"><td style="text-align:left">합계</td>`
+  cHtml += `<tr style="border-top:2px solid var(--border,#cbd5e1);font-weight:700"><td style="text-align:left">Total</td>`
     + `<td>${_brFmt(ytd25,unit)}</td><td>${_brFmt(ytd26,unit)}</td>`
     + `<td style="color:${tDelta>=0?'var(--positive)':'var(--negative)'}">${tDelta>=0?'+':''}${_brFmt(tDelta,unit)}</td>`
     + `<td style="color:${tPct>=0?'var(--positive)':'var(--negative)'}">${tPct==null?'—':`${tPct>=0?'+':''}${(tPct*100).toFixed(1)}%`}</td><td>100.0%</td></tr>`;
   cHtml += '</tbody>';
   document.getElementById('tbl-branch-cat').innerHTML = cHtml;
 
-  const catLine = CATS.map(c => { const a = catAgg[c]; return `${c} ${pfHtml(pctOf(a.y26-a.y25, a.y25))} <span style="color:var(--text-muted)">(비중 ${(a.y26/totYtd26*100).toFixed(0)}%)</span>`; }).join(' · ');
+  const catLine = CATS.map(c => { const a = catAgg[c]; return `${c} ${pfHtml(pctOf(a.y26-a.y25, a.y25))} <span style="color:var(--text-muted)">(${(a.y26/totYtd26*100).toFixed(0)}% mix)</span>`; }).join(' \u00b7 ');
   const catLead = CATS.slice().sort((x,y) => catAgg[y].y26 - catAgg[x].y26)[0];
   document.getElementById('branch-cat-comment').innerHTML =
-    nsvMissing ? '' : `카테고리 YoY: ${catLine}. 주력은 <b>${catLead}</b>(비중 ${(catAgg[catLead].y26/totYtd26*100).toFixed(0)}%).`;
+    nsvMissing ? '' : `Category YoY: ${catLine}. Lead: <b>${catLead}</b> (${(catAgg[catLead].y26/totYtd26*100).toFixed(0)}% mix).`;
 
-  // ── 전문가 진단 코멘트 (지점장용) ──
+  // ── Branch Comment (English, detailed) ──
   const cm = document.getElementById('branch-commentary');
+  const enName = { 'On Trade Total':'On-Trade Total', 'Seoul':'Seoul', 'BuSan':'Busan',
+                   'DaeGu&JeJu':'Daegu & Jeju', 'DaeJeon':'Daejeon', 'GwangJu':'Gwangju' }[tab] || dispName;
   if (nsvMissing) {
-    cm.innerHTML = `<div style="border:1px solid var(--border,#e2e8f0);border-left:4px solid var(--negative);border-radius:8px;padding:12px 16px;background:rgba(220,38,38,0.04);font-size:13px;">⚠️ <b>NSV(매출) 데이터가 아직 없습니다.</b> Data Update 탭의 <b>💰 SKU NSV 백필</b>을 먼저 실행하세요. 지금은 상단 <b>HL(물량)</b> 토글로 물량 기준 분석을 볼 수 있습니다.</div>`;
+    cm.innerHTML = `<div style="border:1px solid var(--border,#e2e8f0);border-left:4px solid var(--negative);border-radius:8px;padding:12px 16px;background:rgba(220,38,38,0.04);font-size:13px;">⚠️ <b>No NSV (revenue) data yet.</b> Run <b>💰 SKU NSV backfill</b> in the Data Update tab first. For now, use the <b>HL (volume)</b> toggle above for volume-based analysis.</div>`;
   } else {
-    const verdict = apAch == null ? { t:'평가 보류', c:'var(--text-muted)' }
-      : apAch >= 100 ? { t:'목표 초과 달성 — 순항 중', c:'var(--positive)' }
-      : apAch >= 95  ? { t:'목표 근접 — 양호', c:'var(--positive)' }
-      : apAch >= 88  ? { t:'목표 하회 — 주의', c:'#d97706' }
-      : { t:'목표 크게 하회 — 부진, 집중 관리 필요', c:'var(--negative)' };
+    const uName = unit === 'nsv' ? 'revenue' : 'volume';
+    const verdict = apAch == null ? { t:'Not yet assessable', c:'var(--text-muted)' }
+      : apAch >= 100 ? { t:'Ahead of plan — on track', c:'var(--positive)' }
+      : apAch >= 95  ? { t:'Near plan — healthy', c:'var(--positive)' }
+      : apAch >= 88  ? { t:'Below plan — watch', c:'#d97706' }
+      : { t:'Well below plan — underperforming, needs focus', c:'var(--negative)' };
     const decliners = skuYtd.filter(r => !r.blade && !r.isNew && r.delta < 0).sort((a,b) => a.delta - b.delta).slice(0,3);
-    const growers   = skuYtd.filter(r => !r.blade && r.delta > 0).sort((a,b) => b.delta - a.delta).slice(0,3);
+    const growers   = skuYtd.filter(r => !r.blade && !r.isNew && r.delta > 0).sort((a,b) => b.delta - a.delta).slice(0,3);
     const bladeActive = skuYtd.some(r => r.blade && (r.y25 > 0 || r.y26 > 0));
-    const watch = [['Paulaner','파울라너'],['Snow','Snow'],['BirraMoretti','Birra']]
-      .filter(([k]) => brandAgg[k]).map(([k,label]) => {
-        const b = brandAgg[k];
-        return `${label} 26Y ${vfmt(b.y26)}${NEW_BRANDS.has(k) ? ' <span style="color:var(--text-muted)">(신규)</span>' : ` (${pfHtml(pctOf(b.y26-b.y25,b.y25))})`}`;
-      });
-    const line = (label, body) => `<div style="margin:5px 0;"><span style="display:inline-block;min-width:80px;font-weight:700;color:var(--primary)">${label}</span>${body}</div>`;
+    // 'New brands' 롤업은 실제 신규 브랜드(3개)만 — 기존 브랜드의 신규 SKU(작년 실적 0)는
+    // 표에 'new' 태그는 붙되 여기선 제외(예: 헤네켄 실버 신규 규격을 신규 브랜드로 오인 방지).
+    const newRows = skuYtd.filter(r => _BR_NEW_BRANDS.has(r.brand) && r.y26 > 0);
+    const newByBrand = {};
+    newRows.forEach(r => { (newByBrand[r.brand] = newByBrand[r.brand] || 0); newByBrand[r.brand] += r.y26; });
+    const newTot = Object.values(newByBrand).reduce((a,v) => a + v, 0);
+
+    const catStats = CATS.map(c => { const a = catAgg[c]; return { c, y26:a.y26, y25:a.y25,
+      pct: pctOf(a.y26-a.y25, a.y25), mix: a.y26/totYtd26 }; }).filter(x => x.y26 > 0 || x.y25 > 0);
+    const catLead2 = catStats.slice().sort((a,b) => b.y26 - a.y26)[0];
+    const catGain = catStats.filter(x => x.pct != null).slice().sort((a,b) => (b.pct||0) - (a.pct||0))[0];
+    const catDrop = catStats.filter(x => x.pct != null).slice().sort((a,b) => (a.pct||0) - (b.pct||0))[0];
+
+    const gapHl = (apAch != null) ? (actHlYtd - apYtd) : null;
+    const line = (label, bodyHtml) => `<div style="margin:6px 0;"><span style="display:inline-block;min-width:120px;font-weight:700;color:var(--primary);vertical-align:top">${label}</span><span style="display:inline-block;max-width:calc(100% - 124px)">${bodyHtml}</span></div>`;
     let body = '';
-    body += line('종합 진단', `26Y YTD(Jan~${monName}) ${unitWord} <b>${vfmt(ytd26)}</b> · 전년동기 ${vfmt(ytd25)} 대비 ${pfHtml(yoy)}`
-      + `${bladeActive ? ` · Blade 철수분 제외 실질 ${pfHtml(yoyEx)}` : ''} · AP 달성률 <b>${apAch==null?'—':apAch.toFixed(1)+'%'}</b> → <b style="color:${verdict.c}">${verdict.t}</b>`);
-    body += line('카테고리', catLine);
-    if (growers.length)   body += line('성장 견인', growers.map(r => `<b>${r.sku}</b> ${pfHtml(pctOf(r.delta,r.y25))}(Δ +${vfmt(r.delta)})`).join(', '));
-    if (decliners.length) body += line('점검 필요', decliners.map(r => `<b>${r.sku}</b> ${pfHtml(pctOf(r.delta,r.y25))}(Δ ${vfmt(r.delta)})`).join(', ') + ' — 원인 파악·대응 권장');
-    if (watch.length)     body += line('전략 브랜드', watch.join(' · ') + ' — 파울라너·신규(Snow/Birra) 확대 여지 점검');
-    if (bladeActive)      body += line('Blade', `26년 철수 제품 → Draught YoY 하락은 정상. 실질 성과는 <b>Blade 제외 ${pfHtml(yoyEx)}</b>로 판단.`);
-    cm.innerHTML = `<div style="border:1px solid var(--border,#e2e8f0);border-left:4px solid var(--primary);border-radius:8px;padding:13px 16px;background:rgba(32,85,39,0.03);font-size:13px;line-height:1.7;">`
-      + `<div style="font-weight:700;margin-bottom:6px;font-size:14px;">🔎 ${dispName} 지점장 진단 코멘트</div>${body}</div>`;
+
+    body += line('Overall', `26Y YTD (Jan\u2013${monName}) ${uName} <b>${vfmt(ytd26)}</b>, vs <b>${vfmt(ytd25)}</b> same period 25Y \u2014 ${pfHtml(yoy)}`
+      + `${bladeActive ? ` (ex-Blade withdrawal <b>${pfHtml(yoyEx)}</b>)` : ''}. `
+      + `AP attainment <b>${apAch==null?'\u2014':apAch.toFixed(1)+'%'}</b>${gapHl!=null?` (${gapHl>=0?'+':''}${_brFmt(gapHl,'hl')} HL vs AP)`:''} \u2192 <b style="color:${verdict.c}">${verdict.t}</b>.`
+      + (newTot > 0 ? ` 25Y excludes newly-launched brands (Paulaner / Snow / Birra Moretti), so YoY counts them as pure incremental.` : ''));
+
+    let catNar = catStats.map(x => `<b>${x.c}</b> ${vfmt(x.y26)} (${(x.mix*100).toFixed(0)}% mix, ${x.pct==null?'new':pfHtml(x.pct)})`).join(' \u00b7 ');
+    if (catLead2) catNar += `<br>Lead category <b>${catLead2.c}</b> at ${(catLead2.mix*100).toFixed(0)}% of ${uName}.`;
+    if (catGain && catGain.pct > 0) catNar += ` Fastest-growing <b>${catGain.c}</b> ${pfHtml(catGain.pct)}.`;
+    if (catDrop && catDrop.pct < 0 && catDrop.c !== 'Draught') catNar += ` Softest <b>${catDrop.c}</b> ${pfHtml(catDrop.pct)} \u2014 worth a closer look.`;
+    body += line('By category', catNar);
+
+    if (growers.length) body += line('Growth drivers', growers.map(r =>
+      `<b>${r.sku}</b> ${pfHtml(pctOf(r.delta,r.y25))} (\u0394 +${vfmt(r.delta)})`).join(', ') + '.');
+
+    if (decliners.length) body += line('Needs attention', decliners.map(r =>
+      `<b>${r.sku}</b> ${pfHtml(pctOf(r.delta,r.y25))} (\u0394 ${vfmt(r.delta)})`).join(', ')
+      + ' \u2014 identify cause (distribution loss, competitor, price) and act.');
+
+    if (newTot > 0) {
+      const parts = Object.entries(newByBrand).sort((a,b) => b[1]-a[1]).map(([b,v]) =>
+        `<b>${b}</b> ${vfmt(v)} (${(v/totYtd26*100).toFixed(1)}% mix)`);
+      body += line('New brands', parts.join(' \u00b7 ') + ` \u2014 combined ${vfmt(newTot)} (${(newTot/totYtd26*100).toFixed(1)}% of ${uName}). `
+        + `Treated as incremental (no 25Y base); protect listings and push secondary placement to build the base.`);
+    }
+
+    if (bladeActive) body += line('Blade (exit)', `Discontinued in 26Y, so the Draught YoY decline is expected. `
+      + `Underlying performance reads better ex-Blade: <b>${pfHtml(yoyEx)}</b>.`);
+
+    let rec;
+    if (apAch == null) rec = 'Await month-end actuals before judging pace.';
+    else if (apAch >= 100) rec = `Ahead of plan \u2014 hold momentum on ${catLead2 ? catLead2.c : 'the lead category'} and lock in the new-brand gains.`;
+    else if (apAch >= 95) rec = `Close to plan \u2014 a small push on ${growers[0] ? growers[0].sku : 'top movers'} should close the gap.`;
+    else rec = `Behind plan by ${gapHl!=null?_brFmt(Math.abs(gapHl),'hl')+' HL':'a margin'}. Prioritise recovery on ${decliners[0] ? decliners[0].sku : 'the largest decliners'} and defend core-can distribution.`;
+    body += line('Recommendation', rec);
+
+    cm.innerHTML = `<div style="border:1px solid var(--border,#e2e8f0);border-left:4px solid var(--primary);border-radius:8px;padding:14px 17px;background:rgba(32,85,39,0.03);font-size:13px;line-height:1.65;">`
+      + `<div style="font-weight:700;margin-bottom:8px;font-size:14px;">🔎 ${enName} — Branch Comment</div>${body}</div>`;
   }
 
-  // ── SKU 상세 테이블 (Cat 열 + 철수/신규 태그) ──
-  document.getElementById('branch-sku-title').textContent = `SKU별 25Y vs 26Y — YTD 동기간 (Jan~${monName}, ${uLbl})`;
-  const sorted = skuYtd.slice().sort((a,b) => b.y26 - a.y26);
-  let html = `<thead><tr><th>SKU</th><th>Cat</th><th>Brand</th><th>25Y</th><th>26Y</th><th>Δ</th><th>Δ%</th><th>Mix%</th></tr></thead><tbody>`;
-  sorted.forEach(r => {
-    const dpct = r.y25 ? (r.delta/r.y25*100) : null;
-    const dc = r.delta > 0 ? 'var(--positive)' : r.delta < 0 ? 'var(--negative)' : 'inherit';
-    const tag = r.blade ? ' <span style="font-size:10px;background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px">철수</span>'
-              : r.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:4px">신규</span>' : '';
-    html += `<tr${r.blade?' style="opacity:.6"':''}><td style="text-align:left">${r.sku}${tag}</td>`
-      + `<td style="color:var(--text-muted)">${r.cat}</td><td style="text-align:left;color:var(--text-muted)">${r.brand}</td>`
-      + `<td>${_brFmt(r.y25,unit)}</td><td><b>${_brFmt(r.y26,unit)}</b></td>`
-      + `<td style="color:${dc}">${r.delta>=0?'+':''}${_brFmt(r.delta,unit)}</td>`
-      + `<td style="color:${dc}">${dpct==null?'\u2014':`${dpct>=0?'+':''}${dpct.toFixed(1)}%`}</td>`
-      + `<td>${(r.y26/totYtd26*100).toFixed(1)}%</td></tr>`;
+  // ── SKU 상세 — 카테고리별로 그룹핑(카테고리 소계 행 + 하위 SKU) ──
+  document.getElementById('branch-sku-title').textContent = `By category \u2192 SKU \u00b7 25Y vs 26Y (YTD Jan\u2013${monName}, ${uLbl})`;
+  const catFull = {}; CATS_ALL.forEach(c => catFull[c] = { y26:0, y25:0 });
+  skuYtd.forEach(r => { const c = catFull[r.cat] ? r.cat : 'Other'; catFull[c].y26 += r.y26; catFull[c].y25 += r.y25; });
+  const dCell = (dv, base) => {
+    const dc = dv > 0 ? 'var(--positive)' : dv < 0 ? 'var(--negative)' : 'inherit';
+    const dp = base ? dv/base*100 : null;
+    return `<td style="color:${dc}">${dv>=0?'+':''}${_brFmt(dv,unit)}</td>`
+         + `<td style="color:${dc}">${dp==null?(dv>0?'new':'\u2014'):`${dp>=0?'+':''}${dp.toFixed(1)}%`}</td>`;
+  };
+  let html = `<thead><tr><th>Category / SKU</th><th>Brand</th><th>25Y</th><th>26Y</th><th>\u0394</th><th>\u0394%</th><th>Mix%</th></tr></thead><tbody>`;
+  CATS_ALL.forEach(c => {
+    const members = skuYtd.filter(r => (catFull[r.cat] ? r.cat : 'Other') === c).sort((a,b) => b.y26 - a.y26);
+    if (!members.length) return;
+    const a = catFull[c], cd = a.y26 - a.y25;
+    // 카테고리 소계(그룹 헤더) 행
+    html += `<tr class="td-brand" style="background:rgba(32,85,39,0.05)"><td style="text-align:left"><b>${c}</b>`
+      + `${c==='Draught'?' <span style="color:var(--text-muted);font-size:11px">(Keg\u00b7Blade)</span>':''}</td>`
+      + `<td></td><td>${_brFmt(a.y25,unit)}</td><td><b>${_brFmt(a.y26,unit)}</b></td>`
+      + dCell(cd, a.y25)
+      + `<td><b>${(a.y26/totYtd26*100).toFixed(1)}%</b></td></tr>`;
+    // 하위 SKU 행
+    members.forEach(r => {
+      const tag = r.blade ? ' <span style="font-size:10px;background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px">exit</span>'
+                : r.isNew ? ' <span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:4px">new</span>' : '';
+      html += `<tr${r.blade?' style="opacity:.6"':''}><td style="text-align:left;padding-left:20px">${r.sku}${tag}</td>`
+        + `<td style="text-align:left;color:var(--text-muted)">${r.brand}</td>`
+        + `<td>${_brFmt(r.y25,unit)}</td><td>${_brFmt(r.y26,unit)}</td>`
+        + dCell(r.delta, r.y25)
+        + `<td>${(r.y26/totYtd26*100).toFixed(1)}%</td></tr>`;
+    });
   });
+  // 총계
+  const tD = ytd26 - ytd25;
+  html += `<tr style="border-top:2px solid var(--border,#cbd5e1);font-weight:700"><td style="text-align:left">Total</td><td></td>`
+    + `<td>${_brFmt(ytd25,unit)}</td><td>${_brFmt(ytd26,unit)}</td>` + dCell(tD, ytd25) + `<td>100.0%</td></tr>`;
   html += '</tbody>';
-  const tbl = document.getElementById('tbl-branch-sku');
-  tbl.innerHTML = html;
-  if (typeof makeSortable === 'function') makeSortable('tbl-branch-sku');
+  document.getElementById('tbl-branch-sku').innerHTML = html;
 }
 
 // ═══════════════════════════════════════════════
