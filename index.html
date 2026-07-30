@@ -2279,10 +2279,6 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
   <div id="tab-branch" class="tab-content">
     <div class="filter-bar" style="margin-bottom:14px;gap:12px;flex-wrap:wrap;">
       <span id="branch-btnbar" style="display:inline-flex;gap:6px;flex-wrap:wrap;"></span>
-      <span class="month-toggle-wrap" style="margin-left:auto;">
-        <button id="branch-unit-nsv" class="month-btn" onclick="setBranchUnit('nsv')">NSV(매출)</button>
-        <button id="branch-unit-hl" class="month-btn off" onclick="setBranchUnit('hl')">HL(물량)</button>
-      </span>
     </div>
     <div id="branch-report-title" class="section-title" style="margin-top:4px;"></div>
     <div id="branch-kpi-grid" class="kpi-grid" style="margin-bottom:8px;"></div>
@@ -6776,7 +6772,7 @@ function _ytdRegionData() {
 //  지점분석 (Branch Report) — 25Y vs 26Y · SKU NSV/HL
 // ═══════════════════════════════════════════════
 let _brBranch = 'On Trade Total';
-let _brUnit = 'nsv';   // 'nsv'(매출) | 'hl'(물량)
+let _brUnit = 'hl';   // HL 전용 — NSV는 백필 전까지 미사용
 let _brUnitAuto = false;   // 첫 렌더 시 NSV 유무로 기본 단위 자동 결정(사용자 토글 후엔 존중)
 // On Trade Total에 NSV 데이터가 하나라도 있는지 (백필 여부 감지)
 function _brHasAnyNsv(){
@@ -6825,21 +6821,14 @@ function _brAgg(tab){
   return { cur, rows, anyNsv };
 }
 
-function _brSyncUnitBtns(){
-  document.getElementById('branch-unit-nsv').classList.toggle('off', _brUnit !== 'nsv');
-  document.getElementById('branch-unit-hl').classList.toggle('off', _brUnit !== 'hl');
-}
-function setBranchUnit(u){
-  _brUnit = u; _brUnitAuto = true;   // 사용자가 직접 고른 뒤엔 자동 전환 안 함
-  _brSyncUnitBtns();
-  renderBranchReport(_brBranch);
-}
+function _brSyncUnitBtns(){ /* NSV 토글 제거됨 — HL 전용, no-op */ }
+function setBranchUnit(u){ _brUnit = 'hl'; renderBranchReport(_brBranch); }   // HL 전용
 function selectBranch(tab){ renderBranchReport(tab); }
 
 function renderBranchReport(branch){
   if (branch) _brBranch = branch;
   // 첫 렌더: NSV 백필됐으면 NSV, 아니면 HL을 기본 단위로 (이후 사용자 토글 존중)
-  if (!_brUnitAuto){ _brUnit = _brHasAnyNsv() ? 'nsv' : 'hl'; _brUnitAuto = true; _brSyncUnitBtns(); }
+  _brUnit = 'hl';   // 이 탭은 HL 전용
   const tab = _brBranch, unit = _brUnit, uLbl = _brUnitLabel(unit);
   // 지점 버튼 바
   document.getElementById('branch-btnbar').innerHTML = _BR_TABS.map(([k,label]) =>
