@@ -7939,9 +7939,9 @@ window.MIN_OFF_CH = [
   { key:'cvs',   label:'CVS',   color:'#3b6ef5', bg:'#eff6ff', accounts:[
     {key:'gs25',label:'GS25'},{key:'cu',label:'CU'},{key:'korea7',label:'Korea 7/Ministop'},{key:'emart24',label:'Emart24'} ]},
   { key:'hyper', label:'HYPER', color:'#dc2626', bg:'#fef2f2', accounts:[
-    {key:'emart',label:'Emart'},{key:'homeplus',label:'Homeplus'},{key:'lottemart',label:'Lottemart'},{key:'kimsclub',label:'Kimsclub'},{key:'megamart',label:'Megamart'} ]},
+    {key:'emart',label:'Emart'},{key:'homeplus',label:'Homeplus'},{key:'lottemart',label:'Lottemart'},{key:'kimsclub',label:'Kimsclub'},{key:'megamart',label:'Megamart'},{key:'newcore',label:'NewCore'} ]},
   { key:'cc',    label:'C&C',   color:'#d97706', bg:'#fffbeb', accounts:[
-    {key:'costco',label:'Costco'},{key:'traders',label:'Traders'},{key:'max',label:'Max'} ]},
+    {key:'costco',label:'Costco'},{key:'traders',label:'Traders'},{key:'max',label:'Max'},{key:'vic',label:'Vic Market'} ]},
   { key:'sm',    label:'SM',    color:'#16a34a', bg:'#f0fdf4', accounts:[
     {key:'gssuper',label:'Gssuper'},{key:'lottesuper',label:'Lottesuper'},{key:'express',label:'Express'},{key:'everyday',label:'Everyday'},{key:'seowon',label:'Seowon'} ]},
   { key:'union', label:'UNION', color:'#0d9488', bg:'#f0fdfa', accounts:[
@@ -9785,10 +9785,12 @@ const _OFF_FCST_ACCOUNTS = [
   {ch:'HYPER',acct:'Kimsclub',sheet:' Kimsclub'},   // 시트명에 leading space 주의
   {ch:'HYPER',acct:'Megamart',sheet:'Megamart'},
   {ch:'HYPER',acct:'Homeplus',sheet:'Homeplus'},
+  {ch:'HYPER',acct:'NewCore',sheet:'NewCore'},
   {ch:'UNION',acct:'Hanaro',sheet:'Hanaro'},
   {ch:'C&C',acct:'Costco',sheet:'Costco'},
   {ch:'C&C',acct:'E-Traders',sheet:'E-Traders'},
   {ch:'C&C',acct:'Lottemaxx',sheet:'Lottemaxx'},
+  {ch:'C&C',acct:'Vic Market',sheet:'Vic Market'},
   {ch:'SM',acct:'GS Super',sheet:'GS Super'},
   {ch:'SM',acct:'Lotte Super',sheet:'Lotte Super'},
   {ch:'SM',acct:'Everyday',sheet:' Everyday'},
@@ -9806,9 +9808,9 @@ const _OFF_FCST_ACCOUNTS = [
 // 채널키/계정키는 _OFF_FCST_ACCOUNTS(=weekly_fcst·fcst_meta 키)와 동일해야 함.
 const _OFF_FCST_OWNERS = {
   CVS:   { GS25:'김한준', CU:'전병권', K7:'이용주', E24:'전병권', Cspace:'전병권' },
-  HYPER: { 'E-mart':'박찬국', Lottemart:'정다정', Kimsclub:'정다정', Megamart:'박기태', Homeplus:'박기태' },
+  HYPER: { 'E-mart':'박찬국', Lottemart:'정다정', Kimsclub:'정다정', Megamart:'박기태', Homeplus:'박기태', NewCore:'정다정' },
   UNION: { Hanaro:'정다정' },
-  'C&C': { Costco:'박기태', 'E-Traders':'박찬국', Lottemaxx:'정다정' },
+  'C&C': { Costco:'박기태', 'E-Traders':'박찬국', Lottemaxx:'정다정', 'Vic Market':'정다정' },
   SM:    { 'GS Super':'박기태', 'Lotte Super':'정다정', Everyday:'박찬국', Nobrand:'박찬국', Seowon:'최지수', Korail:'전병권', Express:'박기태' },
   ALSM:  { ALSM:'박세일' },
   'E-com':    { 'E-com':'이용주' },
@@ -9866,8 +9868,8 @@ function parseOffFcstWorkbook(wb){
 const _OFF_TR_CH_MAP = { 'CVS':'CVS','CLSM':'SM','ALSM':'ALSM','Hyper':'HYPER','Cash&Carry':'C&C','Union Shop':'UNION' };
 const _OFF_TR_AC_MAP = {
   'GS25':'GS25','CU':'CU','KoreaSeven':'K7','Emart24':'E24','cspace':'Cspace',
-  'Emart':'E-mart','LotteMart':'Lottemart','Lottemart':'Lottemart','Megamart':'Megamart','Homeplus':'Homeplus','NewCore':'Lottemart',
-  'Hanaromart':'Hanaro','Costco':'Costco','E-Traders':'E-Traders','Vic Market':'Costco',
+  'Emart':'E-mart','LotteMart':'Lottemart','Lottemart':'Lottemart','Megamart':'Megamart','Homeplus':'Homeplus','NewCore':'NewCore',
+  'Hanaromart':'Hanaro','Costco':'Costco','E-Traders':'E-Traders','Vic Market':'Vic Market',
   'GSSuper':'GS Super','LotteSuper':'Lotte Super','Everyday':'Everyday','NoBrand':'Nobrand',
   'Seowon':'Seowon','Korail':'Korail','Express':'Express',
   'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
