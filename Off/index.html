@@ -2691,8 +2691,8 @@ async function parseDsrExcel(file, fcstMonth = null) {
 
   const groups=[...allGroups].sort(), skus=[...allSkus].sort();
   const weeklyLabels=[], weeklyKeys=[];
-  for (const mo of Object.keys(weeklyHl).map(Number).sort()) {
-    for (const wk of Object.keys(weeklyHl[String(mo)]).map(Number).sort()) {
+  for (const mo of Object.keys(weeklyHl).map(Number).sort((a,b)=>a-b)) {
+    for (const wk of Object.keys(weeklyHl[String(mo)]).map(Number).sort((a,b)=>a-b)) {
       weeklyLabels.push(`${_UP_MONTH_NAMES[mo]||`M${mo}`} W${wk}`);
       weeklyKeys.push([String(mo), String(wk)]);
     }
@@ -6207,8 +6207,8 @@ function initMonthFilter() {
   if (!group) return;
 
   // Prior months: DSR actual data / Current FCST month: always shown (AP vs FCST)
-  const dsrMonths = Object.keys(dsrMon).map(Number).sort();
-  const allMonths = [...new Set([...dsrMonths, _upGetFcstMonth()])].sort();
+  const dsrMonths = Object.keys(dsrMon).map(Number).sort((a,b)=>a-b);
+  const allMonths = [...new Set([...dsrMonths, _upGetFcstMonth()])].sort((a,b)=>a-b);
 
   // FCST 월이 변경됐거나 선택된 월이 유효 범위 밖이면 FCST 월로 자동 이동
   if (!allMonths.includes(_selectedMonth) || _selectedMonth < _upGetFcstMonth()) {
