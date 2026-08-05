@@ -227,9 +227,21 @@
     // Off 미합산 별도 채널 — team=E-comm/DF 안에서 Channel 컬럼 기준으로 분리(E-comm→E-com, DF→DF, Military→Military).
     'E-comm':'E-com', 'DF':'DF', 'Military':'Military' };
   function parseVolumeRofo(wb, sheetName) {
-    const sn = sheetName || '2026RF07';
+    // 시트 자동탐지: 매월 P0X마다 시트명이 2026RF07/2026RF08…로 바뀌므로 하드코딩하지 않고
+    // '<YYYY>RF<NN>' 패턴 중 가장 높은 번호(=최신 P0X)를 고른다. sheetName 명시 시 그것을 우선.
+    let sn = sheetName;
+    if (!sn) {
+      const rfSheets = wb.SheetNames.filter(n => /^\s*\d{4}RF\d+\s*$/i.test(n));
+      if (rfSheets.length) {
+        rfSheets.sort((a, b) => (parseInt((b.match(/RF(\d+)/i) || [])[1] || 0, 10))
+                              - (parseInt((a.match(/RF(\d+)/i) || [])[1] || 0, 10)));
+        sn = rfSheets[0].trim();
+      } else {
+        sn = '2026RF07';   // 폴백
+      }
+    }
     const sh = wb.Sheets[sn];
-    if (!sh) throw new Error("'" + sn + "' 시트 없음 (P07 Volume 파일 확인)");
+    if (!sh) throw new Error("'" + sn + "' 시트 없음 (P0X Volume 파일 확인) · 시트목록[" + wb.SheetNames.join(', ') + "]");
     const range = XLSX.utils.decode_range(sh['!ref']);
     // 헤더 행 탐색: Team/Channel/Jan 이 있는 행
     let hr = -1, cTeam, cCh, cBrand, cSku, cJan;

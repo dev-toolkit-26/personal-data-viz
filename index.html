@@ -2650,7 +2650,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <!-- 통합 RoFo (P0X Volume — On+Off) -->
       <div style="margin-bottom:28px;padding:14px;border:2px solid #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.05);">
         <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔗 통합 RoFo (P0X Volume — On+Off)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">"01. 2026 Volume_P0X.xlsx" 업로드 → 2026RF07 시트에서 On 전체·Off 채널별 RoFo(HL) 갱신. 매월 최신 P0X로 교체. (Off는 채널 단위, 6월까지는 actual)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">"01. 2026 Volume_P0X.xlsx" 업로드 → 2026RF0X 시트(자동 인식)에서 On 전체·Off 채널별 RoFo(HL) 갱신. 매월 최신 P0X로 교체. (Off는 채널 단위, 6월까지는 actual)</div>
         <label class="upload-file-btn" id="crofo-btn-label" style="display:inline-flex;" title="01. 2026 Volume_P0X.xlsx">
           Select File
           <input type="file" id="crofo-file-input" accept=".xlsx" style="display:none" onchange="document.getElementById('crofo-filename').textContent=this.files[0]?this.files[0].name:''">
@@ -7793,11 +7793,15 @@ function renderSkuTable() {
   const monName = MONTH_NAMES_KR[mon - 1];
   const fcstMonName = _UP_MONTH_NAMES[_upGetFcstMonth()] || 'Mar';
   const isPast = mon < _upGetFcstMonth();   // Prior months = Closed Actual mode
-  // RoFo column shows only on On Trade Total view, current/future month, AND
-  // when at least one brand has a non-null rofo_monthly value for this month
-  // (RoFo applies May-Dec only — keeps column hidden during pre-May editions).
-  const showRofo = !isPast && sec === 'On Trade Total' &&
+  // RoFo column shows only on On Trade Total view AND when at least one brand has a
+  // non-null rofo_monthly value for this month (RoFo applies May-Dec only — keeps
+  // column hidden during pre-May editions).
+  //  · 활성/미래월(showRofo): 그달 RoFo vs MTD 진척
+  //  · 마감월(showRofoPast): 그달 RoFo vs 확정 Actual — 마감된 달의 RoFo 대비 실적을 보존
+  const _rofoAvail = sec === 'On Trade Total' &&
     data.some(b => b.data?.rofo_monthly?.[mon - 1] != null);
+  const showRofo     = !isPast && _rofoAvail;
+  const showRofoPast =  isPast && _rofoAvail;
 
   // Brand(c/s) unit conversion: c/s → HL (0.0792 = 1/CASES_PER_HL)
   const brandUnit = _skuUnit === 'hl' ? 'HL' : 'c/s';
@@ -7806,9 +7810,12 @@ function renderSkuTable() {
   // ── Header ─────────────────────────────────────────────────────────────────
   let html;
   if (isPast) {
+    const rofoPastHdr = showRofoPast
+      ? `<th>${monName} RoFo</th><th>vs RoFo</th>`
+      : '';
     html = `<thead><tr>
       <th>Brand (${brandUnit}) / SKU (${skuUnit})</th>
-      <th>${monName} AP</th><th>${monName} Actual</th><th>Attainment(Actual/AP)</th>
+      <th>${monName} AP</th><th>${monName} Actual</th><th>Attainment(Actual/AP)</th>${rofoPastHdr}
       <th>${fcstMonName} AP</th><th>This Wk FCST</th><th>FCST Attainment (vs AP)</th>
       <th>LY Month</th>
     </tr></thead>`;
@@ -7843,7 +7850,10 @@ function renderSkuTable() {
       : `<td>&nbsp;&nbsp;<span style="color:#555">${label}</span></td>`;
     const td = isBrand ? ' class="td-brand"' : '';
 
-    const lyMonthIdx = isPast ? mon - 1 : _upGetFcstMonth() - 1;
+    // LY는 이 행의 기준월(선택월 mon)과 항상 같은 달을 봐야 한다.
+    // (과거월=mon, 활성월=mon==FCST월. 활성 FCST월보다 앞선 달을 볼 때 _upGetFcstMonth()를 쓰면
+    //  AP는 선택월인데 LY만 FCST월로 어긋나 8월 보기인데 LY가 7월로 나오던 버그를 유발했다.)
+    const lyMonthIdx = mon - 1;
     const lyMonth = d.act_2025_monthly?.[lyMonthIdx] ?? d.ly_month;
     if (isPast) {
       const monAP  = d.ap_monthly  ? d.ap_monthly[mon - 1]  : null;
@@ -7853,11 +7863,18 @@ function renderSkuTable() {
       const apToQty = ap => ap == null ? null : (isBrand ? ap : ap * 0.0792 / factor);
       const ach     = (apToQty(monAP) && actual)          ? actual           / apToQty(monAP)   : null;
       const fcstAch = (apToQty(fcstMonAP) && d.this_week_fcst != null) ? d.this_week_fcst / apToQty(fcstMonAP) : null;
+      // 그달 RoFo(표준 c/s) vs 확정 Actual(물량). rofo_monthly는 ap_monthly와 같은 단위 규칙.
+      const rofoStdP  = d.rofo_monthly?.[mon - 1] ?? null;
+      const rofoQtyP  = rofoStdP == null ? null : (isBrand ? rofoStdP : rofoStdP * 0.0792 / factor);
+      const vsRofoAch = (rofoQtyP && actual) ? actual / rofoQtyP : null;
+      const rofoPastCells = showRofoPast
+        ? `<td${td}>${fmtAP(rofoStdP)}</td><td${td}><span class="${achClass(vsRofoAch)}">${fmtPct(vsRofoAch)}</span></td>`
+        : '';
       return `<tr>
         ${nameCell}
         <td${td}>${fmtAP(monAP)}</td>
         <td${td}>${fmt(actual)}</td>
-        <td${td}><span class="${achClass(ach)}">${fmtPct(ach)}</span></td>
+        <td${td}><span class="${achClass(ach)}">${fmtPct(ach)}</span></td>${rofoPastCells}
         <td${td}>${fmtAP(fcstMonAP)}</td>
         <td${td}>${fmt(d.this_week_fcst)}</td>
         <td${td}><span class="${achClass(fcstAch)}">${fmtPct(fcstAch)}</span></td>
