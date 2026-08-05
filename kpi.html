@@ -804,7 +804,7 @@ td.sr-cell{white-space:nowrap}
       </div>
       <div class="ow" style="max-height:300px">
         <table class="utable">
-          <thead><tr><th>지점</th><th class="r">월</th><th class="r">일</th><th>아울렛</th><th>도매상</th><th>브랜드</th><th>SR</th><th class="r">볼륨</th><th class="r">집행액</th></tr></thead>
+          <thead><tr><th>지점</th><th class="r">월</th><th class="r">일</th><th>아울렛</th><th>채널</th><th>판촉툴</th><th>도매상</th><th>브랜드</th><th>SR</th><th class="r">볼륨</th><th class="r">집행액</th></tr></thead>
           <tbody id="pbBottleInc"></tbody>
         </table>
       </div>
@@ -1625,8 +1625,10 @@ function renderBottleIncentive(){
   BOTTLE_INCENTIVE.forEach(d=>{
     const key=(d.team||'')+'|'+(d.outlet||'');
     let o=map.get(key);
-    if(!o){o={team:d.team,outlet:d.outlet,srs:new Set(),vol:{},totalVol:0,totalBudget:0};map.set(key,o);}
+    if(!o){o={team:d.team,outlet:d.outlet,srs:new Set(),channels:new Set(),tools:new Set(),vol:{},totalVol:0,totalBudget:0};map.set(key,o);}
     if(d.sr)o.srs.add(d.sr);
+    if(d.channel)o.channels.add(d.channel);
+    if(d.sales_tool)o.tools.add(d.sales_tool);
     o.vol[+d.mv_month]=(o.vol[+d.mv_month]||0)+(+d.volume||0);
     o.totalVol+=(+d.volume||0);
     o.totalBudget+=(+d.budget||0);
@@ -1634,11 +1636,13 @@ function renderBottleIncentive(){
   let rows=[...map.values()].filter(o=>(r==='전체'||o.team===r)&&(!sr||o.srs.has(sr))&&(!q||(o.outlet||'').toLowerCase().includes(q)));
   rows.sort((a,b)=>b.totalBudget-a.totalBudget);
   const t=document.getElementById('biDetailTable');
-  const head=`<thead><tr><th>지점</th><th>SR</th><th>아울렛명</th>${months.map(m=>`<th class="r">${m}월</th>`).join('')}<th class="r">볼륨합</th><th class="r">집행액</th></tr></thead>`;
+  const head=`<thead><tr><th>지점</th><th>SR</th><th>아울렛명</th><th>채널</th><th>판촉툴</th>${months.map(m=>`<th class="r">${m}월</th>`).join('')}<th class="r">볼륨합</th><th class="r">집행액</th></tr></thead>`;
   const body=rows.map(o=>{
     const srStr=[...o.srs].join(', ')||'–';
-    return `<tr><td>${rtag(o.team)}</td><td class="mu sr-cell">${srStr}</td><td>${o.outlet||'–'}</td>${months.map(m=>{const v=o.vol[m]||0;return v?`<td class="r" style="color:var(--accent)">${v.toLocaleString()}</td>`:`<td class="r mu">–</td>`;}).join('')}<td class="r bo">${o.totalVol?o.totalVol.toLocaleString():'–'}</td><td class="r bo" style="color:var(--accent)">${biWon(o.totalBudget)}</td></tr>`;
-  }).join('')||`<tr><td colspan="${months.length+5}" style="text-align:center;color:var(--muted);padding:18px">데이터 없음</td></tr>`;
+    const chStr=[...o.channels].join(', ')||'–';
+    const tlStr=[...o.tools].join(', ')||'–';
+    return `<tr><td>${rtag(o.team)}</td><td class="mu sr-cell">${srStr}</td><td>${o.outlet||'–'}</td><td class="mu" style="font-size:11px">${chStr}</td><td class="mu" style="font-size:11px">${tlStr}</td>${months.map(m=>{const v=o.vol[m]||0;return v?`<td class="r" style="color:var(--accent)">${v.toLocaleString()}</td>`:`<td class="r mu">–</td>`;}).join('')}<td class="r bo">${o.totalVol?o.totalVol.toLocaleString():'–'}</td><td class="r bo" style="color:var(--accent)">${biWon(o.totalBudget)}</td></tr>`;
+  }).join('')||`<tr><td colspan="${months.length+7}" style="text-align:center;color:var(--muted);padding:18px">데이터 없음</td></tr>`;
   t.innerHTML=head+`<tbody>${body}</tbody>`;
   const totBudget=rows.reduce((s,o)=>s+o.totalBudget,0);
   document.getElementById('biCount').textContent=`총 ${rows.length}개 업장 · ${biWon(totBudget)}`;
@@ -3085,7 +3089,7 @@ function readBottleInc(input){
         const hdr=rows[hdrIdx].map(c=>String(c).trim());
         const ix=(...keys)=>{for(const k of keys){const i=hdr.indexOf(k);if(i>=0)return i;}return -1;};
         const iTeam=ix('Team'),iNo=ix('No.','No'),iYear=ix('Year'),iMon=ix('MV month'),iDate=ix('MV date'),
-          iOut=ix('Outlet'),iWs=ix('WS'),iBrand=ix('Brand'),iSr=ix('SR'),iVol=ix('Volume impact','Volume'),iBud=ix('Budget'),iMgr=ix('MGR');
+          iOut=ix('Outlet'),iChan=ix('Channel'),iTool=ix('Sales tool','Sales Tool'),iWs=ix('WS'),iBrand=ix('Brand'),iSr=ix('SR'),iVol=ix('Volume impact','Volume'),iBud=ix('Budget'),iMgr=ix('MGR');
         rows.slice(hdrIdx+1).forEach(r=>{
           if(String(r[0]||'').includes('예시')) return; // (예시) 템플릿 행 제외
           const outlet=String(r[iOut]||'').trim(); if(!outlet) return;
@@ -3095,7 +3099,8 @@ function readBottleInc(input){
           acc.push({
             team, no:Number(r[iNo])||null, year:Number(r[iYear])||null,
             mv_month:Number(r[iMon])||null, mv_date:r[iDate]!==''&&r[iDate]!=null?String(r[iDate]).trim():null,
-            outlet, ws:String(r[iWs]||'').trim(), brand:String(r[iBrand]||'').trim(),
+            outlet, channel:iChan>=0?String(r[iChan]||'').trim():'', sales_tool:iTool>=0?String(r[iTool]||'').trim():'',
+            ws:String(r[iWs]||'').trim(), brand:String(r[iBrand]||'').trim(),
             sr:String(r[iSr]||'').trim(), volume:isFinite(Number(r[iVol]))?Number(r[iVol]):null,
             budget:bud, mgr:String(r[iMgr]||'').trim(),
           });
@@ -3105,7 +3110,7 @@ function readBottleInc(input){
       parsedBottleInc=acc;
       document.getElementById('pcBottleInc').textContent=parsedBottleInc.length+'건';
       document.getElementById('pbBottleInc').innerHTML=parsedBottleInc.slice(0,50).map(r=>
-        `<tr><td>${rtag(r.team)}</td><td class="r mu">${r.mv_month??'–'}</td><td class="r mu">${r.mv_date??'–'}</td><td>${r.outlet}</td><td class="mu" style="font-size:11px">${r.ws||'–'}</td><td class="mu" style="font-size:11px">${r.brand||'–'}</td><td class="mu">${r.sr||'–'}</td><td class="r">${r.volume??'–'}</td><td class="r">${biWon(r.budget)}</td></tr>`
+        `<tr><td>${rtag(r.team)}</td><td class="r mu">${r.mv_month??'–'}</td><td class="r mu">${r.mv_date??'–'}</td><td>${r.outlet}</td><td class="mu" style="font-size:11px">${r.channel||'–'}</td><td class="mu" style="font-size:11px">${r.sales_tool||'–'}</td><td class="mu" style="font-size:11px">${r.ws||'–'}</td><td class="mu" style="font-size:11px">${r.brand||'–'}</td><td class="mu">${r.sr||'–'}</td><td class="r">${r.volume??'–'}</td><td class="r">${biWon(r.budget)}</td></tr>`
       ).join('');
       document.getElementById('pvBottleInc').style.display='block';
     }catch(err){alert('오류: '+err.message);}
@@ -3127,7 +3132,7 @@ async function confirmBottleInc(){
     const spent=rows.reduce((s,d)=>s+(+d.budget||0),0);
     alert('✅ Bottle Incentive '+rows.length+'건 저장됨\n지점: '+teams.join(', ')+'\n집행 합계: '+biWon(spent));
     cancelBottleInc(); renderUploadStatus(); initBottleIncentiveView();
-  }catch(e){alert('오류: '+e.message+'\n\n(테이블이 없으면 migrations/bottle_incentive_init.sql 를 먼저 실행하세요.)');}
+  }catch(e){alert('오류: '+e.message+'\n\n(테이블이 없으면 migrations/bottle_incentive_init.sql,\nChannel/Sales tool 컬럼 오류면 migrations/bottle_incentive_add_channel_tool.sql 를 먼저 실행하세요.)');}
   finally{ if(ov)ov.style.display='none'; }
 }
 function cancelBottleInc(){

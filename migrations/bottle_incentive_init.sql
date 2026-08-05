@@ -14,6 +14,8 @@ create table if not exists public.bottle_incentive (
   mv_month   int,
   mv_date    text,
   outlet     text default '',
+  channel    text default '',             -- 채널 코드(MB SEB/SB LIB/SB STB/SB WIB/TA TAB 등)
+  sales_tool text default '',             -- 판촉툴(5+1/X 등)
   ws         text default '',
   brand      text default '',
   sr         text default '',
