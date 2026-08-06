@@ -4118,6 +4118,29 @@ async function handleCombinedRofoUpload(input) {
         try { ROFO_BRANCH_BY_MONTH[m] = sheet; } catch(e){}
       }
     }
+    // SKU Detail RoFo도 갱신 — sku_detail['On Trade Total']의 SKU·브랜드 rofo_monthly(표준 c/s).
+    // onSku는 HL이라 c/s로 환산(×12.6263 = ÷0.0792). 렌더는 std×0.0792/factor→QTY로 되돌린다.
+    // 시작월(_rfStart) 이후만 갱신하고 과거월은 보존 — 그 달은 이미 실적이라 덮으면 타겟=실적이 된다.
+    const _CONV_STD = 12.6263;
+    const _ott = DASHBOARD_DATA.sku_detail && DASHBOARD_DATA.sku_detail['On Trade Total'];
+    if (_ott) {
+      for (const be of _ott) {
+        let bArr = null;
+        for (const se of (be.skus || [])) {
+          const hlArr = onSku[se.sku];
+          se.data = se.data || {};
+          const arr = Array.isArray(se.data.rofo_monthly) ? se.data.rofo_monthly.slice() : new Array(12).fill(null);
+          for (let i = _rfStart - 1; i < 12; i++) {
+            if (hlArr && hlArr[i] != null) arr[i] = Math.round(hlArr[i] * _CONV_STD * 100) / 100;
+          }
+          se.data.rofo_monthly = arr;
+          if (!bArr) bArr = new Array(12).fill(null);
+          for (let i = 0; i < 12; i++) if (arr[i] != null) bArr[i] = (bArr[i] || 0) + arr[i];
+        }
+        be.data = be.data || {};
+        be.data.rofo_monthly = bArr;   // 브랜드 = 하위 SKU 합(과거월 보존 반영됨)
+      }
+    }
     _upReRenderAll();
     const tsEl = document.getElementById('upload-ts'); if (tsEl) tsEl.textContent = 'Last Updated: ' + new Date().toLocaleString('ko-KR');
     await _upDeployToSupabase(statusEl);   // On 스냅샷
