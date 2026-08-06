@@ -242,6 +242,8 @@
     }
     const sh = wb.Sheets[sn];
     if (!sh) throw new Error("'" + sn + "' 시트 없음 (P0X Volume 파일 확인) · 시트목록[" + wb.SheetNames.join(', ') + "]");
+    // RF번호 = P0X 기간 = forecast 시작월(P08 → 8). Rofo 시트가 과거월을 덮지 않도록 쓸 기준.
+    const rfPeriod = parseInt((String(sn).match(/RF(\d+)/i) || [])[1], 10) || null;
     const range = XLSX.utils.decode_range(sh['!ref']);
     // 헤더 행 탐색: Team/Channel/Jan 이 있는 행
     let hr = -1, cTeam, cCh, cBrand, cSku, cJan;
@@ -283,7 +285,7 @@
       }
     }
     console.log('[OffIngest Volume] 시트 ' + sn + ' / OFF ' + offRows + '행(' + Object.keys(offChannel).join(',') + ') / ON ' + onRows + '행(SKU ' + Object.keys(onSku).length + ') / 미매핑OFF[' + [...unmappedOff].join(',') + '] / 기타team[' + [...otherTeam].join(',') + ']');
-    return { offChannel, onTotal, onSku, onSkuBrand, unmappedOff: [...unmappedOff], otherTeam: [...otherTeam] };
+    return { offChannel, onTotal, onSku, onSkuBrand, rfPeriod, unmappedOff: [...unmappedOff], otherTeam: [...otherTeam] };
   }
 
   // ── Order Pattern 재집계: DSR 라인아이템 → weekly_acct[ch][acct][월][주5], daily_acct[ch][acct][월][일] (HL) ──

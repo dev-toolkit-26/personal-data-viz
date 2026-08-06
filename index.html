@@ -4094,7 +4094,7 @@ async function handleCombinedRofoUpload(input) {
     if (!window.OffIngest) throw new Error('off_ingest.js 로드 안 됨');
     const buf = await f.arrayBuffer();
     const wb  = XLSX.read(buf, { type: 'array', cellDates: true });
-    const { offChannel, onTotal, onSku, onSkuBrand, unmappedOff, otherTeam } = OffIngest.parseVolumeRofo(wb);
+    const { offChannel, onTotal, onSku, onSkuBrand, rfPeriod, unmappedOff, otherTeam } = OffIngest.parseVolumeRofo(wb);
     // On: TTL RoFo(HL) + SKU별 포션으로 지역 배분
     DASHBOARD_DATA.wk10_summary = DASHBOARD_DATA.wk10_summary || {};
     DASHBOARD_DATA.wk10_summary.hl = DASHBOARD_DATA.wk10_summary.hl || {};
@@ -4105,9 +4105,13 @@ async function handleCombinedRofoUpload(input) {
       DASHBOARD_DATA.wk10_summary.hl[rk] = DASHBOARD_DATA.wk10_summary.hl[rk] || {};
       DASHBOARD_DATA.wk10_summary.hl[rk].rofo_monthly = dist.reg[rk];
     });
-    // Rofo 시트(지점 분배) — 7~12월(P07 forecast) 생성·저장. 6월은 기존 P06 유지.
+    // Rofo 시트(지점 분배) — P0X 시작월(=RF번호)부터 12월까지만 갱신.
+    // 과거월은 이미 실적이 확정돼(P0X 파일에도 그 달은 Actual) 덮으면 타겟=실적→달성률 100%가
+    // 되고 그 달 코멘트가 무의미해진다. 시작월 이전 달은 이전 P0X에서 잠근 타겟을 그대로 둔다.
+    // (예: P08 업로드 → 8~12월만 갱신, 7월 이하는 P07 타겟 유지.)
+    const _rfStart = (rfPeriod && rfPeriod >= 7 && rfPeriod <= 12) ? rfPeriod : 7;   // 미검출 시 7 폴백(종전 동작)
     DASHBOARD_DATA.rofo_branch_by_month = DASHBOARD_DATA.rofo_branch_by_month || {};
-    for (let m = 7; m <= 12; m++) {
+    for (let m = _rfStart; m <= 12; m++) {
       const sheet = _buildOnRofoBranchSheet(onSku, onSkuBrand, m - 1);
       if (Object.keys(sheet).length) {
         DASHBOARD_DATA.rofo_branch_by_month[m] = sheet;
