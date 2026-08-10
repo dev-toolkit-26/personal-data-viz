@@ -7091,13 +7091,14 @@ async function minutesSave() {
     action_items: _minutesActions,                // jsonb로 직접 저장
   };
   if (_minutesCurrentId) payload.id = _minutesCurrentId;
+  // .single()은 select 결과가 정확히 1행이 아니면(RLS로 0행 등) 쓰기 성공에도 예외를 던져
+  // '저장 실패' 오탐이 났다. error가 null이면 쓰기 성공으로 보고, id만 있으면 취한다.
   const { data: result, error } = await _supabase
     .from('off_meeting_minutes')
     .upsert(payload)
-    .select('id')
-    .single();
+    .select('id');
   if (error) { statusEl.textContent = `저장 실패: ${error.message}`; statusEl.style.color = '#e53e3e'; return; }
-  if (!_minutesCurrentId && result?.id) _minutesCurrentId = result.id;
+  if (!_minutesCurrentId && result && result[0] && result[0].id) _minutesCurrentId = result[0].id;
   statusEl.textContent = '저장되었습니다.'; statusEl.style.color = 'var(--accent)';
   document.getElementById('min-delete-btn').style.display = '';
   await minutesLoad();
@@ -10362,23 +10363,37 @@ async function offHandleRofoUpload(input){
 
 // 주간 FCST를 서버 최신본에 병합·저장 (reload→merge→upsert). 업로드된 계정만 갱신 → 타인 데이터 보존.
 async function _offMergeWeeklyToServer(updates){
-  const { data: row, error } = await _supabase
-    .from('off_dashboard_snapshots').select('data').eq('id', 1).single();
-  if(error) throw error;
-  const data = (row && row.data && typeof row.data === 'object') ? row.data : {};
-  if(!Array.isArray(data.rows)) data.rows = Array.isArray(OFF_SEED.rows) ? OFF_SEED.rows : [];
-  const res = _offApplyWeeklyToData(data, updates);          // rows.fcst_m + pattern.weekly_fcst 병합
-  const payload = { id:1, data, updated_at: new Date().toISOString() };  // 기존 keys(meta·rofo_channel 등) 보존
-  const { error: upErr } = await _supabase.from('off_dashboard_snapshots').upsert(payload);
-  if(upErr) throw upErr;
-  // 로컬 반영 (서버 병합본 기준)
-  OFF_SEED.rows = data.rows;
-  OFF_SEED.pattern = data.pattern || {};
-  if(data.meta) OFF_SEED.meta = Object.assign(OFF_SEED.meta || {}, data.meta);
-  window._OFF_ROFO_CH = data.rofo_channel || window._OFF_ROFO_CH || null;
-  OFF = finalizeOff(OFF_SEED.rows);
-  if(data.revenue) OFF_REV = data.revenue;
-  return res;
+  // 낙관적 동시성: 읽은 시점의 updated_at을 조건으로 update. 그 사이 다른 사람이 저장했으면
+  // 0행 갱신 → 최신본을 다시 읽어 재병합·재시도. (종전엔 무조건 upsert라 동시 저장 시 lost-update가
+  //  발생해 "저장했는데 반영 안 됨"이 간헐적으로 났다.)
+  const MAX = 6;
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    const { data: row, error } = await _supabase
+      .from('off_dashboard_snapshots').select('data, updated_at').eq('id', 1).single();
+    if(error) throw error;
+    const prevTs = row ? row.updated_at : null;
+    const data = (row && row.data && typeof row.data === 'object') ? row.data : {};
+    if(!Array.isArray(data.rows)) data.rows = Array.isArray(OFF_SEED.rows) ? OFF_SEED.rows : [];
+    const res = _offApplyWeeklyToData(data, updates);          // rows.fcst_m + pattern.weekly_fcst 병합
+    let q = _supabase.from('off_dashboard_snapshots')
+      .update({ data, updated_at: new Date().toISOString() }).eq('id', 1);
+    q = (prevTs == null) ? q.is('updated_at', null) : q.eq('updated_at', prevTs);   // 읽은 이후 무변경일 때만
+    const { data: upd, error: upErr } = await q.select('id');
+    if(upErr) throw upErr;
+    if (upd && upd.length) {
+      // 성공 — 로컬 반영 (서버 병합본 기준)
+      OFF_SEED.rows = data.rows;
+      OFF_SEED.pattern = data.pattern || {};
+      if(data.meta) OFF_SEED.meta = Object.assign(OFF_SEED.meta || {}, data.meta);
+      window._OFF_ROFO_CH = data.rofo_channel || window._OFF_ROFO_CH || null;
+      OFF = finalizeOff(OFF_SEED.rows);
+      if(data.revenue) OFF_REV = data.revenue;
+      return res;
+    }
+    // 0행 = 그 사이 다른 저장이 끼어듦 → 최신본에 재병합하도록 재시도
+    await new Promise(r => setTimeout(r, 120 * attempt));
+  }
+  throw new Error('동시 저장 충돌이 계속돼 저장하지 못했습니다. 잠시 후 다시 시도하세요.');
 }
 
 // ── ② FCST 주간 핸들러: 다중시트 워크북 지원 (시트=계정) → 서버 자동 병합·저장 ──
