@@ -3085,56 +3085,8 @@ function _upReRenderAll() {
   }
 }
 
-async function handleUpload() {
-  const fcstInput = document.getElementById('fcst-file-input');
-  const dsrInput  = document.getElementById('dsr-file-input');
-  const revInput  = document.getElementById('rev-file-input');
-  const statusEl  = document.getElementById('upload-status');
-  const applyBtn  = document.getElementById('upload-apply-btn');
-  const fcstFile  = fcstInput.files[0];
-  const dsrFile   = dsrInput.files[0];
-  const revFile   = revInput ? revInput.files[0] : null;
-  if (!fcstFile && !dsrFile && !revFile) {
-    statusEl.textContent = 'Please select a file first.'; statusEl.style.color = 'var(--negative)'; return;
-  }
-  applyBtn.disabled = true;
-  statusEl.style.color = 'var(--text-muted)';
-  await new Promise(r => setTimeout(r, 30));
-  try {
-    let fcstResult = null, dsrResult = null;
-    if (fcstFile) { statusEl.textContent = 'Processing FCST...'; fcstResult = await parseFcstExcel(fcstFile); }
-    if (dsrFile)  { statusEl.textContent = 'Processing DSR...';  const _dsrFcstMon = fcstResult?.meta?.wkMeta?.month || null; dsrResult = await parseDsrExcel(dsrFile, _dsrFcstMon); }
-    if (revFile)  { statusEl.textContent = 'Processing Revenue...'; const revResult = await parseRevenueExcel(revFile); applyRevenueData(revResult); }
-    applyDataUpdate(fcstResult, dsrResult);
-    _upReRenderAll();
-    const wkLabel = (DASHBOARD_DATA.wk_meta || {}).label || '';
-    const tsEl = document.getElementById('upload-ts');
-    if (tsEl) tsEl.textContent = 'Last Updated: ' + new Date().toLocaleString('ko-KR');
-    try {
-      await _upDeployToSupabase(statusEl);
-      statusEl.textContent = `✓ ${wkLabel} 업데이트 완료 (Supabase 저장됨)`;
-      statusEl.style.color = 'var(--positive)';
-    } catch(sbErr) {
-      console.warn('Supabase deploy failed:', sbErr);
-      statusEl.textContent = `✓ ${wkLabel} 업데이트 완료 (Supabase 실패: ${sbErr.message})`;
-      statusEl.style.color = 'orange';
-    }
-  } catch(err) {
-    console.error('Upload error:', err);
-    statusEl.textContent = `Error: ${err.message}`;
-    statusEl.style.color = 'var(--negative)';
-  } finally { applyBtn.disabled = false; }
-}
+// (On에서 복사돼 온 미연결 업로드/배포 함수 handleUpload/handleAPUpload/handleRofoUpload/_upDeployToSupabase/offSaveSnapshot 제거 — Off에선 어느 버튼과도 연결 안 됐고, _upDeployToSupabase는 낡은 On 시드(DASHBOARD_DATA)를 off 스냅샷에 덮어쓰는 지뢰였음. Off의 실 저장 경로는 _offMergeWeeklyToServer(FCST)뿐.)
 
-// ── Supabase 배포 ────────────────────────────────────────────────────────────────
-async function _upDeployToSupabase(statusEl) {
-  // 통합: On의 deploy-snapshot(엣지함수)은 On의 dashboard_snapshots에 하드코딩돼 있어
-  // 호출 시 On 데이터를 덮어씀. → off_dashboard_snapshots 로 직접 upsert (offSaveSnapshot 패턴).
-  statusEl.textContent = 'Supabase: 업로드 중...';
-  const payload = { id: 1, data: DASHBOARD_DATA, updated_at: new Date().toISOString() };
-  const { error } = await _supabase.from('off_dashboard_snapshots').upsert(payload);
-  if (error) throw new Error(`Supabase 업로드 실패: ${error.message || error}`);
-}
 
 // ── AP Excel 파싱 (update_ap.py 로직 재현) ───────────────────────────────────────
 async function parseAPExcel(file) {
@@ -3299,47 +3251,6 @@ function applyAPData({ vol, brandData, skuData, CONV }) {
   }
 }
 
-// ── AP 업로드 핸들러 ──────────────────────────────────────────────────────────────
-async function handleAPUpload() {
-  const apInput  = document.getElementById('ap-file-input');
-  const statusEl = document.getElementById('ap-upload-status');
-  const applyBtn = document.getElementById('ap-apply-btn');
-  const apFile   = apInput?.files[0];
-  if (!apFile) {
-    statusEl.textContent = 'AP 파일을 선택하세요.'; statusEl.style.color = 'var(--negative)'; return;
-  }
-  applyBtn.disabled = true;
-  statusEl.style.color = 'var(--text-muted)';
-  await new Promise(r => setTimeout(r, 30));
-  try {
-    // 1. Supabase Storage에 원본 저장
-    statusEl.textContent = 'Storage: 파일 업로드 중...';
-    const buf    = await _upReadBuffer(apFile);
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-    const storeRes = await fetch(SUPABASE_URL + '/functions/v1/store-ap-file', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: sessionStorage.getItem('auth_token'), filename: 'off_' + apFile.name, fileBase64: base64 }),
-    });
-    const storeResult = await storeRes.json();
-    if (!storeResult.ok) throw new Error(`Storage 업로드 실패: ${storeResult.error}`);
-
-    // 2. 파싱 후 DASHBOARD_DATA 적용
-    statusEl.textContent = 'AP Excel 파싱 중...';
-    const apResult = await parseAPExcel(apFile);
-    applyAPData(apResult);
-    _upReRenderAll();
-
-    // 3. Supabase dashboard_snapshots 저장
-    await _upDeployToSupabase(statusEl);
-    statusEl.textContent = `✓ AP 업데이트 완료 (${apFile.name} 저장됨)`;
-    statusEl.style.color = 'var(--positive)';
-  } catch(err) {
-    console.error('AP upload error:', err);
-    statusEl.textContent = `Error: ${err.message}`;
-    statusEl.style.color = 'var(--negative)';
-  } finally { applyBtn.disabled = false; }
-}
 
 // ── RoFo Excel 파싱 (update_rofo.py 로직 재현) ────────────────────────────────
 // 입력: "Latest RoFo" 시트, R7..R58, K(11)=Team L(12)=Channel M(13)=Brand N(14)=SKU O..Z(15..26)=Jan..Dec
@@ -3455,37 +3366,6 @@ function applyRofoData({ skuRofoStd, brandRofoStd, ttlRofoStd, ttlRofoHl }) {
   if (D.wk10_summary?.cases?.['BEER TTL']) D.wk10_summary.cases['BEER TTL'].rofo_monthly = ttlRofoStd;
 }
 
-// ── RoFo 업로드 핸들러 ────────────────────────────────────────────────────────
-async function handleRofoUpload() {
-  const input    = document.getElementById('rofo-file-input');
-  const statusEl = document.getElementById('rofo-upload-status');
-  const applyBtn = document.getElementById('rofo-apply-btn');
-  const file     = input?.files[0];
-  if (!file) { statusEl.textContent = 'RoFo 파일을 선택하세요.'; statusEl.style.color = 'var(--negative)'; return; }
-  applyBtn.disabled = true;
-  statusEl.style.color = 'var(--text-muted)';
-  await new Promise(r => setTimeout(r, 30));
-  try {
-    statusEl.textContent = 'RoFo Excel 파싱 중...';
-    const result = await parseRofoExcel(file);
-    applyRofoData(result);
-    _upReRenderAll();
-
-    await _upDeployToSupabase(statusEl);
-    const skipMsg = result.unmapped.length || result.skipped.length
-      ? ` (skipped ${result.skipped.length} / unmapped ${result.unmapped.length} — 콘솔 확인)`
-      : '';
-    if (result.unmapped.length || result.skipped.length) {
-      console.info('[RoFo] skipped rows:', result.skipped, 'unmapped SKUs:', result.unmapped);
-    }
-    statusEl.textContent = `✓ ${result.monthLabel} RoFo 업데이트 완료${skipMsg}`;
-    statusEl.style.color = 'var(--positive)';
-  } catch (err) {
-    console.error('RoFo upload error:', err);
-    statusEl.textContent = `Error: ${err.message}`;
-    statusEl.style.color = 'var(--negative)';
-  } finally { applyBtn.disabled = false; }
-}
 
 let _charts = {};
 function destroyChart(id) {
@@ -10593,18 +10473,6 @@ async function offHandleActUpload(input){
   } catch(e){ el.textContent = '오류: ' + (e.message || e); console.error(e); }
 }
 
-async function offSaveSnapshot(){
-  const el = document.getElementById('off-save-status');
-  el.textContent = '저장 중…';
-  try {
-    const payload = { id:1, data:{ rows:OFF_SEED.rows, channels:OFF_CHANNELS, meta:OFF_SEED.meta, revenue: OFF_REV, pattern: OFF_SEED.pattern || {}, rofo_channel: window._OFF_ROFO_CH || null }, updated_at:new Date().toISOString() };
-    const { error } = await _supabase.from('off_dashboard_snapshots').upsert(payload);
-    if(error) throw error;
-    el.textContent = '✓ Supabase 저장 완료 (rows + revenue + meta)';
-    const ts = document.getElementById('upload-ts');
-    if(ts) ts.textContent = 'Last saved: ' + new Date().toLocaleString('ko-KR');
-  } catch(e){ el.textContent = '저장 실패: ' + (e.message || e); console.error(e); }
-}
 async function offReloadSnapshot(){
   const el = document.getElementById('off-save-status');
   el.textContent = '서버에서 불러오는 중…';
