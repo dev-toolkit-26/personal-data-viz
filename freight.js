@@ -8,7 +8,9 @@
 //  · 지점: DSR Group(Seoul/Busan/Daegu/Jeju/Daejeon/Gwangju) — 요율은 권역, 집계는 지점 둘 다 가능.
 //  · 담당(SR): DSR raw의 `Customer.SR`(KRSR###)이 유일한 기준. 업로드된 DSR 중 '가장 최신 날짜' 파일의
 //    코드→SR을 저장(_srmap)하고 과거 월 배송건에도 그 매핑을 적용 → 이동·퇴사 시 과거 담당도 현재 담당으로 표시.
-//  · 시트 구성: A 코드별 예상 배송비 / B 구간 걸침 알림 / C 배송 빈도 / D LY 비교.
+//  · 시트 구성: D LY 비교 / B 구간 걸침(실행 대상) / A 도매장별 배송비 / C 배송 빈도 / E 통합정산 절감.
+//  · 통합정산 절감: 같은 날 같은 하차지로 2개 이상 코드가 나간 건은 코드별 박스를 parts[]로 보존 →
+//    (코드별 개별 청구액 합) − (합산 박스 1건 청구액) = 통합정산으로 절감되는 금액.
 //  · 모든 기준은 DSR(On). KCTC 물류 베이스라인은 On/Off 분리가 안 돼 쓰지 않음 →
 //    D(LY 비교)는 전년 DSR 백필분(on_freight_months 'YYYY-MM')과 동일 소스로 비교.
 // ═══════════════════════════════════════════════════════════════════
@@ -150,8 +152,9 @@
       const branch = BRANCH_OF_GROUP[grp] || (grp.startsWith('Seoul') ? 'Seoul' : grp || '?');
       const mk = ym + '|' + key + '|' + day;
       let a = acc[mk];
-      if (!a) { a = acc[mk] = { ym, y, m: m0 + 1, key, day, box: 0, hl: 0, codes: new Set(), br: {}, res, name: iName >= 0 && r[iName] != null ? String(r[iName]).trim() : code }; }
+      if (!a) { a = acc[mk] = { ym, y, m: m0 + 1, key, day, box: 0, hl: 0, codes: new Set(), cb: {}, br: {}, res, name: iName >= 0 && r[iName] != null ? String(r[iName]).trim() : code }; }
       a.box += q; a.hl += hl; a.codes.add(code); a.br[branch] = (a.br[branch] || 0) + q;
+      a.cb[code] = (a.cb[code] || 0) + q;                        // 코드별 박스(통합정산 절감 산출용)
       if (iSr >= 0) {
         const sr = r[iSr] != null ? String(r[iSr]).trim() : '';
         if (sr && !/^others$/i.test(sr)) {
@@ -179,7 +182,11 @@
         u[1] += a.box; u[2] += a.hl; u[3] += 1;
         continue;
       }
-      rec.deliv.push([a.key, a.day, Math.round(a.box), Math.round(a.hl * 100) / 100, branch, a.codes.size]);
+      const row = [a.key, a.day, Math.round(a.box), Math.round(a.hl * 100) / 100, branch, a.codes.size];
+      // 같은 날 2개 이상 코드가 함께 나간 통합 배송건만 코드별 박스 보존(용량 절감) — 분리 청구 대비 절감액 계산용
+      const parts = Object.values(a.cb).map(v => Math.round(v)).filter(v => v > 0).sort((x, y) => y - x);
+      if (parts.length >= 2) row.push(parts);
+      rec.deliv.push(row);
       // 이름은 freight_master(keyName)에서 복원 가능 → 저장 용량 절감을 위해 names는 비워둠(하위호환용 필드)
     }
     const warnings = [];
@@ -261,12 +268,19 @@
     // 배송건에 권역·요율·배송료·구간·담당(SR) 부여(캐시 — SR 매핑 갱신 시 _srStamp로 무효화)
     if (rec._e && rec._eStamp === _srStamp) return rec._e;
     const out = rec.deliv.map(d => {
-      const [key, day, box, hl, branch, nc] = d;
+      const [key, day, box, hl, branch, nc, parts] = d;
       const region = keyRegion(key) || '미매핑';
       const tier = tierOf(box);
       const rate = rateOf(region, box) || 0;
       const sr = srOfKey(key);
-      return { key, name: rec.names[key] || keyName(key), y: rec.y, m: rec.m, day, box, hl, branch, nc, region, tier, rate, fee: rate * box, wk: isoWeek(rec.y, rec.m - 1, day), sr, srName: srName(sr) };
+      const fee = rate * box;
+      // 통합정산 절감 = 코드별 개별 청구 합 − 합산 1건 청구
+      let csave = 0, cparts = 0;
+      if (Array.isArray(parts) && parts.length >= 2) {
+        let sep = 0; for (const pb of parts) { const r2 = rateOf(region, pb); if (r2 == null) { sep = 0; break; } sep += r2 * pb; }
+        if (sep > fee) { csave = sep - fee; cparts = parts.length; }
+      }
+      return { key, name: rec.names[key] || keyName(key), y: rec.y, m: rec.m, day, box, hl, branch, nc, region, tier, rate, fee, wk: isoWeek(rec.y, rec.m - 1, day), sr, srName: srName(sr), csave, cparts };
     });
     rec._e = out; rec._eStamp = _srStamp; return out;
   }
@@ -295,8 +309,9 @@
     // A. 도매장별
     const byKey = {};
     D.forEach(d => {
-      const a = byKey[d.key] || (byKey[d.key] = { key: d.key, name: d.name, region: d.region, sr: d.sr, srName: d.srName, branch: {}, n: 0, box: 0, hl: 0, fee: 0, tiers: [0,0,0,0,0], small: 0, edge: 0, edgeSave: 0 });
+      const a = byKey[d.key] || (byKey[d.key] = { key: d.key, name: d.name, region: d.region, sr: d.sr, srName: d.srName, branch: {}, n: 0, box: 0, hl: 0, fee: 0, tiers: [0,0,0,0,0], small: 0, edge: 0, edgeSave: 0, csave: 0, cn: 0 });
       a.n++; a.box += d.box; a.hl += d.hl; a.fee += d.fee; a.tiers[d.tier]++; if (d.box <= 5) a.small++;
+      if (d.csave) { a.csave += d.csave; a.cn++; }
       a.branch[d.branch] = (a.branch[d.branch] || 0) + d.box;
       const e = edgeOf(d); if (e) { a.edge++; a.edgeSave += e.save; }
     });
@@ -322,8 +337,8 @@
       for (const k in o) { o[k].hfCnt = o[k].hf.size; o[k].nKeys = o[k].keys.size; delete o[k].hf; delete o[k].keys; }
       return o;
     };
-    const total = { n: D.length, box: 0, hl: 0, fee: 0, small: 0, edge: edges.length, edgeSave: 0, hfCnt: highFreqList.length, tiers: [0,0,0,0,0], nKeys: codes.length };
-    D.forEach(d => { total.box += d.box; total.hl += d.hl; total.fee += d.fee; if (d.box <= 5) total.small++; total.tiers[d.tier]++; });
+    const total = { n: D.length, box: 0, hl: 0, fee: 0, small: 0, edge: edges.length, edgeSave: 0, hfCnt: highFreqList.length, tiers: [0,0,0,0,0], nKeys: codes.length, csave: 0, cn: 0 };
+    D.forEach(d => { total.box += d.box; total.hl += d.hl; total.fee += d.fee; if (d.box <= 5) total.small++; total.tiers[d.tier]++; if (d.csave) { total.csave += d.csave; total.cn++; } });
     edges.forEach(e => total.edgeSave += e.save);
     return { D, codes, edges, edgeByRegion, edgeByBand, highFreqList, byBranch: sumBy('branch'), byRegion: sumBy('region'), bySr: sumBy('sr'), total };
   }
@@ -331,7 +346,7 @@
   // ═══════════════════════════════════════════════════════════════
   //  UI
   // ═══════════════════════════════════════════════════════════════
-  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, edgeAct: true, edgeBand: 'ALL', charts: {} };
+  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, showAllCs: false, edgeAct: true, edgeBand: 'ALL', charts: {} };
 
   function periodMonths(period, months) {
     // period: 'YYYY-MM' | 'YTD-YYYY'
@@ -398,13 +413,14 @@
 
     // ── 요약 카드 ──
     const T = R.total;
-    html += `<div class="kpi-grid" style="grid-template-columns:repeat(6,1fr);">
+    html += `<div class="kpi-grid" style="grid-template-columns:repeat(7,1fr);">
       ${card('예상 배송료', '₩' + fmt(T.fee), `${fmt(T.n)}건 · ${fmt(T.box)}박스`, '')}
       ${card('박스당 단가', '₩' + fmt(T.box ? T.fee / T.box : 0), `HL당 ₩${fmt(T.hl ? T.fee / T.hl : 0)} · ${fmt1(T.hl)} HL`, '')}
       ${card('소량건(≤5박스) 비중', fpct(pct(T.small, T.n)), `${fmt(T.small)}건 / ${fmt(T.n)}건`, T.n && pct(T.small, T.n) > 30 ? 'negative' : 'positive')}
       ${card('구간 걸침 오더', fmt(T.edge) + '건', `전량 상향 시 절감 ₩${fmt(T.edgeSave)}`, T.edge ? 'neutral' : 'positive')}
       ${card('주4회+ 배송 도매장', fmt(T.hfCnt) + '곳', `도매장 ${fmt(T.nKeys)}곳 중`, T.hfCnt ? 'neutral' : 'positive')}
       ${card('Over 60 비중', fpct(pct(T.tiers[4], T.n)), `21~60: ${fmt(T.tiers[3])} · 11~20: ${fmt(T.tiers[2])} · ≤10: ${fmt(T.tiers[0] + T.tiers[1])}`, '')}
+      ${card('동일 하차장 통합 절감', '₩' + fmt(T.csave), `${fmt(T.cn)}건 통합 배송 · 분리 청구 대비${T.fee ? ` (${fpct(pct(T.csave, T.fee + T.csave))})` : ''}`, T.csave ? 'positive' : '')}
     </div>`;
 
     // ── D. LY 비교 (DSR(On) 동일 소스: 전년 동월 저장분 vs 선택 기간, 같은 권역·지점 필터) ──
@@ -459,6 +475,7 @@
             ${rowD('걸침 오더 수', TL ? TL.edge : null, T.edge, fmt, true)}
             ${rowD('걸침 방치 절감여지(₩)', TL ? TL.edgeSave : null, T.edgeSave, won, true)}
             ${rowD('주4회+ 배송 도매장', TL ? TL.hfCnt : null, T.hfCnt, fmt, true)}
+            ${rowD('동일 하차장 통합 절감', TL ? TL.csave : null, T.csave, won, false)}
           </tbody></table></div>
           <div style="font-size:11px;color:var(--text-muted);line-height:1.6;">
             · 모든 값은 DSR(On Team만, ALSM·제외코드 제외)에 KCTC 요율표를 적용한 <b>추정 배송료</b>. LY 보유월: ${dsrLyTxt}${missingLy.length && lyKeys.length ? ` · <b style="color:#b45309">${missingLy.map(m => MON_NM[m - 1]).join('·')} LY 없음</b>` : ''}<br>
@@ -577,6 +594,36 @@
       </div>
     </div>`;
 
+    // ── E. 동일 하차장 통합정산 절감 ──
+    //   같은 날 같은 하차지로 2개 이상 코드가 나간 배송건: (코드별 개별 청구 합) − (합산 1건 청구) = 절감액.
+    //   KCTC 통합정산 적용 리스트(Freight/KCTC_동일배송지_통합정산_적용리스트_최종.xlsx) 기준 실현 금액.
+    const csList = R.codes.filter(c => c.csave > 0).sort((x, y) => y.csave - x.csave);
+    const csTotal = csList.reduce((t, c) => t + c.csave, 0);
+    // 월별 추이(선택 기간 내)
+    const csByMon = {};
+    R.D.forEach(d => { if (d.csave) { const k = d.y + '-' + String(d.m).padStart(2, '0'); const a = csByMon[k] || (csByMon[k] = { save: 0, n: 0 }); a.save += d.csave; a.n++; } });
+    const csMons = Object.keys(csByMon).sort();
+    const csShow = S.showAllCs ? csList : csList.slice(0, 15);
+    html += `<div class="chart-card full" style="margin-bottom:16px;">
+      <div class="chart-title">E. 동일 하차장 통합정산 절감 — ${esc(periodLabel)}${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">같은 날 2개 이상 코드가 같은 하차지로 나간 건 · (코드별 개별 청구 합 − 합산 1건 청구)</span></div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px;">
+        ${card('통합 절감액', '₩' + fmt(T.csave), `${fmt(T.cn)}건 통합 배송 · 통합그룹 ${fmt(csList.length)}곳`, T.csave ? 'positive' : '')}
+        ${card('절감률', fpct(pct(T.csave, T.fee + T.csave)), `분리 청구 시 ₩${fmt(T.fee + T.csave)} → 실제 ₩${fmt(T.fee)}`, '')}
+        ${card('월평균 절감', '₩' + fmt(csMons.length ? T.csave / csMons.length : 0), csMons.length ? `${csMons.length}개월 · 최근 ${csMons[csMons.length - 1]} ₩${fmt(csByMon[csMons[csMons.length - 1]].save)}` : '데이터 없음', '')}
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);background:#f0f7f0;border-left:3px solid var(--primary);padding:6px 10px;margin-bottom:10px;">
+        기준: <b>KCTC 동일배송지 통합정산 적용 리스트</b>(${(() => { const g = new Set(Object.values(M().consol).map(v => v[0])); return `${g.size}그룹 · ${Object.keys(M().consol).length}코드`; })()}) — 채널분기 코드(_프랜차이즈/_클럽/_Hotel/_CGV 등)가 동일 하차지로 확인된 그룹. 추가 발주 없이 얻는 절감이라 MOQ 협의(B)보다 실행 난도가 낮습니다.
+      </div>
+      <div class="table-wrap" style="margin:0;max-height:420px;">
+      <table><thead><tr><th style="text-align:left">통합그룹</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>통합 배송건</th><th>총 배송건</th><th>합산 박스</th><th>실제 청구</th><th>분리 청구 시</th><th>통합 절감액</th></tr></thead><tbody>
+      ${csShow.map(c => `<tr><td title="${esc(c.key)}">${esc(c.name)}</td><td title="${esc(c.sr)}">${esc(c.srName)}</td><td>${c.branchTop}</td><td>${c.region}</td><td class="td-neu">${fmt(c.cn)}건</td><td>${fmt(c.n)}</td><td>${fmt(c.box)}</td><td>₩${fmt(c.fee)}</td><td>₩${fmt(c.fee + c.csave)}</td><td class="td-pos"><b>₩${fmt(c.csave)}</b></td></tr>`).join('')
+        || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted)">해당 기간에 같은 날 2개 이상 코드가 함께 나간 통합 배송이 없습니다</td></tr>'}
+      ${csList.length ? `<tr style="font-weight:700;background:#e0ebe0;"><td>Total</td><td colspan="3"></td><td>${fmt(T.cn)}건</td><td>${fmt(T.n)}</td><td>${fmt(T.box)}</td><td>₩${fmt(T.fee)}</td><td>₩${fmt(T.fee + T.csave)}</td><td>₩${fmt(csTotal)}</td></tr>` : ''}
+      </tbody></table></div>
+      ${csList.length > 15 ? `<div style="text-align:right;margin-top:6px;"><button class="month-btn off" onclick="Freight.toggleAllCs()">${S.showAllCs ? '상위 15곳만' : `전체 ${csList.length}곳 보기`}</button></div>` : ''}
+      ${csMons.length > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">월별: ${csMons.map(k => `${MON_NM[+k.slice(5) - 1]} ₩${fmt(csByMon[k].save)}`).join(' · ')}</div>` : ''}
+    </div>`;
+
     // ── 미매핑/데이터 정보 ──
     const um = {}; recs.forEach(r => { for (const c in r.unmapped) { const u = r.unmapped[c]; const a = um[c] || (um[c] = [u[0], 0, 0, 0, u[4]]); a[1] += u[1]; a[2] += u[2]; a[3] += u[3]; } });
     const umList = Object.entries(um).sort((a, b) => b[1][1] - a[1][1]);
@@ -649,6 +696,7 @@
     setEdgeBand(v) { S.edgeBand = v; S.showAllB = false; rerender(); },
     setEdgeAct(v) { S.edgeAct = !!v; S.showAllB = false; rerender(); },
     toggleAllRep() { S.showAllRep = !S.showAllRep; rerender(); },
+    toggleAllCs() { S.showAllCs = !S.showAllCs; rerender(); },
     setSearch(v) { S.search = v; clearTimeout(S._t); S._t = setTimeout(rerender, 250); },
     toggleAllA() { S.showAllA = !S.showAllA; rerender(); },
     toggleAllB() { S.showAllB = !S.showAllB; rerender(); },
