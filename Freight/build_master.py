@@ -8,6 +8,8 @@ Freight/build_master.py — 기준 CSV → 루트 freight_master.js 재생성
 · on_codes_dsr.csv             : DSR에서 Team=On(ALSM 제외)으로 등장한 코드 목록 → 매핑을 이 코드(+통합마스터)로만 필터
                                  (모든 기준은 DSR(On). 물류 기준 데이터의 Off 코드는 제외)
 · 기준데이터_코드통합마스터.csv : 배송처코드,배송처명,통합그룹,권역,통합정산 (KCTC 통합정산 확정 75코드)
+· sr_names.csv                  : SR코드(KRSR###),SR명,지점 — DSR의 Customer.SR 코드를 사람 이름으로 표시.
+                                 퇴사·이동 시 이 CSV만 수정하고 재생성. (담당 배송처는 DSR에서 자동 갱신되므로 여기 없음)
 요율표·제외코드는 아래 상수(RATES/EXCLUDE)에 하드코딩 — 계약 변경 시 여기만 수정.
 LY 비교는 DSR 2025 백필(on_freight_months)로 동일 소스끼리 하므로 KCTC 베이스라인 CSV는 쓰지 않는다.
 """
@@ -49,8 +51,19 @@ def main():
     codes = {r['코드']: [r['배송처명'], ri[r['권역']]] for _, r in mp.iterrows()}
     missing = [c for c in consol if c not in codes]
     if missing: print('경고: 통합마스터 코드가 권역매핑에 없음 →', missing)
+    sr_path = os.path.join(HERE, 'sr_names.csv')
+    sr_names = {}
+    if os.path.exists(sr_path):
+        srdf = pd.read_csv(sr_path, encoding='utf-8-sig', dtype=str)
+        for c in srdf.columns: srdf[c] = srdf[c].astype(str).str.strip()
+        sr_names = {r['SR코드']: [r['SR명'], r.get('지점', '')] for _, r in srdf.iterrows()}
+        print(f'SR 이름 매핑: {len(sr_names)}명')
+    else:
+        print('경고: sr_names.csv 없음 → SR은 코드(KRSR###)로 표시')
+
     out = {
         'regions': REG, 'rates': RATES, 'tier_max': [5, 10, 20, 60],
+        'sr_names': sr_names,
         'tier_labels': ['01~05', '06~10', '11~20', '21~60', 'Over 60'],
         'exclude': EXCLUDE, 'consol': consol, 'codes': codes,
     }
@@ -62,7 +75,7 @@ def main():
           "window.FREIGHT_MASTER = " + json.dumps(out, ensure_ascii=False, separators=(',', ':')) + ";\n")
     dst = os.path.join(ROOT, 'freight_master.js')
     with open(dst, 'w', encoding='utf-8') as f: f.write(js)
-    print(f'{dst}: {len(js):,} bytes · codes {len(codes)} · consol {len(consol)}')
+    print(f'{dst}: {len(js):,} bytes · codes {len(codes)} · consol {len(consol)} · SR {len(sr_names)}')
 
 if __name__ == '__main__':
     main()

@@ -2658,7 +2658,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <!-- 운송비(Freight) DSR 백필 — Freight 탭용 -->
       <div style="margin-bottom:28px;padding:14px;border:2px dashed #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.03);">
         <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🚚 운송비(Freight) DSR 백필 (Freight 탭 · 여러 월·여러 파일 한 번에)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;"><b>배송처코드(Code)</b>가 있는 DSR raw를 <b>여러 개 동시 선택</b> 가능(예: <code>DSR_Raw_202501-202606.xlsx</code> + <code>DSR_Raw_2026_TTL.xlsx</code>) → Team=On만(ALSM·제외코드 제외) <b>배송처(통합그룹)×배송일</b> 배송건으로 합산해 파일에 포함된 <b>모든 월</b>을 월 단위로 저장. 이미 저장된 월보다 덜 채워진(일수가 적은) 파일은 그 월을 덮어쓰지 않음. 이후 최신월은 통합 DSR / DSR Raw 업로드 시 자동 갱신. 박스=Qty(UnitsSold). LY 비교는 2025 백필분과 동일 소스로 비교.</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;"><b>배송처코드(Code)</b>가 있는 DSR raw를 <b>여러 개 동시 선택</b> 가능(예: <code>DSR_Raw_202501-202606.xlsx</code> + <code>DSR_Raw_2026_TTL.xlsx</code>) → Team=On만(ALSM·제외코드 제외) <b>배송처(통합그룹)×배송일</b> 배송건으로 합산해 파일에 포함된 <b>모든 월</b>을 월 단위로 저장. 이미 저장된 월보다 덜 채워진(일수가 적은) 파일은 그 월을 덮어쓰지 않음. 이후 최신월은 통합 DSR / DSR Raw 업로드 시 자동 갱신. 박스=Qty(UnitsSold). LY 비교는 2025 백필분과 동일 소스로 비교. <b>담당 SR</b>은 <code>Customer.SR</code> 컬럼이 있는 파일(주간 DSR raw)에서 자동 갱신되며 가장 최신 기준으로 과거 월까지 소급 적용됩니다.</div>
         <label class="upload-file-btn" id="frbf-btn-label" style="display:inline-flex;" title="배송처코드 포함 DSR raw (다중 선택 가능)">
           Select File(s)
           <input type="file" id="frbf-file-input" accept=".xlsx,.xlsb,.xls" multiple style="display:none" onchange="document.getElementById('frbf-filename').textContent=Array.from(this.files).map(f=>f.name).join(' + ')">
@@ -4306,16 +4306,24 @@ async function _freightIngestWorkbook(wb, statusEl, onlyYm) {
   if (!window.Freight || !window.FREIGHT_MASTER) throw new Error('freight.js / freight_master.js 로드 안 됨');
   const res = Freight.parseWorkbook(wb);
   if (!res.hasCode) return { skipped: true, warnings: res.warnings };
+  // 담당(SR): Customer.SR 컬럼이 있는 파일이면 코드→SR 매핑 갱신(최신 기준일만 채택, 과거 월에도 소급 적용)
+  let srMsg = '';
+  if (res.hasSr) {
+    try {
+      const sr = await Freight.saveSrMap(_supabase, res.srMap, res.srAsOf);
+      srMsg = sr.saved ? ` · SR 매핑 ${sr.n}곳 갱신(기준 ${sr.asOf}, 누적 ${sr.total}곳)` : ` · SR 매핑 유지(${sr.reason})`;
+    } catch (e) { console.warn('SR 매핑 저장 실패:', e); srMsg = ` · ⚠ SR 매핑 실패(${e.message})`; }
+  }
   let months = res.months;
   if (onlyYm) months = months[onlyYm] ? { [onlyYm]: months[onlyYm] } : {};
   const yms = Object.keys(months).sort();
-  if (!yms.length) return { skipped: true, warnings: res.warnings.concat(['저장할 월 없음']) };
+  if (!yms.length) return { skipped: true, warnings: res.warnings.concat(['저장할 월 없음']), srMsg };
   if (statusEl) statusEl.textContent = `운송비 저장 중… (${yms.join(', ')})`;
   const sv = await Freight.saveMonths(_supabase, months);
   Freight.invalidate();
   const nDeliv = yms.reduce((a, k) => a + months[k].deliv.length, 0);
   const nUm = new Set(yms.flatMap(k => Object.keys(months[k].unmapped))).size;
-  return { skipped: false, months: yms, n: sv.saved, protectedSkip: sv.skipped, nDeliv, nUm, warnings: res.warnings, hlPerBox: res.hlPerBox };
+  return { skipped: false, months: yms, n: sv.saved, protectedSkip: sv.skipped, nDeliv, nUm, warnings: res.warnings, hlPerBox: res.hlPerBox, srMsg };
 }
 async function handleFreightBackfill(input) {
   const statusEl = document.getElementById('freight-backfill-status');
@@ -4327,7 +4335,7 @@ async function handleFreightBackfill(input) {
   try {
     // 여러 파일 선택 시 파일명 순으로 순차 처리(2025 → 2026). 각 파일의 모든 월을 저장(부분월 보호는 saveMonths가 처리).
     files.sort((a, b) => a.name.localeCompare(b.name));
-    const allMonths = new Set(), allSkip = [], allWarn = []; let nDeliv = 0, nUm = 0, hpb = null;
+    const allMonths = new Set(), allSkip = [], allWarn = [], allSr = []; let nDeliv = 0, nUm = 0, hpb = null;
     for (let i = 0; i < files.length; i++) {
       const f = files[i];
       statusEl.textContent = `[${i + 1}/${files.length}] ${f.name} 처리 중… (대용량이면 시간이 걸립니다)`;
@@ -4338,14 +4346,14 @@ async function handleFreightBackfill(input) {
       if (r.skipped) { allWarn.push(`${f.name}: ${(r.warnings || []).join(' / ') || '처리할 데이터 없음'}`); continue; }
       r.months.forEach(m => allMonths.add(m)); (r.protectedSkip || []).forEach(s => allSkip.push(s));
       (r.warnings || []).forEach(w => allWarn.push(`${f.name}: ${w}`));
-      nDeliv += r.nDeliv; nUm = Math.max(nUm, r.nUm); hpb = r.hlPerBox;
+      nDeliv += r.nDeliv; nUm = Math.max(nUm, r.nUm); hpb = r.hlPerBox; if (r.srMsg) allSr.push(r.srMsg.replace(/^ · /, ''));
     }
     if (!allMonths.size) throw new Error(allWarn.join(' / ') || '처리할 데이터 없음');
     const ms = [...allMonths].sort();
     const warn = allWarn.length ? ` · ⚠ ${allWarn.join(' / ')}` : '';
     const skip = allSkip.length ? ` · 보호(미덮어씀): ${allSkip.join(', ')}` : '';
     statusEl.style.color = allWarn.length ? 'orange' : 'var(--positive)';
-    statusEl.textContent = `✓ 운송비 백필 완료 — ${files.length}개 파일 · ${ms.length}개월(${ms[0]}~${ms[ms.length-1]}) · 배송건 ${nDeliv.toLocaleString('ko-KR')}건${hpb != null ? ` · HL/박스 ${hpb.toFixed(3)}` : ''}${nUm ? ` · 미매핑 코드 ${nUm}개(Freight 탭 하단)` : ''}${skip}${warn}`;
+    statusEl.textContent = `✓ 운송비 백필 완료 — ${files.length}개 파일 · ${ms.length}개월(${ms[0]}~${ms[ms.length-1]}) · 배송건 ${nDeliv.toLocaleString('ko-KR')}건${hpb != null ? ` · HL/박스 ${hpb.toFixed(3)}` : ''}${nUm ? ` · 미매핑 코드 ${nUm}개(Freight 탭 하단)` : ''}${allSr.length ? ' · ' + allSr.join(' · ') : ''}${skip}${warn}`;
     delete _tabInitialized['freight'];
   } catch (err) {
     console.error('Freight backfill error:', err);
@@ -4472,7 +4480,7 @@ async function handleCombinedDsrUpload(input) {
     let frMsg = '';
     try {
       const fr = await _freightIngestWorkbook(wb, statusEl, null);
-      if (!fr.skipped) { frMsg = ` · Freight ${fr.months.join(',')} ${fr.nDeliv.toLocaleString('ko-KR')}건${fr.protectedSkip && fr.protectedSkip.length ? ` (보호: ${fr.protectedSkip.join(', ')})` : ''}`; delete _tabInitialized['freight']; }
+      if (!fr.skipped) { frMsg = ` · Freight ${fr.months.join(',')} ${fr.nDeliv.toLocaleString('ko-KR')}건${fr.protectedSkip && fr.protectedSkip.length ? ` (보호: ${fr.protectedSkip.join(', ')})` : ''}${fr.srMsg || ''}`; delete _tabInitialized['freight']; }
       else if (fr.warnings && fr.warnings.length) console.warn('Freight skipped:', fr.warnings);
     } catch (frErr) { console.warn('Freight 반영 실패:', frErr); frMsg = ` · ⚠ Freight 미반영(${frErr.message})`; }
 
@@ -4539,7 +4547,7 @@ async function handleUpload() {
         if (pre.hasCode) {
           // 파일 내 모든 월 반영 — 부분월 보호(배송일수 비교)가 마감월 덮어쓰기를 막음
           const fr = await _freightIngestWorkbook(fwb, statusEl, null);
-          if (!fr.skipped) { frMsg = ` · Freight ${fr.months.join(',')} ${fr.nDeliv.toLocaleString('ko-KR')}건`; delete _tabInitialized['freight']; }
+          if (!fr.skipped) { frMsg = ` · Freight ${fr.months.join(',')} ${fr.nDeliv.toLocaleString('ko-KR')}건${fr.srMsg || ''}`; delete _tabInitialized['freight']; }
         }
       } catch (frErr) { console.warn('Freight 반영 실패:', frErr); frMsg = ` · ⚠ Freight 미반영(${frErr.message})`; }
     }
