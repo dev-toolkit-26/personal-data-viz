@@ -97,6 +97,16 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 .tab-btn.active { background: var(--primary); color: #fff; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+/* ── 2단 탭: 상단 그룹 / 하단 하위 시트 ── */
+.tab-nav .tab-btn.group-btn.has-active { background: var(--primary); color: #fff; }
+.subtab-nav { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: -10px 0 16px; padding: 8px 10px;
+              background: var(--card-bg); border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow); }
+.subtab-nav .sub-label { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 4px; letter-spacing: .3px; }
+.subtab-btn { padding: 5px 14px; border-radius: 14px; border: 1.5px solid var(--primary); background: transparent; color: var(--primary);
+              font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: inherit; transition: background .15s, color .15s; }
+.subtab-btn:hover { background: rgba(32,85,39,.08); }
+.subtab-btn.active { background: var(--primary); color: #fff; }
+.subtab-nav.single { display: none; }   /* 하위가 1개면 숨김 */
 /* 회의록 — Notion-style */
 .min-editor { background:#fff !important; color:#1f2937 !important; }
 .min-editor:empty::before { content:attr(data-placeholder); color:#c4c9d4; pointer-events:none; font-size:15px; }
@@ -369,6 +379,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
   /* 탭 버튼 — 터치 높이 확보 */
   .tab-btn { padding: 11px 16px !important; font-size: 12px; }
+  .subtab-btn { padding: 8px 12px !important; font-size: 11px; }
+  .subtab-nav { gap: 5px; padding: 7px 8px; }
 
   /* 월 토글 — 터치 영역 확보 */
   .month-btn { padding: 7px 12px !important; font-size: 11px; }
@@ -2164,21 +2176,9 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
   <!-- KPI Cards -->
   <div class="kpi-grid" id="kpi-grid"></div>
 
-  <!-- Tabs -->
-  <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('wk10')" id="tab-btn-wk10">FCST Status</button>
-    <button class="tab-btn" onclick="switchTab('rofo-sheet')" id="tab-btn-rofo-sheet">Rofo</button>
-    <button class="tab-btn" onclick="switchTab('minutes')" id="tab-btn-minutes">Minutes</button>
-    <button class="tab-btn" onclick="switchTab('ytd')">YTD</button>
-    <button class="tab-btn" onclick="switchTab('branch')">Branch Analysis</button>
-    <button class="tab-btn" onclick="switchTab('revenue')">Revenue</button>
-    <button class="tab-btn" onclick="switchTab('sku')">SKU Detail</button>
-    <button class="tab-btn" onclick="switchTab('sku-hist')">SKU History</button>
-    <button class="tab-btn" onclick="switchTab('order')">Order Pattern</button>
-    <button class="tab-btn" onclick="switchTab('freight')" id="tab-btn-freight">Freight</button>
-    <button class="tab-btn" onclick="switchTab('calendar')" id="tab-btn-calendar" style="margin-left:auto;">Calendar &amp; To-Do</button>
-    <button class="tab-btn" onclick="switchTabUpdate()" id="tab-btn-update">Data Update</button>
-  </div>
+  <!-- Tabs — 2단(그룹 → 하위 시트). 버튼은 TAB_GROUPS 기준으로 renderTabNav()가 생성 -->
+  <div class="tab-nav" id="tab-nav-groups"></div>
+  <div class="subtab-nav" id="tab-nav-subs"></div>
 
   <!-- Tab: WK10 -->
   <div id="tab-wk10" class="tab-content active">
@@ -8996,13 +8996,44 @@ function renderSumMTDDiagnosis() {
 //  TAB SWITCHING
 // ═══════════════════════════════════════════════
 const _tabInitialized = {};
+
+// ── 2단 탭 메뉴 구성 ────────────────────────────────────────────────────────
+//  시트가 12개로 늘어 한 줄에 다 안 들어가므로 그룹(상단) → 하위 시트(하단 칩)로 분리.
+//  switchTab(tabId) API는 그대로 유지 — 그룹은 tabId로 역산해서 활성화한다.
+const TAB_GROUPS = [
+  { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['rofo-sheet','Rofo'], ['order','Order Pattern']] },
+  { key: 'perf',   label: 'Performance', tabs: [['ytd','YTD'], ['branch','Branch Analysis'], ['revenue','Revenue']] },
+  { key: 'sku',    label: 'SKU',         tabs: [['sku','SKU Detail'], ['sku-hist','SKU History']] },
+  { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)']] },
+  { key: 'work',   label: 'Workspace',   tabs: [['minutes','Minutes'], ['calendar','Calendar & To-Do']] },
+];
+const _tabGroupOf = tabId => TAB_GROUPS.find(g => g.tabs.some(t => t[0] === tabId)) || null;
+let _lastTabInGroup = {};   // { groupKey: tabId } — 그룹 재방문 시 마지막으로 보던 시트로
+
+function renderTabNav(activeTabId) {
+  const gEl = document.getElementById('tab-nav-groups'), sEl = document.getElementById('tab-nav-subs');
+  if (!gEl || !sEl) return;
+  const isUpdate = activeTabId === 'update';
+  const ag = isUpdate ? null : (_tabGroupOf(activeTabId) || TAB_GROUPS[0]);
+  gEl.innerHTML = TAB_GROUPS.map(g =>
+      `<button class="tab-btn group-btn${ag && g.key === ag.key ? ' active' : ''}" onclick="switchTabGroup('${g.key}')">${g.label}</button>`
+    ).join('')
+    + `<button class="tab-btn${isUpdate ? ' active' : ''}" onclick="switchTabUpdate()" id="tab-btn-update" style="margin-left:auto;">Data Update</button>`;
+  if (isUpdate || !ag) { sEl.innerHTML = ''; sEl.classList.add('single'); return; }
+  sEl.classList.toggle('single', ag.tabs.length < 2);
+  sEl.innerHTML = `<span class="sub-label">${ag.label}</span>` + ag.tabs.map(([id, label]) =>
+    `<button class="subtab-btn${id === activeTabId ? ' active' : ''}" onclick="switchTab('${id}')" id="tab-btn-${id}">${label}</button>`).join('');
+}
+function switchTabGroup(key) {
+  const g = TAB_GROUPS.find(x => x.key === key); if (!g) return;
+  switchTab(_lastTabInGroup[key] && g.tabs.some(t => t[0] === _lastTabInGroup[key]) ? _lastTabInGroup[key] : g.tabs[0][0]);
+}
+
 function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tabId).classList.add('active');
-  const tabNames = ['wk10','rofo-sheet','minutes','ytd','branch','revenue','sku','sku-hist','order','freight','calendar'];
-  const btns = document.querySelectorAll('.tab-btn');
-  btns[tabNames.indexOf(tabId)]?.classList.add('active');
+  const g = _tabGroupOf(tabId); if (g) _lastTabInGroup[g.key] = tabId;
+  renderTabNav(tabId);
 
   if (!_tabInitialized[tabId]) {
     _tabInitialized[tabId] = true;
@@ -9868,9 +9899,8 @@ function cancelUploadPw() {
 }
 function _doSwitchToUpdate() {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-update').classList.add('active');
-  document.getElementById('tab-btn-update').classList.add('active');
+  renderTabNav('update');
   _tabInitialized['update'] = true;
 }
 
@@ -10636,6 +10666,7 @@ async function loadFromSupabase() {
 //  INIT
 // ═══════════════════════════════════════════════
 function init() {
+  renderTabNav('wk10');   // 2단 탭 메뉴 생성 (기본 활성 시트 = FCST Status)
   initMonthFilter();   // Generate month toggle buttons (call before chart/table render)
   renderKPI();
   renderWK10Tables();
