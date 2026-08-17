@@ -331,7 +331,7 @@
   // ═══════════════════════════════════════════════════════════════
   //  UI
   // ═══════════════════════════════════════════════════════════════
-  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, edgeBand: 'ALL', charts: {} };
+  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, edgeAct: true, edgeBand: 'ALL', charts: {} };
 
   function periodMonths(period, months) {
     // period: 'YYYY-MM' | 'YTD-YYYY'
@@ -431,19 +431,16 @@
     const won = v => v == null ? '-' : '₩' + fmt(v);
     const dsrLyTxt = lyKeys.length ? lyKeys.map(k => MON_NM[+k.slice(5) - 1]).join('·') : `없음 — ${yearSel - 1} DSR 백필 필요`;
     const missingLy = monsSel.filter(m => !lyKeys.includes((yearSel - 1) + '-' + String(m).padStart(2, '0')));
-    // 권역/지점별 YoY 미니표
-    // 전체 → 지점별 / 지점 선택 → 그 지점의 SR별 (SR까지 선택하면 다시 지점별로 보여 비교 맥락 유지)
-    const dimBySr = S.branch !== 'ALL' && S.sr === 'ALL';
-    const dimKey = dimBySr ? 'bySr' : 'byBranch';
-    const dimList = dimBySr ? srList.filter(x => R.bySr[x] || (RL && RL.bySr[x])) : BRANCHES;
-    const dimLabel = x => dimBySr ? srName(x) : x;
-    const dimRows = dimList.filter(k => R[dimKey][k] || (RL && RL[dimKey][k])).map(k => {
-      const c = R[dimKey][k] || { n: 0, box: 0, fee: 0, small: 0, edge: 0, hfCnt: 0 }, l = RL ? (RL[dimKey][k] || null) : null;
+    // 지점별 YoY 미니표 — 지점 필터와 무관하게 항상 전 지점 비교(선택 지점만 강조)
+    const RbAll = S.branch === 'ALL' ? R  : compute(recs, { sr: S.sr });
+    const RlAll = S.branch === 'ALL' ? RL : (lyKeys.length ? compute(lyKeys.map(k => months[k]), { sr: S.sr, dayCap }) : null);
+    const dimRows = BRANCHES.filter(k => RbAll.byBranch[k] || (RlAll && RlAll.byBranch[k])).map(k => {
+      const c = RbAll.byBranch[k] || { n: 0, box: 0, fee: 0, small: 0, edge: 0, hfCnt: 0 }, l = RlAll ? (RlAll.byBranch[k] || null) : null;
       const yo = (a, b) => (l && a) ? ((b - a) / a * 100) : null;
       const yoF = v => v == null ? dash : `<span class="${v > 0 ? 'td-neg' : 'td-pos'}">${(v > 0 ? '+' : '') + v.toFixed(1)}%</span>`;
       const sm0 = l && l.n ? pct(l.small, l.n) : null, sm1 = c.n ? pct(c.small, c.n) : null;
       const smD = (sm0 != null && sm1 != null) ? sm1 - sm0 : null;
-      return `<tr><td><b>${esc(dimLabel(k))}</b></td><td>${won(c.fee)}</td><td>${yoF(yo(l && l.fee, c.fee))}</td><td>${fmt(c.n)}</td><td>${yoF(yo(l && l.n, c.n))}</td><td>${won(c.box ? c.fee / c.box : null)}</td><td>${fpct(sm1)}</td><td>${smD == null ? dash : `<span class="${smD > 0 ? 'td-neg' : 'td-pos'}">${(smD > 0 ? '+' : '') + smD.toFixed(1)}%p</span>`}</td><td>${c.hfCnt}${l ? ` <span style="color:var(--text-muted)">(${l.hfCnt})</span>` : ''}</td></tr>`;
+      return `<tr${k === S.branch ? ' style="background:#eaf5ea;"' : ''}><td><b>${esc(k)}</b></td><td>${won(c.fee)}</td><td>${yoF(yo(l && l.fee, c.fee))}</td><td>${fmt(c.n)}</td><td>${yoF(yo(l && l.n, c.n))}</td><td>${won(c.box ? c.fee / c.box : null)}</td><td>${fpct(sm1)}</td><td>${smD == null ? dash : `<span class="${smD > 0 ? 'td-neg' : 'td-pos'}">${(smD > 0 ? '+' : '') + smD.toFixed(1)}%p</span>`}</td><td>${c.hfCnt}${l ? ` <span style="color:var(--text-muted)">(${l.hfCnt})</span>` : ''}</td></tr>`;
     }).join('');
     html += `<div class="chart-card full" style="margin-bottom:16px;">
       <div class="chart-title">D. LY 비교 및 개선 현황 — ${esc(periodLabel)}${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">DSR(On) 동일 소스 · 전년 동월(${yearSel - 1}) vs ${yearSel} · 같은 지점 필터${esc(capNote)}</span></div>
@@ -469,7 +466,7 @@
           <div id="fr-comment" style="margin-top:10px;font-size:12px;line-height:1.7;background:#f0f7f0;border-left:3px solid var(--primary);padding:8px 12px;border-radius:4px;">${autoComment(yearSel, R, RL, 'ALL')}</div>
         </div>
         <div>
-          <div class="table-wrap" style="margin:0 0 10px;"><table><thead><tr><th style="text-align:left">${dimBySr ? '담당 SR' : '지점'}</th><th>배송료</th><th>YoY</th><th>배송건</th><th>YoY</th><th>박스당</th><th>소량 비중</th><th>YoY</th><th>주4회+ (LY)</th></tr></thead><tbody>
+          <div class="table-wrap" style="margin:0 0 10px;"><table><thead><tr><th style="text-align:left">지점</th><th>배송료</th><th>YoY</th><th>배송건</th><th>YoY</th><th>박스당</th><th>소량 비중</th><th>YoY</th><th>주4회+ (LY)</th></tr></thead><tbody>
             ${dimRows || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">데이터 없음</td></tr>'}
           </tbody></table></div>
           <div class="chart-title" style="font-size:12px;">월별 예상 배송료 (${yearSel - 1} vs ${yearSel}${S.branch !== 'ALL' ? ' · ' + S.branch : ''})</div>
@@ -480,22 +477,67 @@
       </div>
     </div>`;
 
-    // ── B. 걸침 알림 (핵심) ──
+    // ── B. 걸침 알림 (핵심) — "무조건 절감"이 아니라 실행 가능한 건만 우선 ──
+    //   실행 대상 = 소량(4~5박스) 제외 + 추가 1~2박스면 상위 구간 진입. 반복(2회+) 도매장이 진짜 개선 대상(MOQ 가이드).
+    const ACT_NEED = 2;
+    const isAct = e => e.band !== '4~5' && e.need <= ACT_NEED;
+    const actAll = Rb.edges.filter(isAct);                     // SR 칩 표기용(지점만 반영)
     const bands = ['ALL', ...EDGE.map(e => e[0] + '~' + e[1])];
-    const edgesF = S.edgeBand === 'ALL' ? R.edges : R.edges.filter(e => e.band === S.edgeBand);
+    // 도매장별 반복 집계(실행 대상 기준)
+    const aggKey = (list) => {
+      const o = {};
+      list.forEach(e => {
+        const a = o[e.key] || (o[e.key] = { key: e.key, name: e.name, sr: e.sr, srName: e.srName, branch: e.branch, region: e.region, n: 0, save: 0, need: 0, box: 0, months: new Set(), bands: {} });
+        a.n++; a.save += e.save; a.need += e.need; a.box += e.box; a.months.add(e.y + '-' + e.m); a.bands[e.band] = (a.bands[e.band] || 0) + 1;
+      });
+      return o;
+    };
+    const actEdges = R.edges.filter(isAct);
+    const repeatList = Object.values(aggKey(actEdges)).filter(a => a.n >= 2).sort((x, y) => y.save - x.save);
+    const repeatSave = repeatList.reduce((t, a) => t + a.save, 0);
+    const repeatN = repeatList.reduce((t, a) => t + a.n, 0);
+    const actSave = actEdges.reduce((t, e) => t + e.save, 0);
+    // SR별(실행 대상 기준) — 담당자별 협의 배분
+    const srAct = {};
+    actAll.forEach(e => { const a = srAct[e.sr] || (srAct[e.sr] = { n: 0, save: 0, keys: new Set() }); a.n++; a.save += e.save; a.keys.add(e.key); });
+    const srActList = Object.keys(srAct).sort((a, b) => srAct[b].save - srAct[a].save);
+    // 상세 테이블 데이터
+    let edgesF = S.edgeAct ? actEdges : R.edges;
+    if (S.edgeBand !== 'ALL') edgesF = edgesF.filter(e => e.band === S.edgeBand);
     const bShow = S.showAllB ? edgesF : edgesF.slice(0, 40);
+    const repShow = S.showAllRep ? repeatList : repeatList.slice(0, 15);
     html += `<div class="chart-card full" style="margin-bottom:16px;">
-      <div class="chart-title">B. 구간 걸침 오더 알림 — ${esc(periodLabel)} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">배송처(통합그룹)×배송일 합산박스 기준 · 절감액 = (현재요율 − 차상위요율) × 현재 박스</span></div>
+      <div class="chart-title">B. 구간 걸침 오더 — 실행 가능 건 중심 ${esc(periodLabel)}${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">배송처(통합그룹)×배송일 합산박스 기준 · 절감액 = (현재요율 − 차상위요율) × 현재 박스</span></div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px;">
+        ${card('실행 대상 (추가 1~2박스)', '₩' + fmt(actSave), `${fmt(actEdges.length)}건 · 소량(4~5박스) 제외`, 'positive')}
+        ${card('반복 걸침 도매장 (2회+)', '₩' + fmt(repeatSave), `${fmt(repeatList.length)}곳 · ${fmt(repeatN)}건 — MOQ 가이드 1순위`, 'neutral')}
+        ${card('전체 걸침 (참고)', '₩' + fmt(T.edgeSave), `${fmt(T.edge)}건 · 전량 상향 가정치(실행 전제 아님)`, '')}
+      </div>
+      <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:10px;">
+        ※ 목표는 <b>무조건 절감이 아니라 실행 가능한 건</b>. 반복적으로 구간 경계에 걸리는 도매장에 MOQ(최소 주문 박스) 가이드를 주는 것이 실효. 1회성·시즌 물량과 4~5박스 소량(신규 거래처·시즈널)은 선별 적용. 제주권은 단일요율이라 대상 제외.
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px;">
+        <span style="font-size:11px;font-weight:700;color:var(--text-muted);">담당 SR</span>
+        <button class="month-btn ${S.sr === 'ALL' ? '' : 'off'}" onclick="Freight.setSr('ALL')">전체 (${fmt(actAll.length)}건)</button>
+        ${srActList.map(sr => `<button class="month-btn ${S.sr === sr ? '' : 'off'}" onclick="Freight.setSr('${esc(sr)}')" title="실행 대상 ${srAct[sr].n}건 · 도매장 ${srAct[sr].keys.size}곳">${esc(srName(sr))} ${srAct[sr].n}건/₩${fmt(srAct[sr].save)}</button>`).join('')}
+      </div>
+      <div class="table-wrap" style="margin:0 0 12px;">
+        <table><thead><tr><th style="text-align:left">반복 걸침 도매장 (실행 1순위)</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>걸침 횟수</th><th>월 수</th><th>평균 부족 박스</th><th>절감액 합계</th><th>주 구간</th></tr></thead><tbody>
+        ${repShow.map(a => { const mb = Object.keys(a.bands).sort((x, y) => a.bands[y] - a.bands[x])[0];
+          return `<tr><td title="${esc(a.key)}">${esc(a.name)}</td><td title="${esc(a.sr)}">${esc(a.srName)}</td><td>${a.branch}</td><td>${a.region}</td><td class="td-neu"><b>${a.n}회</b></td><td>${a.months.size}</td><td>+${(a.need / a.n).toFixed(1)}</td><td class="td-pos">₩${fmt(a.save)}</td><td>${mb}박스</td></tr>`; }).join('')
+          || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">반복(2회 이상) 걸침 도매장 없음 — 개별 건은 아래 표 참고</td></tr>'}
+        </tbody></table></div>
+      ${repeatList.length > 15 ? `<div style="text-align:right;margin:-6px 0 10px;"><button class="month-btn off" onclick="Freight.toggleAllRep()">${S.showAllRep ? '상위 15곳만' : `전체 ${repeatList.length}곳 보기`}</button></div>` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-        ${bands.map(b => `<button class="month-btn ${S.edgeBand === b ? '' : 'off'}" onclick="Freight.setEdgeBand('${b}')">${b === 'ALL' ? '전체' : b + '박스'}${b !== 'ALL' && R.edgeByBand[b] ? ` (${R.edgeByBand[b].n})` : ''}</button>`).join('')}
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">권역별: ${M().regions.filter(r => R.edgeByRegion[r]).map(r => `${r.replace('권','')} ${R.edgeByRegion[r].n}건/₩${fmt(R.edgeByRegion[r].save)}`).join(' · ') || '-'}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--text-muted);">개별 오더</span>
+        <button class="month-btn ${S.edgeAct ? '' : 'off'}" onclick="Freight.setEdgeAct(true)">실행 대상만 (+1~2박스)</button>
+        <button class="month-btn ${S.edgeAct ? 'off' : ''}" onclick="Freight.setEdgeAct(false)">전체 걸침</button>
+        <span style="width:8px;"></span>
+        ${bands.map(b => `<button class="month-btn ${S.edgeBand === b ? '' : 'off'}" onclick="Freight.setEdgeBand('${b}')">${b === 'ALL' ? '구간 전체' : b + '박스'}${b !== 'ALL' && R.edgeByBand[b] ? ` (${R.edgeByBand[b].n})` : ''}</button>`).join('')}
       </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">담당 SR별 절감 여지: ${Object.keys(R.bySr).filter(k => R.bySr[k].edge).sort((a,b) => R.bySr[b].edgeSave - R.bySr[a].edgeSave).map(k => `<b style="color:var(--text)">${esc(srName(k))}</b> ${R.bySr[k].edge}건/₩${fmt(R.bySr[k].edgeSave)}`).join(' · ') || '-'}
-      </div>
-      <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:8px;">※ 4~5박스(소량) 알림은 <b>신규 거래처·시즈널 물량은 선별 적용</b> (일괄 제한 아님). 제주권은 단일요율이라 알림 제외.</div>
-      <div class="table-wrap" style="max-height:520px;">
+      <div class="table-wrap" style="max-height:460px;">
       <table><thead><tr><th style="text-align:left">도매장</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>일자</th><th>현재 박스</th><th>추가 필요</th><th>현재 요율</th><th>→ 변경 요율</th><th>박스당 절감</th><th>예상 절감액</th></tr></thead><tbody>
-      ${bShow.map(e => `<tr><td title="${esc(e.key)}">${esc(e.name)}</td><td title="${esc(e.sr)}">${esc(e.srName)}</td><td>${e.branch}</td><td>${e.region}</td><td>${e.y}-${String(e.m).padStart(2,'0')}-${String(e.day).padStart(2,'0')}</td><td><b>${e.box}</b></td><td class="td-neu">+${e.need} → ${e.target}</td><td>₩${fmt(e.curRate)}</td><td>₩${fmt(e.nextRate)}</td><td>₩${fmt(e.savePerBox)}</td><td class="td-pos">₩${fmt(e.save)}</td></tr>`).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted)">걸침 오더 없음</td></tr>'}
+      ${bShow.map(e => `<tr><td title="${esc(e.key)}">${esc(e.name)}</td><td title="${esc(e.sr)}">${esc(e.srName)}</td><td>${e.branch}</td><td>${e.region}</td><td>${e.y}-${String(e.m).padStart(2,'0')}-${String(e.day).padStart(2,'0')}</td><td><b>${e.box}</b></td><td class="td-neu">+${e.need} → ${e.target}</td><td>₩${fmt(e.curRate)}</td><td>₩${fmt(e.nextRate)}</td><td>₩${fmt(e.savePerBox)}</td><td class="td-pos">₩${fmt(e.save)}</td></tr>`).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted)">해당 조건의 걸침 오더 없음</td></tr>'}
       </tbody></table></div>
       ${edgesF.length > 40 ? `<div style="text-align:right;margin-top:6px;"><button class="month-btn off" onclick="Freight.toggleAllB()">${S.showAllB ? '상위 40건만' : `전체 ${edgesF.length}건 보기`}</button></div>` : ''}
     </div>`;
@@ -602,8 +644,10 @@
     render, TABLE, BRANCHES,
     setPeriod(v) { S.period = v; S.showAllA = S.showAllB = false; rerender(); },
     setBranch(v) { S.branch = v; S.sr = 'ALL'; rerender(); },
-    setSr(v) { S.sr = v; S.showAllA = S.showAllB = false; rerender(); },
+    setSr(v) { S.sr = v; S.showAllA = S.showAllB = S.showAllRep = false; rerender(); },
     setEdgeBand(v) { S.edgeBand = v; S.showAllB = false; rerender(); },
+    setEdgeAct(v) { S.edgeAct = !!v; S.showAllB = false; rerender(); },
+    toggleAllRep() { S.showAllRep = !S.showAllRep; rerender(); },
     setSearch(v) { S.search = v; clearTimeout(S._t); S._t = setTimeout(rerender, 250); },
     toggleAllA() { S.showAllA = !S.showAllA; rerender(); },
     toggleAllB() { S.showAllB = !S.showAllB; rerender(); },
