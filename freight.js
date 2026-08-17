@@ -387,12 +387,13 @@
         <button class="month-btn ${S.branch === 'ALL' ? '' : 'off'}" onclick="Freight.setBranch('ALL')">전체</button>
         ${BRANCHES.map(b => `<button class="month-btn ${S.branch === b ? '' : 'off'}" onclick="Freight.setBranch('${b}')">${b}</button>`).join('')}
       </span>
-      <span><label>담당 SR</label>
-        <select id="fr-sr" onchange="Freight.setSr(this.value)">
-          <option value="ALL">전체 (${srList.length}명)</option>
-          ${srList.map(sr => `<option value="${esc(sr)}" ${S.sr === sr ? 'selected' : ''}>${esc(srName(sr))}${sr !== SR_NONE ? ` · ₩${fmt(Rb.bySr[sr].fee)}` : ''}</option>`).join('')}
-        </select></span>
       <span style="margin-left:auto;font-size:11px;color:var(--text-muted);">DSR(On) 기준 · 데이터 ~${asOf} · 박스=Qty · 담당 SR ~${_srAsOf || '미설정'}</span>
+      ${S.branch === 'ALL' ? '' : `
+      <span class="month-toggle-wrap" style="flex-basis:100%;padding-top:8px;border-top:1px dashed var(--border);">
+        <label>담당 SR · ${S.branch}</label>
+        <button class="month-btn ${S.sr === 'ALL' ? '' : 'off'}" onclick="Freight.setSr('ALL')">전체 ${srList.filter(x => x !== SR_NONE).length}명</button>
+        ${srList.map(sr => `<button class="month-btn ${S.sr === sr ? '' : 'off'}" onclick="Freight.setSr('${esc(sr)}')" title="${esc(sr)}">${esc(srName(sr))}</button>`).join('')}
+      </span>`}
     </div>`;
 
     // ── 요약 카드 ──

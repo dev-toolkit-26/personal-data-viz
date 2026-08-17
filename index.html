@@ -381,6 +381,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
   .tab-btn { padding: 11px 16px !important; font-size: 12px; }
   .subtab-btn { padding: 8px 12px !important; font-size: 11px; }
   .subtab-nav { gap: 5px; padding: 7px 8px; }
+  /* Freight 필터바(지점+담당 SR 2단)는 모바일에서 높이가 커 sticky 해제 — 화면 절반을 먹지 않게 */
+  #freight-root .filter-bar.op-sticky { position: static; }
 
   /* 월 토글 — 터치 영역 확보 */
   .month-btn { padding: 7px 12px !important; font-size: 11px; }
