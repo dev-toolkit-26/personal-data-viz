@@ -9,6 +9,8 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="off_ingest.js"></script>
+<script src="freight_master.js"></script>
+<script src="freight.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
 <!-- Vanta BIRDS (Select Channel 배경 3D) — three 0.134 / vanta 0.5.24 고정 -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
@@ -2173,6 +2175,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     <button class="tab-btn" onclick="switchTab('sku')">SKU Detail</button>
     <button class="tab-btn" onclick="switchTab('sku-hist')">SKU History</button>
     <button class="tab-btn" onclick="switchTab('order')">Order Pattern</button>
+    <button class="tab-btn" onclick="switchTab('freight')" id="tab-btn-freight">Freight</button>
     <button class="tab-btn" onclick="switchTab('calendar')" id="tab-btn-calendar" style="margin-left:auto;">Calendar &amp; To-Do</button>
     <button class="tab-btn" onclick="switchTabUpdate()" id="tab-btn-update">Data Update</button>
   </div>
@@ -2452,6 +2455,11 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     </div>
   </div>
 
+  <!-- Tab: Freight (운송비 — KCTC 배송비 절감 플랜) -->
+  <div id="tab-freight" class="tab-content">
+    <div id="freight-root"><div class="chart-card" style="padding:24px;color:var(--text-muted);font-size:13px;">운송비 데이터 로드 중…</div></div>
+  </div>
+
   <!-- Tab: 회의록 -->
   <div id="tab-minutes" class="tab-content">
     <div style="display:flex;gap:0;height:calc(100vh - 160px);min-height:500px;">
@@ -2644,6 +2652,21 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
           <button class="upload-apply-btn" id="nsvbf-apply-btn" onclick="handleNsvBackfill(document.getElementById('nsvbf-file-input'))">NSV 백필 실행</button>
           <span id="nsv-backfill-status" style="font-size:12px;"></span>
+        </div>
+      </div>
+
+      <!-- 운송비(Freight) DSR 백필 — Freight 탭용 -->
+      <div style="margin-bottom:28px;padding:14px;border:2px dashed #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.03);">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🚚 운송비(Freight) DSR 백필 (Freight 탭 · 여러 월·여러 파일 한 번에)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;"><b>배송처코드(Code)</b>가 있는 DSR raw를 <b>여러 개 동시 선택</b> 가능(예: <code>DSR_Raw_202501-202606.xlsx</code> + <code>DSR_Raw_2026_TTL.xlsx</code>) → Team=On만(ALSM·제외코드 제외) <b>배송처(통합그룹)×배송일</b> 배송건으로 합산해 파일에 포함된 <b>모든 월</b>을 월 단위로 저장. 이미 저장된 월보다 덜 채워진(일수가 적은) 파일은 그 월을 덮어쓰지 않음. 이후 최신월은 통합 DSR / DSR Raw 업로드 시 자동 갱신. 박스=Qty(UnitsSold). LY 비교는 2025 백필분과 동일 소스로 비교.</div>
+        <label class="upload-file-btn" id="frbf-btn-label" style="display:inline-flex;" title="배송처코드 포함 DSR raw (다중 선택 가능)">
+          Select File(s)
+          <input type="file" id="frbf-file-input" accept=".xlsx,.xlsb,.xls" multiple style="display:none" onchange="document.getElementById('frbf-filename').textContent=Array.from(this.files).map(f=>f.name).join(' + ')">
+        </label>
+        <span id="frbf-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
+          <button class="upload-apply-btn" id="frbf-apply-btn" onclick="handleFreightBackfill(document.getElementById('frbf-file-input'))">운송비 백필 실행</button>
+          <span id="freight-backfill-status" style="font-size:12px;"></span>
         </div>
       </div>
 
@@ -4276,6 +4299,61 @@ async function handleNsvBackfill(input) {
   } finally { if (btn) btn.disabled = false; }
 }
 
+// ── 운송비(Freight): DSR raw(배송처코드 포함) → 월별 배송건 upsert (on_freight_months) ──
+//    · 백필 슬롯: 파일에 포함된 모든 월 저장(월 통째 교체) — 2025·2026 히스토리 한 번에.
+//    · 통합 DSR 업로드에서는 최신월(maxMon)만 (`onlyYm` 지정) — 다른 지표와 동일 규칙.
+async function _freightIngestWorkbook(wb, statusEl, onlyYm) {
+  if (!window.Freight || !window.FREIGHT_MASTER) throw new Error('freight.js / freight_master.js 로드 안 됨');
+  const res = Freight.parseWorkbook(wb);
+  if (!res.hasCode) return { skipped: true, warnings: res.warnings };
+  let months = res.months;
+  if (onlyYm) months = months[onlyYm] ? { [onlyYm]: months[onlyYm] } : {};
+  const yms = Object.keys(months).sort();
+  if (!yms.length) return { skipped: true, warnings: res.warnings.concat(['저장할 월 없음']) };
+  if (statusEl) statusEl.textContent = `운송비 저장 중… (${yms.join(', ')})`;
+  const sv = await Freight.saveMonths(_supabase, months);
+  Freight.invalidate();
+  const nDeliv = yms.reduce((a, k) => a + months[k].deliv.length, 0);
+  const nUm = new Set(yms.flatMap(k => Object.keys(months[k].unmapped))).size;
+  return { skipped: false, months: yms, n: sv.saved, protectedSkip: sv.skipped, nDeliv, nUm, warnings: res.warnings, hlPerBox: res.hlPerBox };
+}
+async function handleFreightBackfill(input) {
+  const statusEl = document.getElementById('freight-backfill-status');
+  const files = input && input.files ? Array.from(input.files) : [];
+  if (!files.length) { statusEl.textContent = '파일을 선택하세요.'; statusEl.style.color = 'var(--negative)'; return; }
+  const btn = document.getElementById('frbf-apply-btn'); if (btn) btn.disabled = true;
+  statusEl.style.color = 'var(--text-muted)';
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    // 여러 파일 선택 시 파일명 순으로 순차 처리(2025 → 2026). 각 파일의 모든 월을 저장(부분월 보호는 saveMonths가 처리).
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    const allMonths = new Set(), allSkip = [], allWarn = []; let nDeliv = 0, nUm = 0, hpb = null;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      statusEl.textContent = `[${i + 1}/${files.length}] ${f.name} 처리 중… (대용량이면 시간이 걸립니다)`;
+      await new Promise(r => setTimeout(r, 30));
+      const buf = await f.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array', cellDates: true });
+      const r = await _freightIngestWorkbook(wb, statusEl, null);
+      if (r.skipped) { allWarn.push(`${f.name}: ${(r.warnings || []).join(' / ') || '처리할 데이터 없음'}`); continue; }
+      r.months.forEach(m => allMonths.add(m)); (r.protectedSkip || []).forEach(s => allSkip.push(s));
+      (r.warnings || []).forEach(w => allWarn.push(`${f.name}: ${w}`));
+      nDeliv += r.nDeliv; nUm = Math.max(nUm, r.nUm); hpb = r.hlPerBox;
+    }
+    if (!allMonths.size) throw new Error(allWarn.join(' / ') || '처리할 데이터 없음');
+    const ms = [...allMonths].sort();
+    const warn = allWarn.length ? ` · ⚠ ${allWarn.join(' / ')}` : '';
+    const skip = allSkip.length ? ` · 보호(미덮어씀): ${allSkip.join(', ')}` : '';
+    statusEl.style.color = allWarn.length ? 'orange' : 'var(--positive)';
+    statusEl.textContent = `✓ 운송비 백필 완료 — ${files.length}개 파일 · ${ms.length}개월(${ms[0]}~${ms[ms.length-1]}) · 배송건 ${nDeliv.toLocaleString('ko-KR')}건${hpb != null ? ` · HL/박스 ${hpb.toFixed(3)}` : ''}${nUm ? ` · 미매핑 코드 ${nUm}개(Freight 탭 하단)` : ''}${skip}${warn}`;
+    delete _tabInitialized['freight'];
+  } catch (err) {
+    console.error('Freight backfill error:', err);
+    statusEl.style.color = 'var(--negative)';
+    statusEl.textContent = `Error: ${err.message}`;
+  } finally { if (btn) btn.disabled = false; }
+}
+
 // ── 통합 DSR: Team으로 On/Off 분리 → On(지역) 스냅샷 + Off(채널/거래처) 스냅샷 동시 반영 ──
 async function handleCombinedDsrUpload(input) {
   const statusEl = document.getElementById('combined-dsr-status');
@@ -4389,7 +4467,16 @@ async function handleCombinedDsrUpload(input) {
       .upsert({ id: 1, data: offData, updated_at: new Date().toISOString() });
     if (upErr) throw new Error('Off 스냅샷 저장 실패: ' + upErr.message);
 
-    statusEl.textContent = `✓ 완료 — 적용월 ${maxMon >= 0 ? _MON_NM[maxMon] : '-'}만 반영(과거 마감월 보존) · On ${onCnt.toLocaleString('ko-KR')}행 · Off 26Y ${res26.matched.toLocaleString('ko-KR')}행/25Y ${res25.matched.toLocaleString('ko-KR')}행 반영 (Off 실현월 ${r2.actual_months}${opMonths.length ? ' · OrderPattern 월 ' + opMonths.map(m=>m+1).join(',') : ''})`;
+    // ── 운송비(Freight): 파일에 든 모든 월의 배송건 재집계 → on_freight_months (실패해도 본 업로드는 성공 처리)
+    //    (지표와 달리 maxMon 제한 없음 — saveMonths의 부분월 보호(배송일수 비교)가 마감월 덮어쓰기를 막아줌) ──
+    let frMsg = '';
+    try {
+      const fr = await _freightIngestWorkbook(wb, statusEl, null);
+      if (!fr.skipped) { frMsg = ` · Freight ${fr.months.join(',')} ${fr.nDeliv.toLocaleString('ko-KR')}건${fr.protectedSkip && fr.protectedSkip.length ? ` (보호: ${fr.protectedSkip.join(', ')})` : ''}`; delete _tabInitialized['freight']; }
+      else if (fr.warnings && fr.warnings.length) console.warn('Freight skipped:', fr.warnings);
+    } catch (frErr) { console.warn('Freight 반영 실패:', frErr); frMsg = ` · ⚠ Freight 미반영(${frErr.message})`; }
+
+    statusEl.textContent = `✓ 완료 — 적용월 ${maxMon >= 0 ? _MON_NM[maxMon] : '-'}만 반영(과거 마감월 보존) · On ${onCnt.toLocaleString('ko-KR')}행 · Off 26Y ${res26.matched.toLocaleString('ko-KR')}행/25Y ${res25.matched.toLocaleString('ko-KR')}행 반영 (Off 실현월 ${r2.actual_months}${opMonths.length ? ' · OrderPattern 월 ' + opMonths.map(m=>m+1).join(',') : ''})${frMsg}`;
     statusEl.style.color = 'var(--positive)';
   } catch (err) {
     console.error('Combined DSR error:', err);
@@ -4442,9 +4529,23 @@ async function handleUpload() {
     const wkLabel = (DASHBOARD_DATA.wk_meta || {}).label || '';
     const tsEl = document.getElementById('upload-ts');
     if (tsEl) tsEl.textContent = 'Last Updated: ' + new Date().toLocaleString('ko-KR');
+    // ── 운송비(Freight): DSR Raw에 배송처코드가 있으면 최신월 배송건 자동 반영 (없으면 조용히 건너뜀, 실패해도 본 업데이트는 성공) ──
+    let frMsg = '';
+    if (dsrFile && window.Freight) {
+      try {
+        const fbuf = await _upReadBuffer(dsrFile);
+        const fwb  = XLSX.read(fbuf, { type: 'array', cellDates: true });
+        const pre  = Freight.parseWorkbook(fwb);
+        if (pre.hasCode) {
+          // 파일 내 모든 월 반영 — 부분월 보호(배송일수 비교)가 마감월 덮어쓰기를 막음
+          const fr = await _freightIngestWorkbook(fwb, statusEl, null);
+          if (!fr.skipped) { frMsg = ` · Freight ${fr.months.join(',')} ${fr.nDeliv.toLocaleString('ko-KR')}건`; delete _tabInitialized['freight']; }
+        }
+      } catch (frErr) { console.warn('Freight 반영 실패:', frErr); frMsg = ` · ⚠ Freight 미반영(${frErr.message})`; }
+    }
     try {
       await _upDeployToSupabase(statusEl);
-      statusEl.textContent = `✓ ${wkLabel} 업데이트 완료 (Supabase 저장됨)`;
+      statusEl.textContent = `✓ ${wkLabel} 업데이트 완료 (Supabase 저장됨)${frMsg}`;
       statusEl.style.color = 'var(--positive)';
     } catch(sbErr) {
       console.warn('Supabase deploy failed:', sbErr);
@@ -8899,7 +9000,7 @@ function switchTab(tabId) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tabId).classList.add('active');
-  const tabNames = ['wk10','rofo-sheet','minutes','ytd','branch','revenue','sku','sku-hist','order','calendar'];
+  const tabNames = ['wk10','rofo-sheet','minutes','ytd','branch','revenue','sku','sku-hist','order','freight','calendar'];
   const btns = document.querySelectorAll('.tab-btn');
   btns[tabNames.indexOf(tabId)]?.classList.add('active');
 
@@ -8912,6 +9013,7 @@ function switchTab(tabId) {
     if (tabId === 'sku')      { renderSkuTable(); }
     if (tabId === 'sku-hist') { renderSkuHistTable(); renderSkuHistCompare(); }
     if (tabId === 'order')    { renderOrderPattern(); }
+    if (tabId === 'freight')  { if (window.Freight) Freight.render(_supabase); }
     if (tabId === 'minutes')  { minutesLoad(); }
     if (tabId === 'calendar') { calendarInit(); todoInit(); }
   } else {
@@ -8921,6 +9023,7 @@ function switchTab(tabId) {
     else if (tabId === 'revenue') { initRevenueTab(); }
     else if (tabId === 'sku-hist'){ renderSkuHistTable(); renderSkuHistCompare(); }
     else if (tabId === 'order')   { renderOrderPattern(); }
+    else if (tabId === 'freight') { if (window.Freight) Freight.render(_supabase); }
     else if (tabId === 'minutes') { minutesLoad(); }
     else if (tabId === 'calendar'){ calendarRender(); calendarRenderDayEvents(); todoRender(); }
     else Object.values(_charts).forEach(c => c.resize && c.resize());
