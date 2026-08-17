@@ -524,7 +524,7 @@
     setSearch(v) { S.search = v; clearTimeout(S._t); S._t = setTimeout(rerender, 250); },
     toggleAllA() { S.showAllA = !S.showAllA; rerender(); },
     toggleAllB() { S.showAllB = !S.showAllB; rerender(); },
-    invalidate() { _cache = null; },
+    invalidate() { _cache = null; S.period = null; S.showAllA = S.showAllB = false; },   // 데이터 갱신 후 다음 렌더는 최신 월로
     _state: S,
   };
   global.Freight = api;

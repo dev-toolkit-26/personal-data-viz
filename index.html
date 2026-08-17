@@ -9,8 +9,8 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="off_ingest.js"></script>
-<script src="freight_master.js"></script>
-<script src="freight.js"></script>
+<!-- Freight 모듈: 배포 후 캐시된 옛 버전이 보이지 않도록 시간 기반 쿼리(1시간 단위)로 로드 -->
+<script>(function(){var v=Math.floor(Date.now()/3600000);document.write('<script src="freight_master.js?v='+v+'"><\/script><script src="freight.js?v='+v+'"><\/script>');})();</script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
 <!-- Vanta BIRDS (Select Channel 배경 3D) — three 0.134 / vanta 0.5.24 고정 -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/build/three.min.js"></script>
