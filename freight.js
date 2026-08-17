@@ -267,7 +267,7 @@
   // ═══════════════════════════════════════════════════════════════
   //  UI
   // ═══════════════════════════════════════════════════════════════
-  const S = { period: null, region: 'ALL', branch: 'ALL', search: '', showAllA: false, showAllB: false, edgeBand: 'ALL', charts: {} };
+  const S = { period: null, branch: 'ALL', search: '', showAllA: false, showAllB: false, edgeBand: 'ALL', charts: {} };
 
   function periodMonths(period, months) {
     // period: 'YYYY-MM' | 'YTD-YYYY'
@@ -302,7 +302,7 @@
     if (!S.period || (!S.period.startsWith('YTD-') && !months[S.period])) S.period = keys[keys.length - 1];
     const selKeys = periodMonths(S.period, months);
     const recs = selKeys.map(k => months[k]);
-    const R = compute(recs, { region: S.region, branch: S.branch });
+    const R = compute(recs, { branch: S.branch });
     const years = [...new Set(keys.map(k => k.slice(0, 4)))];
     const periodLabel = S.period.startsWith('YTD-') ? S.period.slice(4) + ' YTD (' + selKeys.map(k => MON_NM[+k.slice(5) - 1]).join('·') + ')' : (S.period.slice(0, 4) + ' ' + MON_NM[+S.period.slice(5) - 1]);
     const lastRec = recs[recs.length - 1];
@@ -316,13 +316,9 @@
           ${years.map(y => `<option value="YTD-${y}" ${S.period === 'YTD-' + y ? 'selected' : ''}>${y} YTD</option>`).join('')}
           ${keys.slice().reverse().map(k => `<option value="${k}" ${S.period === k ? 'selected' : ''}>${k.slice(0,4)} ${MON_NM[+k.slice(5)-1]}</option>`).join('')}
         </select></span>
-      <span><label>Branch</label>
-        <select id="fr-branch" onchange="Freight.setBranch(this.value)">
-          <option value="ALL">All</option>${BRANCHES.map(b => `<option value="${b}" ${S.branch === b ? 'selected' : ''}>${b}</option>`).join('')}
-        </select></span>
-      <span class="month-toggle-wrap"><label>권역</label>
-        <button class="month-btn ${S.region === 'ALL' ? '' : 'off'}" onclick="Freight.setRegion('ALL')">전체</button>
-        ${M().regions.map(r => `<button class="month-btn ${S.region === r ? '' : 'off'}" onclick="Freight.setRegion('${r}')">${r.replace('권','')}</button>`).join('')}
+      <span class="month-toggle-wrap"><label>Branch</label>
+        <button class="month-btn ${S.branch === 'ALL' ? '' : 'off'}" onclick="Freight.setBranch('ALL')">전체</button>
+        ${BRANCHES.map(b => `<button class="month-btn ${S.branch === b ? '' : 'off'}" onclick="Freight.setBranch('${b}')">${b}</button>`).join('')}
       </span>
       <span style="margin-left:auto;font-size:11px;color:var(--text-muted);">DSR(On) 기준 · 데이터 ~${asOf} · 박스=UnitsSold(물리 박스)</span>
     </div>`;
@@ -350,7 +346,7 @@
       const mt = months[latestYm].meta || {}; const dim = new Date(Date.UTC(+latestYm.slice(0, 4), +latestYm.slice(5), 0)).getUTCDate();
       if (mt.maxDay && mt.maxDay < dim) { const lyK = (yearSel - 1) + latestYm.slice(4); if (months[lyK]) { dayCap[lyK] = mt.maxDay; capNote = ` · ${MON_NM[+latestYm.slice(5) - 1]}은 진행 중(~${mt.maxDay}일) → LY도 1~${mt.maxDay}일만 비교`; } }
     }
-    const RL = lyKeys.length ? compute(lyKeys.map(k => months[k]), { region: S.region, branch: S.branch, dayCap }) : null;
+    const RL = lyKeys.length ? compute(lyKeys.map(k => months[k]), { branch: S.branch, dayCap }) : null;
     const TL = RL ? RL.total : null;
     const cellDiff = (a, b, lowerBetter, pp) => {
       const diff = (a == null || b == null) ? null : (pp ? (b - a) : (a ? (b - a) / a * 100 : null));
@@ -364,8 +360,8 @@
     const dsrLyTxt = lyKeys.length ? lyKeys.map(k => MON_NM[+k.slice(5) - 1]).join('·') : `없음 — ${yearSel - 1} DSR 백필 필요`;
     const missingLy = monsSel.filter(m => !lyKeys.includes((yearSel - 1) + '-' + String(m).padStart(2, '0')));
     // 권역/지점별 YoY 미니표
-    const dimKey = S.region === 'ALL' ? 'byRegion' : 'byBranch';
-    const dimList = S.region === 'ALL' ? M().regions : BRANCHES;
+    const dimKey = S.branch === 'ALL' ? 'byBranch' : 'byRegion';
+    const dimList = S.branch === 'ALL' ? BRANCHES : M().regions;
     const dimRows = dimList.filter(k => R[dimKey][k] || (RL && RL[dimKey][k])).map(k => {
       const c = R[dimKey][k] || { n: 0, box: 0, fee: 0, small: 0, edge: 0, hfCnt: 0 }, l = RL ? (RL[dimKey][k] || null) : null;
       const yo = (a, b) => (l && a) ? ((b - a) / a * 100) : null;
@@ -375,7 +371,7 @@
       return `<tr><td><b>${k}</b></td><td>${won(c.fee)}</td><td>${yoF(yo(l && l.fee, c.fee))}</td><td>${fmt(c.n)}</td><td>${yoF(yo(l && l.n, c.n))}</td><td>${won(c.box ? c.fee / c.box : null)}</td><td>${fpct(sm1)}</td><td>${smD == null ? dash : `<span class="${smD > 0 ? 'td-neg' : 'td-pos'}">${(smD > 0 ? '+' : '') + smD.toFixed(1)}%p</span>`}</td><td>${c.hfCnt}${l ? ` <span style="color:var(--text-muted)">(${l.hfCnt})</span>` : ''}</td></tr>`;
     }).join('');
     html += `<div class="chart-card full" style="margin-bottom:16px;">
-      <div class="chart-title">D. LY 비교 및 개선 현황 — ${esc(periodLabel)}${S.region !== 'ALL' ? ' · ' + S.region : ''}${S.branch !== 'ALL' ? ' · ' + S.branch : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">DSR(On) 동일 소스 · 전년 동월(${yearSel - 1}) vs ${yearSel} · 같은 권역·지점 필터${esc(capNote)}</span></div>
+      <div class="chart-title">D. LY 비교 및 개선 현황 — ${esc(periodLabel)}${S.branch !== 'ALL' ? ' · ' + S.branch : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">DSR(On) 동일 소스 · 전년 동월(${yearSel - 1}) vs ${yearSel} · 같은 지점 필터${esc(capNote)}</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
         <div>
           <div class="table-wrap" style="margin:0 0 8px;"><table><thead><tr><th style="text-align:left">지표</th><th>${yearSel - 1} LY</th><th>${yearSel} CY</th><th>YoY</th></tr></thead><tbody>
@@ -395,13 +391,13 @@
             · 모든 값은 DSR(On Team만, ALSM·제외코드 제외)에 KCTC 요율표를 적용한 <b>추정 배송료</b>. LY 보유월: ${dsrLyTxt}${missingLy.length && lyKeys.length ? ` · <b style="color:#b45309">${missingLy.map(m => MON_NM[m - 1]).join('·')} LY 없음</b>` : ''}<br>
             · 개선 지표(작을수록 좋음): 소량건 비중 · 걸침 방치율 · 주4회+ 도매장 수 (주 3회는 정상).
           </div>
-          <div id="fr-comment" style="margin-top:10px;font-size:12px;line-height:1.7;background:#f0f7f0;border-left:3px solid var(--primary);padding:8px 12px;border-radius:4px;">${autoComment(yearSel, R, RL, S.region)}</div>
+          <div id="fr-comment" style="margin-top:10px;font-size:12px;line-height:1.7;background:#f0f7f0;border-left:3px solid var(--primary);padding:8px 12px;border-radius:4px;">${autoComment(yearSel, R, RL, 'ALL')}</div>
         </div>
         <div>
-          <div class="table-wrap" style="margin:0 0 10px;"><table><thead><tr><th style="text-align:left">${S.region === 'ALL' ? '권역' : '지점'}</th><th>배송료</th><th>YoY</th><th>배송건</th><th>YoY</th><th>박스당</th><th>소량 비중</th><th>YoY</th><th>주4회+ (LY)</th></tr></thead><tbody>
+          <div class="table-wrap" style="margin:0 0 10px;"><table><thead><tr><th style="text-align:left">${S.branch === 'ALL' ? '지점' : '권역'}</th><th>배송료</th><th>YoY</th><th>배송건</th><th>YoY</th><th>박스당</th><th>소량 비중</th><th>YoY</th><th>주4회+ (LY)</th></tr></thead><tbody>
             ${dimRows || '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">데이터 없음</td></tr>'}
           </tbody></table></div>
-          <div class="chart-title" style="font-size:12px;">월별 예상 배송료 (${yearSel - 1} vs ${yearSel}${S.region !== 'ALL' ? ' · ' + S.region : ''}${S.branch !== 'ALL' ? ' · ' + S.branch : ''})</div>
+          <div class="chart-title" style="font-size:12px;">월별 예상 배송료 (${yearSel - 1} vs ${yearSel}${S.branch !== 'ALL' ? ' · ' + S.branch : ''})</div>
           <div class="chart-wrap" style="height:200px;"><canvas id="fr-chart-ly"></canvas></div>
           <div class="chart-title" style="font-size:12px;margin-top:12px;">월별 소량건 비중</div>
           <div class="chart-wrap" style="height:160px;"><canvas id="fr-chart-small"></canvas></div>
@@ -473,7 +469,7 @@
     // charts (D) — DSR(On) 월별 (같은 권역·지점 필터)
     const dsrMonthly = (year) => {
       const fee = new Array(12).fill(null), small = new Array(12).fill(null);
-      for (let m = 1; m <= 12; m++) { const k = year + '-' + String(m).padStart(2, '0'); if (!months[k]) continue; const t = compute([months[k]], { region: S.region, branch: S.branch, dayCap }).total; fee[m - 1] = t.fee; small[m - 1] = t.n ? Math.round(pct(t.small, t.n) * 10) / 10 : null; }
+      for (let m = 1; m <= 12; m++) { const k = year + '-' + String(m).padStart(2, '0'); if (!months[k]) continue; const t = compute([months[k]], { branch: S.branch, dayCap }).total; fee[m - 1] = t.fee; small[m - 1] = t.n ? Math.round(pct(t.small, t.n) * 10) / 10 : null; }
       return { fee, small };
     };
     const dmLY = dsrMonthly(yearSel - 1), dmCY = dsrMonthly(yearSel);
@@ -523,7 +519,6 @@
     parseWorkbook, saveMonths, loadAll, compute, resolveCode, tierOf, rateOf, enrich,
     render, TABLE, BRANCHES,
     setPeriod(v) { S.period = v; S.showAllA = S.showAllB = false; rerender(); },
-    setRegion(v) { S.region = v; rerender(); },
     setBranch(v) { S.branch = v; rerender(); },
     setEdgeBand(v) { S.edgeBand = v; S.showAllB = false; rerender(); },
     setSearch(v) { S.search = v; clearTimeout(S._t); S._t = setTimeout(rerender, 250); },
