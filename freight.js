@@ -624,6 +624,46 @@
       ${csMons.length > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">월별: ${csMons.map(k => `${MON_NM[+k.slice(5) - 1]} ₩${fmt(csByMon[k].save)}`).join(' · ')}</div>` : ''}
     </div>`;
 
+    // ── F. KCTC 계약 요율표 (권역 × 합산박스 구간) ──
+    //   요율은 freight_master.js(=Freight/build_master.py RATES 상수)가 원본. 표에는 선택 기간의 실제 사용량 병기.
+    const TL_ = M().tier_labels, TMAX = M().tier_max;
+    const useRT = {};                                   // {권역: [{n,box,fee} × 5]}
+    R.D.forEach(d => { const a = useRT[d.region] || (useRT[d.region] = TL_.map(() => ({ n: 0, box: 0, fee: 0 }))); const t = a[d.tier]; t.n++; t.box += d.box; t.fee += d.fee; });
+    const rtRow = rg => {
+      const rr = M().rates[rg], u = useRT[rg] || TL_.map(() => ({ n: 0, box: 0, fee: 0 }));
+      const tot = u.reduce((t, x) => ({ n: t.n + x.n, box: t.box + x.box, fee: t.fee + x.fee }), { n: 0, box: 0, fee: 0 });
+      const maxFee = Math.max(...u.map(x => x.fee));
+      const single = rg === '제주권';
+      const cells = TL_.map((lb, i) => {
+        if (single && i > 0) return '';                  // 제주권은 단일요율 → 셀 병합
+        const hot = !single && u[i].fee > 0 && u[i].fee === maxFee;
+        const uu = single ? tot : u[i];                  // 단일요율 권역은 구간 구분이 없으므로 전체 합을 표기
+        return `<td${single ? ' colspan="5"' : ''} style="${hot ? 'background:#eaf5ea;' : ''}text-align:right;">
+          <b>₩${fmt(rr[i])}</b>${single ? ' <span style="font-weight:400;color:var(--text-muted);font-size:10px;">(구간 무관 단일요율)</span>' : ''}
+          <div style="font-size:10px;color:var(--text-muted);font-weight:400;">${uu.n ? `${fmt(uu.n)}건 · ${fmt(uu.box)}박스 · ₩${fmt(uu.fee)}` : '-'}</div></td>`;
+      }).join('');
+      return `<tr><td><b>${rg}</b></td>${cells}<td style="text-align:right;">${fmt(tot.n)}</td><td style="text-align:right;">${fmt(tot.box)}</td><td style="text-align:right;"><b>₩${fmt(tot.fee)}</b></td><td style="text-align:right;">₩${fmt(tot.box ? tot.fee / tot.box : 0)}</td></tr>`;
+    };
+    // 구간 상향 시 박스당 절감폭(요율 차이) — B(걸침)의 근거
+    const stepRow = rg => {
+      const rr = M().rates[rg];
+      if (rg === '제주권') return `<tr><td><b>${rg}</b></td><td colspan="4" style="color:var(--text-muted);">단일요율 — 구간 상향 효과 없음</td></tr>`;
+      return `<tr><td><b>${rg}</b></td>${[1, 2, 3, 4].map(i => `<td style="text-align:right;">₩${fmt(rr[i - 1] - rr[i])}<div style="font-size:10px;color:var(--text-muted);">${TMAX[i - 1]}→${TMAX[i - 1] + 1}박스</div></td>`).join('')}</tr>`;
+    };
+    html += `<div class="chart-card full" style="margin-bottom:16px;">
+      <div class="chart-title">F. KCTC 계약 요율표 — 권역 × 합산박스 구간 (원/박스) <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">2025 = 2026 동결 · 구간은 <b>배송처(통합그룹)×배송일 합산박스</b>로 판정 · 아래 회색 수치는 ${esc(periodLabel)}${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} 실적</span></div>
+      <div class="table-wrap" style="margin:0 0 12px;">
+      <table><thead><tr><th style="text-align:left">권역</th>${TL_.map(l => `<th>${l}박스</th>`).join('')}<th>배송건</th><th>박스</th><th>배송료</th><th>박스당</th></tr></thead><tbody>
+        ${M().regions.map(rtRow).join('')}
+      </tbody></table></div>
+      <div class="chart-title" style="font-size:12px;">구간 상향 시 박스당 절감폭 <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:6px;">B(걸침 오더) 절감액 = 이 값 × 현재 박스</span></div>
+      <div class="table-wrap" style="margin:0;">
+      <table><thead><tr><th style="text-align:left">권역</th><th>05→06박스</th><th>10→11박스</th><th>20→21박스</th><th>60→61박스</th></tr></thead><tbody>
+        ${M().regions.map(stepRow).join('')}
+      </tbody></table></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">요율 변경 시 <code>Freight/build_master.py</code>의 <code>RATES</code> 상수만 수정 후 재생성하면 대시보드 전체(A~F)에 즉시 반영됩니다.</div>
+    </div>`;
+
     // ── 미매핑/데이터 정보 ──
     const um = {}; recs.forEach(r => { for (const c in r.unmapped) { const u = r.unmapped[c]; const a = um[c] || (um[c] = [u[0], 0, 0, 0, u[4]]); a[1] += u[1]; a[2] += u[2]; a[3] += u[3]; } });
     const umList = Object.entries(um).sort((a, b) => b[1][1] - a[1][1]);
