@@ -30,8 +30,8 @@
   const _OFF_TR_CH_MAP = { 'CVS':'CVS','CLSM':'SM','ALSM':'ALSM','Hyper':'HYPER','Cash&Carry':'C&C','Union Shop':'UNION' };
   const _OFF_TR_AC_MAP = {
     'GS25':'GS25','CU':'CU','KoreaSeven':'K7','Emart24':'E24','cspace':'Cspace',
-    'Emart':'E-mart','LotteMart':'Lottemart','Lottemart':'Lottemart','Megamart':'Megamart','Homeplus':'Homeplus','NewCore':'NewCore',
-    'Hanaromart':'Hanaro','Costco':'Costco','E-Traders':'E-Traders','Vic Market':'Vic Market',
+    'Emart':'E-mart','LotteMart':'Lottemart','Lottemart':'Lottemart','Megamart':'Megamart','Homeplus':'Homeplus','NewCore':'Kimsclub',
+    'Hanaromart':'Hanaro','Costco':'Costco','E-Traders':'E-Traders','Vic Market':'Lottemaxx',
     'GSSuper':'GS Super','LotteSuper':'Lotte Super','Everyday':'Everyday','NoBrand':'Nobrand',
     'Seowon':'Seowon','Korail':'Korail','Express':'Express',
     'ALSM CHN':'ALSM','ALSM Seoul':'ALSM','ALSM YN':'ALSM',
