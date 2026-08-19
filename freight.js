@@ -401,7 +401,7 @@
   // ═══════════════════════════════════════════════════════════════
   //  UI
   // ═══════════════════════════════════════════════════════════════
-  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, showAllCs: false, showAllRet: false, edgeAct: true, edgeBand: 'ALL', charts: {} };
+  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, showAllCs: false, showAllRet: false, edgeAct: true, edgeBand: 'ALL', edgeSort: 'save', charts: {} };
 
   function periodMonths(period, months) {
     // period: 'YYYY-MM' | 'YTD-YYYY'
@@ -578,6 +578,11 @@
     // 상세 테이블 데이터
     let edgesF = S.edgeAct ? actEdges : R.edges;
     if (S.edgeBand !== 'ALL') edgesF = edgesF.filter(e => e.band === S.edgeBand);
+    // 정렬: 절감액순(기본) / 날짜순(최근 → 과거) — 같은 값이면 절감액·일자 보조 정렬
+    const dnum = e => e.y * 10000 + e.m * 100 + e.day;
+    edgesF = edgesF.slice().sort(S.edgeSort === 'date'
+      ? (a, b) => dnum(b) - dnum(a) || b.save - a.save
+      : (a, b) => b.save - a.save || dnum(b) - dnum(a));
     const bShow = S.showAllB ? edgesF : edgesF.slice(0, 40);
     const repShow = S.showAllRep ? repeatList : repeatList.slice(0, 15);
     html += `<div class="chart-card full" style="margin-bottom:16px;">
@@ -608,6 +613,11 @@
         <button class="month-btn ${S.edgeAct ? 'off' : ''}" onclick="Freight.setEdgeAct(false)">전체 걸침</button>
         <span style="width:8px;"></span>
         ${bands.map(b => `<button class="month-btn ${S.edgeBand === b ? '' : 'off'}" onclick="Freight.setEdgeBand('${b}')">${b === 'ALL' ? '구간 전체' : b + '박스'}${b !== 'ALL' && R.edgeByBand[b] ? ` (${R.edgeByBand[b].n})` : ''}</button>`).join('')}
+        <span style="margin-left:auto;display:inline-flex;gap:6px;align-items:center;">
+          <span style="font-size:11px;font-weight:700;color:var(--text-muted);">정렬</span>
+          <button class="month-btn ${S.edgeSort === 'save' ? '' : 'off'}" onclick="Freight.setEdgeSort('save')">절감액순</button>
+          <button class="month-btn ${S.edgeSort === 'date' ? '' : 'off'}" onclick="Freight.setEdgeSort('date')">날짜순(최근)</button>
+        </span>
       </div>
       <div class="table-wrap" style="max-height:460px;">
       <table><thead><tr><th style="text-align:left">도매장</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>일자</th><th>현재 박스</th><th title="같은 날 같은 하차지에 반품이 함께 발생한 건 — 출고 구간에는 상계되지 않음">교환 동반</th><th>추가 필요</th><th>현재 요율</th><th>→ 변경 요율</th><th>박스당 절감</th><th>예상 절감액</th></tr></thead><tbody>
@@ -825,6 +835,7 @@
     setSr(v) { S.sr = v; S.showAllA = S.showAllB = S.showAllRep = false; rerender(); },
     setEdgeBand(v) { S.edgeBand = v; S.showAllB = false; rerender(); },
     setEdgeAct(v) { S.edgeAct = !!v; S.showAllB = false; rerender(); },
+    setEdgeSort(v) { S.edgeSort = v; S.showAllB = false; rerender(); },
     toggleAllRep() { S.showAllRep = !S.showAllRep; rerender(); },
     toggleAllCs() { S.showAllCs = !S.showAllCs; rerender(); },
     toggleAllRet() { S.showAllRet = !S.showAllRet; rerender(); },
