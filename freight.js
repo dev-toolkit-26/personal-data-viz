@@ -378,7 +378,11 @@
     D.forEach(d => { total.box += d.box; total.hl += d.hl; total.fee += d.fee; if (d.box <= 5) total.small++; total.tiers[d.tier]++; if (d.csave) { total.csave += d.csave; total.cn++; } });
     edges.forEach(e => total.edgeSave += e.save);
     // ── 반품 스트림 + 교환 추정(같은 하차지·같은 날 출고와 반품이 함께 발생 = 맞교환) ──
+    //   출고 구간에는 반품을 상계하지 않으므로(실제 청구와 동일), 교환이 섞인 건만 표시해 발주 판단 시 오해를 막는다.
     const shipKey = new Set(D.map(d => d.key + '|' + d.y + '-' + d.m + '-' + d.day));
+    const retBoxByKey = {};
+    RET.forEach(r => { const k = r.key + '|' + r.y + '-' + r.m + '-' + r.day; retBoxByKey[k] = (retBoxByKey[k] || 0) + r.box; });
+    D.forEach(d => { d.exRet = retBoxByKey[d.key + '|' + d.y + '-' + d.m + '-' + d.day] || 0; });
     total.retFee = 0; total.retN = RET.length; total.retBox = 0; total.retSmall = 0; total.retSmallFee = 0; total.exN = 0; total.exRetFee = 0;
     const retByKey = {};
     RET.forEach(r => {
@@ -465,9 +469,7 @@
     // ── 요약 카드 ──
     const T = R.total;
     html += `<div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);">
-      ${card('총 물류비 (출고+반품)', '₩' + fmt(T.gross), `출고 ₩${fmt(T.fee)} + 반품 ₩${fmt(T.retFee)}`, '')}
-      ${card('출고 배송료', '₩' + fmt(T.fee), `${fmt(T.n)}건 · ${fmt(T.box)}박스`, '')}
-      ${card('반품 물류비', '₩' + fmt(T.retFee), `${fmt(T.retN)}건 · ${fmt(T.retBox)}박스 · 총액의 ${fpct(pct(T.retFee, T.gross))}`, T.retFee && pct(T.retFee, T.gross) > 5 ? 'negative' : '')}
+      ${card('출고 배송료 (발주 기준)', '₩' + fmt(T.fee), `${fmt(T.n)}건 · ${fmt(T.box)}박스${T.retFee ? ` · 반품 ₩${fmt(T.retFee)} 별도(참고)` : ''}`, '')}
       ${card('박스당 단가', '₩' + fmt(T.box ? T.fee / T.box : 0), `HL당 ₩${fmt(T.hl ? T.fee / T.hl : 0)} · ${fmt1(T.hl)} HL`, '')}
       ${card('소량건(≤5박스) 비중', fpct(pct(T.small, T.n)), `${fmt(T.small)}건 / ${fmt(T.n)}건`, T.n && pct(T.small, T.n) > 30 ? 'negative' : 'positive')}
       ${card('구간 걸침 오더', fmt(T.edge) + '건', `전량 상향 시 절감 ₩${fmt(T.edgeSave)}`, T.edge ? 'neutral' : 'positive')}
@@ -517,9 +519,7 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
         <div>
           <div class="table-wrap" style="margin:0 0 8px;"><table><thead><tr><th style="text-align:left">지표</th><th>${yearSel - 1} LY</th><th>${yearSel} CY</th><th>YoY</th></tr></thead><tbody>
-            ${rowD('총 물류비 (출고+반품)', TL ? TL.gross : null, T.gross, won, true)}
-            ${rowD('　출고 배송료', TL ? TL.fee : null, T.fee, won, true)}
-            ${rowD('　반품 물류비', TL ? TL.retFee : null, T.retFee, won, true)}
+            ${rowD('출고 배송료 (발주 기준)', TL ? TL.fee : null, T.fee, won, true)}
             ${rowD('배송건', TL ? TL.n : null, T.n, fmt, true)}
             ${rowD('박스', TL ? TL.box : null, T.box, fmt, false)}
             ${rowD('HL', TL ? TL.hl : null, T.hl, fmt1, false)}
@@ -531,6 +531,7 @@
             ${rowD('걸침 방치 절감여지(₩)', TL ? TL.edgeSave : null, T.edgeSave, won, true)}
             ${rowD('주4회+ 배송 도매장', TL ? TL.hfCnt : null, T.hfCnt, fmt, true)}
             ${rowD('동일 하차장 통합 절감', TL ? TL.csave : null, T.csave, won, false)}
+            ${rowD('반품 물류비 (참고·통제 불가)', TL ? TL.retFee : null, T.retFee, won, true)}
           </tbody></table></div>
           <div style="font-size:11px;color:var(--text-muted);line-height:1.6;">
             · 모든 값은 DSR(On Team만, ALSM·제외코드 제외)에 KCTC 요율표를 적용한 <b>추정 배송료</b>. LY 보유월: ${dsrLyTxt}${missingLy.length && lyKeys.length ? ` · <b style="color:#b45309">${missingLy.map(m => MON_NM[m - 1]).join('·')} LY 없음</b>` : ''}<br>
@@ -609,8 +610,8 @@
         ${bands.map(b => `<button class="month-btn ${S.edgeBand === b ? '' : 'off'}" onclick="Freight.setEdgeBand('${b}')">${b === 'ALL' ? '구간 전체' : b + '박스'}${b !== 'ALL' && R.edgeByBand[b] ? ` (${R.edgeByBand[b].n})` : ''}</button>`).join('')}
       </div>
       <div class="table-wrap" style="max-height:460px;">
-      <table><thead><tr><th style="text-align:left">도매장</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>일자</th><th>현재 박스</th><th>추가 필요</th><th>현재 요율</th><th>→ 변경 요율</th><th>박스당 절감</th><th>예상 절감액</th></tr></thead><tbody>
-      ${bShow.map(e => `<tr><td title="${esc(e.key)}">${esc(e.name)}</td><td title="${esc(e.sr)}">${esc(e.srName)}</td><td>${e.branch}</td><td>${e.region}</td><td>${e.y}-${String(e.m).padStart(2,'0')}-${String(e.day).padStart(2,'0')}</td><td><b>${e.box}</b></td><td class="td-neu">+${e.need} → ${e.target}</td><td>₩${fmt(e.curRate)}</td><td>₩${fmt(e.nextRate)}</td><td>₩${fmt(e.savePerBox)}</td><td class="td-pos">₩${fmt(e.save)}</td></tr>`).join('') || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted)">해당 조건의 걸침 오더 없음</td></tr>'}
+      <table><thead><tr><th style="text-align:left">도매장</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>일자</th><th>현재 박스</th><th title="같은 날 같은 하차지에 반품이 함께 발생한 건 — 출고 구간에는 상계되지 않음">교환 동반</th><th>추가 필요</th><th>현재 요율</th><th>→ 변경 요율</th><th>박스당 절감</th><th>예상 절감액</th></tr></thead><tbody>
+      ${bShow.map(e => `<tr><td title="${esc(e.key)}">${esc(e.name)}</td><td title="${esc(e.sr)}">${esc(e.srName)}</td><td>${e.branch}</td><td>${e.region}</td><td>${e.y}-${String(e.m).padStart(2,'0')}-${String(e.day).padStart(2,'0')}</td><td><b>${e.box}</b></td><td>${e.exRet ? `<span class="td-neu" title="반품 ${e.exRet}박스 동반(맞교환 추정)">교환 ${e.exRet}</span>` : '-'}</td><td class="td-neu">+${e.need} → ${e.target}</td><td>₩${fmt(e.curRate)}</td><td>₩${fmt(e.nextRate)}</td><td>₩${fmt(e.savePerBox)}</td><td class="td-pos">₩${fmt(e.save)}</td></tr>`).join('') || '<tr><td colspan="12" style="text-align:center;color:var(--text-muted)">해당 조건의 걸침 오더 없음</td></tr>'}
       </tbody></table></div>
       ${edgesF.length > 40 ? `<div style="text-align:right;margin-top:6px;"><button class="month-btn off" onclick="Freight.toggleAllB()">${S.showAllB ? '상위 40건만' : `전체 ${edgesF.length}건 보기`}</button></div>` : ''}
     </div>`;
@@ -639,9 +640,9 @@
     html += `<div class="chart-card full" style="margin-bottom:16px;">
       <div class="chart-title">C. 지점별 배송 빈도 — ${esc(periodLabel)} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">도매장×ISO주 배송일수 · 주 4회 이상만 협의 대상(주 3회는 정상)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div class="table-wrap" style="margin:0;"><table><thead><tr><th style="text-align:left">${cBySr ? '담당 SR' : '지점'}</th><th>도매장 수</th><th>배송건</th><th>박스</th><th>출고 배송료</th><th>반품</th><th>총 물류비</th><th>박스당</th><th>소량건 비중</th><th>주4회+</th></tr></thead><tbody>
-          ${cKeys.map(b => { const a = cAgg[b]; return `<tr><td><b>${esc(cLabel(b))}</b></td><td>${a.nKeys}</td><td>${fmt(a.n)}</td><td>${fmt(a.box)}</td><td>₩${fmt(a.fee)}</td><td class="${a.retFee ? 'td-neg' : ''}">₩${fmt(a.retFee)}</td><td><b>₩${fmt(a.gross)}</b></td><td>₩${fmt(a.box ? a.fee / a.box : 0)}</td><td class="${pct(a.small, a.n) > 30 ? 'td-neg' : ''}">${fpct(pct(a.small, a.n))}</td><td class="${a.hfCnt ? 'td-neu' : ''}">${a.hfCnt}</td></tr>`; }).join('')}
-          <tr style="font-weight:700;background:#e0ebe0;"><td>Total</td><td>${T.nKeys}</td><td>${fmt(T.n)}</td><td>${fmt(T.box)}</td><td>₩${fmt(T.fee)}</td><td>₩${fmt(T.retFee)}</td><td>₩${fmt(T.gross)}</td><td>₩${fmt(T.box ? T.fee / T.box : 0)}</td><td>${fpct(pct(T.small, T.n))}</td><td>${T.hfCnt}</td></tr>
+        <div class="table-wrap" style="margin:0;"><table><thead><tr><th style="text-align:left">${cBySr ? '담당 SR' : '지점'}</th><th>도매장 수</th><th>배송건</th><th>박스</th><th>출고 배송료</th><th>박스당</th><th>소량건 비중</th><th>걸침건</th><th>주4회+ 도매장</th></tr></thead><tbody>
+          ${cKeys.map(b => { const a = cAgg[b]; return `<tr><td><b>${esc(cLabel(b))}</b></td><td>${a.nKeys}</td><td>${fmt(a.n)}</td><td>${fmt(a.box)}</td><td>₩${fmt(a.fee)}</td><td>₩${fmt(a.box ? a.fee / a.box : 0)}</td><td class="${pct(a.small, a.n) > 30 ? 'td-neg' : ''}">${fpct(pct(a.small, a.n))}</td><td>${a.edge}</td><td class="${a.hfCnt ? 'td-neu' : ''}">${a.hfCnt}</td></tr>`; }).join('')}
+          <tr style="font-weight:700;background:#e0ebe0;"><td>Total</td><td>${T.nKeys}</td><td>${fmt(T.n)}</td><td>${fmt(T.box)}</td><td>₩${fmt(T.fee)}</td><td>₩${fmt(T.box ? T.fee / T.box : 0)}</td><td>${fpct(pct(T.small, T.n))}</td><td>${T.edge}</td><td>${T.hfCnt}</td></tr>
         </tbody></table></div>
         <div class="table-wrap" style="margin:0;max-height:360px;"><table><thead><tr><th style="text-align:left">주4회+ 도매장</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>해당 주 수</th><th>최다 일수/주</th><th>박스</th></tr></thead><tbody>
           ${R.highFreqList.slice(0, 60).map(h => `<tr><td title="${esc(h.key)}">${esc(h.name)}</td><td title="${esc(h.sr)}">${esc(h.srName)}</td><td>${h.branch}</td><td>${h.region}</td><td class="td-neu">${h.weeks}주</td><td>${h.maxDays}일</td><td>${fmt(h.box)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">주 4회 이상 배송 도매장 없음</td></tr>'}
@@ -679,46 +680,38 @@
       ${csMons.length > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">월별: ${csMons.map(k => `${MON_NM[+k.slice(5) - 1]} ₩${fmt(csByMon[k].save)}`).join(' · ')}</div>` : ''}
     </div>`;
 
-    // ── G. 반품·교환 물류비 ──
-    //   transport_logic.js 규칙: 반품은 출고에 상계되지 않고 [통합그룹×일] 자체 합산 박스로 별도 과금.
-    //   DSR에는 유형 컬럼이 없어 음수 Qty를 반품으로 본다(회송은 DSR로 식별 불가 — 마감내역서 필요).
-    //   교환(맞교환) 추정 = 같은 하차지·같은 날 출고와 반품이 동시에 발생한 건.
-    const retShow = S.showAllRet ? R.retList : R.retList.slice(0, 15);
-    const exList = R.RET.filter(r => r.withShip).sort((a, b) => b.fee - a.fee);
-    const soloEx = exList.filter(r => {                                  // 단독 교환 추정: 그날 출고 합산이 5박스 이하
-      const d = R.D.find(x => x.key === r.key && x.y === r.y && x.m === r.m && x.day === r.day);
-      return d && d.box <= 5;
-    });
-    const soloExSave = soloEx.reduce((t, r) => {
-      const d = R.D.find(x => x.key === r.key && x.y === r.y && x.m === r.m && x.day === r.day);
-      const modeRate = rateOf(r.region, 30) || 0;                        // 정기 배송일(21~60 구간) 합류 가정
+    // ── G. 교환 혼입 점검 (발주 판단용) ──
+    //   목적: 오더 수량과 교환(맞교환) 물량이 섞여 구간이 잘못 산출되는 것을 막는 것.
+    //   실제 청구와 동일하게 반품은 출고에 상계하지 않으므로(transport_logic.js 규칙 1·3),
+    //   교환이 섞인 배송건은 "순수 발주량"과 다르게 보일 수 있어 여기서 따로 짚어준다.
+    //   반품 물류비 자체는 통제 불가 항목이라 절감 대상이 아니라 참고로만 표기한다.
+    const exShip = R.D.filter(d => d.exRet > 0).sort((a, b) => b.exRet - a.exRet);
+    const exShow = S.showAllRet ? exShip : exShip.slice(0, 15);
+    const soloEx = exShip.filter(d => d.box <= 5);          // 단독 교환출고 추정(그날 출고 합산 ≤5박스)
+    const soloExSave = soloEx.reduce((t, d) => {
+      const modeRate = rateOf(d.region, 30) || 0;           // 정기 배송일(21~60 구간) 합류 가정
       return t + Math.max(0, (d.rate - modeRate) * d.box);
     }, 0);
-    const retMon = {};
-    R.RET.forEach(r => { const k = r.y + '-' + String(r.m).padStart(2, '0'); retMon[k] = (retMon[k] || 0) + r.fee; });
-    const retMons = Object.keys(retMon).sort();
+    const exEdge = exShip.filter(d => edgeOf(d));           // 교환이 섞인 걸침 오더 — 판단 주의 대상
     html += `<div class="chart-card full" style="margin-bottom:16px;">
-      <div class="chart-title">G. 반품·교환 물류비 — ${esc(periodLabel)}${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">반품은 출고에 상계되지 않고 별도 과금(실제 청구 기준) · 교환출고는 출고에 자동 합산(이중계산 없음)</span></div>
-      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px;">
-        ${card('반품 물류비', '₩' + fmt(T.retFee), `${fmt(T.retN)}건 · ${fmt(T.retBox)}박스 · 총 물류비의 ${fpct(pct(T.retFee, T.gross))}`, T.retFee ? 'negative' : '')}
-        ${card('소량 반품(≤5박스)', fpct(pct(T.retSmallFee, T.retFee)), `${fmt(T.retSmall)}건 · ₩${fmt(T.retSmallFee)} — 회수 합류 협의 대상`, T.retFee && pct(T.retSmallFee, T.retFee) > 50 ? 'neutral' : '')}
-        ${card('교환(맞교환) 추정', fmt(T.exN) + '건', `반품 ₩${fmt(T.exRetFee)} 동반 · 같은 날 출고와 동시 발생`, '')}
-        ${card('단독 교환 출고', fmt(soloEx.length) + '건', soloEx.length ? `정기 배송일 합류 시 ₩${fmt(soloExSave)} 절감 여지` : '해당 없음', soloEx.length ? 'neutral' : 'positive')}
-      </div>
+      <div class="chart-title">G. 교환 혼입 점검 — ${esc(periodLabel)}${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">같은 날 같은 하차지에 출고와 반품이 함께 발생한 건 — 발주량 판단 시 참고</span></div>
       <div style="font-size:11px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-bottom:10px;">
-        ※ 교환 출고는 <b>정기 배송일 합류를 원칙</b>으로 (품질 이슈 등 긴급 건 제외). 단독 출고 시 소량 구간(01~05) 요율이 적용돼 박스당 단가가 크게 오릅니다.
-        ${T.retFee ? '' : ' · 이 기간에는 반품 데이터가 없습니다(해당 월 재업로드 필요).'}
+        실제 청구는 <b>출고와 반품을 각각 별도 구간으로 과금</b>합니다(상계 없음). 따라서 아래 건들의 <b>출고 박스는 교환분이 포함된 실제 출고량</b>이며, 구간·요율도 그 기준으로 산출됩니다.
+        순수 신규 발주량으로 보려면 교환 박스를 빼고 보세요 — <b>MOQ 협의 시 이 건들은 교환 여부를 확인한 뒤 판단</b>하시면 됩니다.
+        ${T.retFee ? `<br>참고: 이 기간 반품 물류비 ₩${fmt(T.retFee)} (${fmt(T.retN)}건 · ${fmt(T.retBox)}박스) — 통제 불가 항목이라 절감 대상에서 제외.` : '<br>이 기간에는 반품 데이터가 없습니다(해당 월 재업로드 시 반영).'}
+      </div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:10px;">
+        ${card('교환 혼입 배송건', fmt(exShip.length) + '건', `전체 출고 ${fmt(T.n)}건의 ${fpct(pct(exShip.length, T.n))} · 교환 ${fmt(exShip.reduce((t, d) => t + d.exRet, 0))}박스`, '')}
+        ${card('교환 혼입 · 걸침 오더', fmt(exEdge.length) + '건', exEdge.length ? 'MOQ 협의 전 교환 여부 확인 필요' : '해당 없음', exEdge.length ? 'neutral' : 'positive')}
+        ${card('단독 교환 출고(≤5박스)', fmt(soloEx.length) + '건', soloEx.length ? `정기 배송일 합류 시 ₩${fmt(soloExSave)} 절감 여지` : '해당 없음', soloEx.length ? 'neutral' : 'positive')}
       </div>
       <div class="table-wrap" style="margin:0;max-height:380px;">
-      <table><thead><tr><th style="text-align:left">반품 발생 도매장</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>반품 건수</th><th>반품 박스</th><th>반품 물류비</th><th>소량(≤5)</th><th>교환 추정</th><th>출고 배송료</th></tr></thead><tbody>
-      ${retShow.map(a => { const sh = R.codes.find(c => c.key === a.key);
-        return `<tr><td title="${esc(a.key)}">${esc(a.name)}</td><td title="${esc(a.sr)}">${esc(a.srName)}</td><td>${a.branch}</td><td>${a.region}</td><td>${fmt(a.n)}</td><td>${fmt(a.box)}</td><td class="td-neg"><b>₩${fmt(a.fee)}</b></td><td class="${a.small ? 'td-neu' : ''}">${a.small}</td><td>${a.ex}</td><td>₩${fmt(sh ? sh.fee : 0)}</td></tr>`; }).join('')
-        || '<tr><td colspan="10" style="text-align:center;color:var(--text-muted)">반품 없음</td></tr>'}
-      ${R.retList.length ? `<tr style="font-weight:700;background:#e0ebe0;"><td>Total</td><td colspan="3"></td><td>${fmt(T.retN)}</td><td>${fmt(T.retBox)}</td><td>₩${fmt(T.retFee)}</td><td>${fmt(T.retSmall)}</td><td>${fmt(T.exN)}</td><td>₩${fmt(T.fee)}</td></tr>` : ''}
+      <table><thead><tr><th style="text-align:left">도매장</th><th style="text-align:left">담당 SR</th><th style="text-align:left">지점</th><th>권역</th><th>일자</th><th>출고 박스(청구 기준)</th><th>교환 박스</th><th>순수 발주 추정</th><th>적용 구간</th><th>요율</th><th>출고 배송료</th></tr></thead><tbody>
+      ${exShow.map(d => `<tr><td title="${esc(d.key)}">${esc(d.name)}</td><td title="${esc(d.sr)}">${esc(d.srName)}</td><td>${d.branch}</td><td>${d.region}</td><td>${d.y}-${String(d.m).padStart(2,'0')}-${String(d.day).padStart(2,'0')}</td><td><b>${fmt(d.box)}</b></td><td class="td-neu">${fmt(d.exRet)}</td><td>${fmt(Math.max(0, d.box - d.exRet))}</td><td>${M().tier_labels[d.tier]}</td><td>₩${fmt(d.rate)}</td><td>₩${fmt(d.fee)}</td></tr>`).join('')
+        || '<tr><td colspan="11" style="text-align:center;color:var(--text-muted)">교환이 섞인 배송건 없음</td></tr>'}
       </tbody></table></div>
-      ${R.retList.length > 15 ? `<div style="text-align:right;margin-top:6px;"><button class="month-btn off" onclick="Freight.toggleAllRet()">${S.showAllRet ? '상위 15곳만' : `전체 ${R.retList.length}곳 보기`}</button></div>` : ''}
-      ${retMons.length > 1 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:8px;">월별 반품 물류비: ${retMons.map(k => `${MON_NM[+k.slice(5) - 1]} ₩${fmt(retMon[k])}`).join(' · ')}</div>` : ''}
-      <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">회송(반송) 유형은 DSR에 구분이 없어 집계에서 빠져 있습니다 — 포함하려면 물류마감내역서(유형 컬럼 포함) 업로드가 필요합니다.</div>
+      ${exShip.length > 15 ? `<div style="text-align:right;margin-top:6px;"><button class="month-btn off" onclick="Freight.toggleAllRet()">${S.showAllRet ? '상위 15건만' : `전체 ${exShip.length}건 보기`}</button></div>` : ''}
+      <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">교환 출고는 <b>정기 배송일 합류를 원칙</b>으로 (품질 이슈 등 긴급 건 제외) — 단독 출고 시 소량 구간(01~05) 요율이 적용돼 박스당 단가가 크게 오릅니다. · 회송(반송)은 집계 대상이 아닙니다.</div>
     </div>`;
 
     // ── F. KCTC 계약 요율표 (권역 × 합산박스 구간) ──
