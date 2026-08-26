@@ -243,10 +243,11 @@
     if (!yms.length) return { saved: 0, skipped: [] };
     const skipped = [];
     if (protect) {
-      const { data: ex, error: exErr } = await sb.from(TABLE).select('id, data->meta').in('id', yms);
+      const { data: ex, error: exErr } = await sb.from(TABLE).select('id, data->meta, data->locked').in('id', yms);
       if (exErr) _throwSaveErr(exErr);
       const fill = mt => mt ? (mt.nDays != null ? mt.nDays : (mt.maxDay || 0)) : 0;
       (ex || []).forEach(r => {
+        if (r.locked) { skipped.push(`${r.id}(🔒 마감 잠금 — Freight 탭 하단 칩 클릭으로 해제)`); return; }
         const oldN = fill(r.meta), newN = fill(months[r.id].meta);
         if (newN < oldN) skipped.push(`${r.id}(저장 ${oldN}일 > 파일 ${newN}일)`);
       });
@@ -841,7 +842,7 @@
         ${umList.map(([c, u]) => `<tr><td>${esc(c)}</td><td>${esc(u[0])}</td><td>${esc(u[4])}</td><td>${u[3]}</td><td>${fmt(u[1])}</td><td>${fmt1(u[2])}</td></tr>`).join('')}</tbody></table></div>
         <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">→ 코드권역매핑 CSV에 추가 후 freight_master.js 재생성하면 다음 업로드부터 집계됩니다.</div>` : '<div style="font-size:12px;color:var(--text-muted);">모든 배송처 코드가 권역에 매핑되었습니다.</div>'}
       <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">담당 SR: DSR <code>Customer.SR</code> 기준(최신 파일 기준으로 과거 월도 소급) · 매핑 기준일 <b>${_srAsOf || '미설정 — SR 컬럼이 있는 DSR raw를 업로드하세요'}</b> · 배송처 ${fmt(Object.keys(_srMap || {}).length)}곳 배정${(() => { const u = Rb.bySr[SR_NONE]; return u ? ` · <b style="color:#b45309">미지정 ${fmt(u.nKeys)}곳 / ₩${fmt(u.fee)} (${fpct(pct(u.fee, Rb.total.fee))})</b> — 해당 기간에만 거래한 코드는 최신 DSR에 없어 미지정. 주간 DSR raw를 업로드할수록 누적 배정됩니다` : ''; })()}${(() => { const un = [...new Set(srList.filter(x => x !== SR_NONE && !(M().sr_names && M().sr_names[x])))]; return un.length ? ` · <b style="color:#b45309">이름 미등록 ${un.length}명(${un.join(', ')}) → Freight/sr_names.csv 보강</b>` : ''; })()}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">저장된 월: ${keys.map(k => `<span style="display:inline-block;padding:1px 6px;margin:1px;border:1px solid var(--border);border-radius:8px;">${k}${months[k].meta ? ` (~${months[k].meta.maxDay}일·${months[k].meta.nDays != null ? months[k].meta.nDays + '일치' : ''})` : ''}</span>`).join('')}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">저장된 월 <span style="font-weight:400">(칩 클릭 = 마감 잠금/해제 · 🔒 잠긴 달은 업로드가 덮어쓰지 않음)</span>: ${keys.map(k => `<span onclick="Freight.toggleLock('${k}')" title="클릭하여 마감 잠금/해제" style="display:inline-block;padding:1px 6px;margin:1px;border:1px solid ${months[k].locked ? 'var(--primary)' : 'var(--border)'};border-radius:8px;cursor:pointer;${months[k].locked ? 'background:#eaf5ea;font-weight:600;' : ''}">${months[k].locked ? '🔒 ' : ''}${k}${months[k].meta ? ` (~${months[k].meta.maxDay}일·${months[k].meta.nDays != null ? months[k].meta.nDays + '일치' : ''})` : ''}</span>`).join('')}</div>
     </div>`;
 
     root.innerHTML = html;
@@ -911,6 +912,17 @@
     toggleAllA() { S.showAllA = !S.showAllA; rerender(); },
     toggleAllB() { S.showAllB = !S.showAllB; rerender(); },
     invalidate() { _cache = null; S.period = null; S.showAllA = S.showAllB = false; },   // 데이터 갱신 후 다음 렌더는 최신 월로
+    // 마감 잠금 토글 — 잠긴 달은 saveMonths가 건드리지 않음(해제 후 업로드하면 잠금도 풀린 상태로 저장됨 → 재잠금 필요)
+    async toggleLock(ym) {
+      const sb = S.sb || global._supabase; if (!sb) return;
+      const { data, error } = await sb.from(TABLE).select('data').eq('id', ym).single();
+      if (error || !data) { console.warn('toggleLock 실패:', error); return; }
+      const d = data.data || {}; d.locked = !d.locked;
+      const { error: upErr } = await sb.from(TABLE).upsert({ id: ym, data: d, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+      if (upErr) { console.warn('toggleLock 저장 실패:', upErr); return; }
+      if (_cache && _cache[ym]) _cache[ym].locked = d.locked;
+      rerender();
+    },
     _state: S,
   };
   global.Freight = api;
