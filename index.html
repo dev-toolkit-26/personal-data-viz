@@ -2626,11 +2626,11 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <div class="chart-title" style="font-size:16px;margin-bottom:20px;">Data Update</div>
 
 
-      <!-- FCST -->
+      <div style="font-weight:800;font-size:12px;color:var(--text-muted);letter-spacing:.06em;margin:0 0 10px;">① 주간 정기 — 파일 하나로 전 대시보드 반영</div>
       <!-- 통합 DSR (On + Off 동시 반영) -->
       <div style="margin-bottom:28px;padding:14px;border:2px solid var(--primary);border-radius:8px;background:rgba(32,85,39,0.04);">
         <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔗 통합 DSR (On + Off 동시 반영)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Team(On/Off) 구분된 원본 업로드 → On(지역)·Off(채널/거래처) 스냅샷 모두 갱신. <b>최신월만 담긴 작은 파일도 가능</b> — 파일에 포함된 월만 갱신하고 과거분은 보존(증분). 예: DSR_Raw_YYYYMM-YYYYMM.xlsx</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Team(On/Off) 구분된 원본 업로드 → On(지역)·Off(채널/거래처)·<b>운송비(Freight) 배송건·담당 SR</b>까지 한 번에 갱신. 🔒 잠긴 마감월은 건드리지 않음. <b>최신월만 담긴 작은 파일도 가능</b> — 파일에 포함된 월만 갱신하고 과거분은 보존(증분). 예: DSR_Raw_YYYYMM-YYYYMM.xlsx</div>
         <label class="upload-file-btn" id="cdsr-btn-label" style="display:inline-flex;" title="통합 DSR 원본 (Team 구분)">
           Select File
           <input type="file" id="cdsr-file-input" accept=".xlsx" style="display:none" onchange="document.getElementById('cdsr-filename').textContent=this.files[0]?this.files[0].name:''">
@@ -2642,51 +2642,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         </div>
       </div>
 
-      <!-- SKU NSV 백필 (25Y+26Y 전월, 지점분석 탭용) -->
-      <div style="margin-bottom:28px;padding:14px;border:2px dashed var(--primary);border-radius:8px;background:rgba(32,85,39,0.03);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">💰 SKU NSV 백필 (지점분석 탭 · 1회성)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">NSV 컬럼이 있는 <b>전체 히스토리 DSR</b>(예: <code>DSR_Raw_202501-202606.xlsx</code>)을 업로드 → On만 필터해 <b>SKU×지점×월 NSV(MKRW)</b>를 25Y·26Y 전월 계산. 지점분석 탭의 매출(NSV) 소스. 물량(HL) 데이터는 건드리지 않음. 이후 최신월은 통합 DSR 업로드로 자동 갱신.</div>
-        <label class="upload-file-btn" id="nsvbf-btn-label" style="display:inline-flex;" title="NSV 포함 전체 히스토리 DSR">
-          Select File
-          <input type="file" id="nsvbf-file-input" accept=".xlsx" style="display:none" onchange="document.getElementById('nsvbf-filename').textContent=this.files[0]?this.files[0].name:''">
-        </label>
-        <span id="nsvbf-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
-          <button class="upload-apply-btn" id="nsvbf-apply-btn" onclick="handleNsvBackfill(document.getElementById('nsvbf-file-input'))">NSV 백필 실행</button>
-          <span id="nsv-backfill-status" style="font-size:12px;"></span>
-        </div>
-      </div>
-
-      <!-- 운송비(Freight) DSR 백필 — Freight 탭용 -->
-      <div style="margin-bottom:28px;padding:14px;border:2px dashed #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.03);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🚚 운송비(Freight) DSR 백필 (Freight 탭 · 여러 월·여러 파일 한 번에)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;"><b>배송처코드(Code)</b>가 있는 DSR raw를 <b>여러 개 동시 선택</b> 가능(예: <code>DSR_Raw_202501-202606.xlsx</code> + <code>DSR_Raw_2026_TTL.xlsx</code>) → Team=On만(ALSM·제외코드 제외) <b>배송처(통합그룹)×배송일</b> 배송건으로 합산해 파일에 포함된 <b>모든 월</b>을 월 단위로 저장. 이미 저장된 월보다 덜 채워진(일수가 적은) 파일은 그 월을 덮어쓰지 않음. 이후 최신월은 통합 DSR / DSR Raw 업로드 시 자동 갱신. 박스=Qty(UnitsSold). LY 비교는 2025 백필분과 동일 소스로 비교. <b>담당 SR</b>은 <code>Customer.SR</code> 컬럼이 있는 파일(주간 DSR raw)에서 자동 갱신되며 가장 최신 기준으로 과거 월까지 소급 적용됩니다.</div>
-        <label class="upload-file-btn" id="frbf-btn-label" style="display:inline-flex;" title="배송처코드 포함 DSR raw (다중 선택 가능)">
-          Select File(s)
-          <input type="file" id="frbf-file-input" accept=".xlsx,.xlsb,.xls" multiple style="display:none" onchange="document.getElementById('frbf-filename').textContent=Array.from(this.files).map(f=>f.name).join(' + ')">
-        </label>
-        <span id="frbf-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
-          <button class="upload-apply-btn" id="frbf-apply-btn" onclick="handleFreightBackfill(document.getElementById('frbf-file-input'))">운송비 백필 실행</button>
-          <span id="freight-backfill-status" style="font-size:12px;"></span>
-        </div>
-      </div>
-
-      <!-- 통합 RoFo (P0X Volume — On+Off) -->
-      <div style="margin-bottom:28px;padding:14px;border:2px solid #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.05);">
-        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔗 통합 RoFo (P0X Volume — On+Off)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">"01. 2026 Volume_P0X.xlsx" 업로드 → 2026RF0X 시트(자동 인식)에서 On 전체·Off 채널별 RoFo(HL) 갱신. 매월 최신 P0X로 교체. (Off는 채널 단위, 6월까지는 actual)</div>
-        <label class="upload-file-btn" id="crofo-btn-label" style="display:inline-flex;" title="01. 2026 Volume_P0X.xlsx">
-          Select File
-          <input type="file" id="crofo-file-input" accept=".xlsx" style="display:none" onchange="document.getElementById('crofo-filename').textContent=this.files[0]?this.files[0].name:''">
-        </label>
-        <span id="crofo-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
-          <button class="upload-apply-btn" id="crofo-apply-btn" onclick="handleCombinedRofoUpload(document.getElementById('crofo-file-input'))">RoFo 적용 (On+Off)</button>
-          <span id="combined-rofo-status" style="font-size:12px;"></span>
-        </div>
-      </div>
-
+      <div style="font-weight:800;font-size:12px;color:var(--text-muted);letter-spacing:.06em;margin:32px 0 10px;padding-top:20px;border-top:1px solid var(--border);">② 개별 파일 — 선택한 것만 아래 Apply 한 번으로 일괄 반영</div>
       <div style="margin-bottom:28px;">
         <div style="font-weight:700;font-size:14px;margin-bottom:6px;">FCST Excel</div>
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">File format: 26Y_On-T_Weekly_FCST_W##_MMDD.xlsx</div>
@@ -2695,17 +2651,6 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
           <input type="file" id="fcst-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'fcst-btn-label','FCST')">
         </label>
         <span id="fcst-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
-      </div>
-
-      <!-- DSR -->
-      <div style="margin-bottom:28px;">
-        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">DSR Raw Excel</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Filename: 26Y DSR raw.xlsx</div>
-        <label class="upload-file-btn" id="dsr-btn-label" style="display:inline-flex;" title="26Y DSR raw.xlsx">
-          Select File
-          <input type="file" id="dsr-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'dsr-btn-label','DSR')">
-        </label>
-        <span id="dsr-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
       </div>
 
       <!-- Revenue -->
@@ -2748,6 +2693,22 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         <span id="upload-status" style="font-size:12px;"></span>
       </div>
 
+      <div style="font-weight:800;font-size:12px;color:var(--text-muted);letter-spacing:.06em;margin:32px 0 10px;padding-top:20px;border-top:1px solid var(--border);">③ 월간 · 연간</div>
+      <!-- 통합 RoFo (P0X Volume — On+Off) -->
+      <div style="margin-bottom:28px;padding:14px;border:2px solid #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.05);">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🔗 통합 RoFo (P0X Volume — On+Off)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">"01. 2026 Volume_P0X.xlsx" 업로드 → 2026RF0X 시트(자동 인식)에서 On 전체·Off 채널별 RoFo(HL) 갱신. 매월 최신 P0X로 교체. (Off는 채널 단위, 6월까지는 actual)</div>
+        <label class="upload-file-btn" id="crofo-btn-label" style="display:inline-flex;" title="01. 2026 Volume_P0X.xlsx">
+          Select File
+          <input type="file" id="crofo-file-input" accept=".xlsx" style="display:none" onchange="document.getElementById('crofo-filename').textContent=this.files[0]?this.files[0].name:''">
+        </label>
+        <span id="crofo-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
+          <button class="upload-apply-btn" id="crofo-apply-btn" onclick="handleCombinedRofoUpload(document.getElementById('crofo-file-input'))">RoFo 적용 (On+Off)</button>
+          <span id="combined-rofo-status" style="font-size:12px;"></span>
+        </div>
+      </div>
+
       <!-- AP File (Annual Plan) -->
       <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border);">
         <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">Annual Plan (AP) Update</div>
@@ -2767,24 +2728,41 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         </div>
       </div>
 
-      <!-- RoFo File (Rolling Forecast) -->
-      <div style="margin-top:32px;padding-top:20px;border-top:1px solid var(--border);">
-        <div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">RoFo (Rolling Forecast) Update</div>
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">매월 RoFo Excel 교체 시 사용. 파일명에 포함된 월부터 12월까지 적용 (이전 월은 actual 유지).</div>
-        <div style="margin-bottom:14px;">
-          <div style="font-weight:700;font-size:14px;margin-bottom:6px;">RoFo Excel</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Filename: 26Y Rofo_[월].xlsx (예: 26Y Rofo_May.xlsx → 5-12월 적용)</div>
-          <label class="upload-file-btn" id="rofo-btn-label" style="display:inline-flex;" title="26Y Rofo_[월].xlsx">
-            Select File
-            <input type="file" id="rofo-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'rofo-btn-label','RoFo')">
-          </label>
-          <span id="rofo-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <button class="upload-apply-btn" id="rofo-apply-btn" onclick="handleRofoUpload()">Apply RoFo</button>
-          <span id="rofo-upload-status" style="font-size:12px;"></span>
+      <!-- 백필 · 1회성 도구 (평소 접힘 — 이미 적재 완료) -->
+      <details style="margin-top:32px;border-top:1px solid var(--border);padding-top:16px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:13px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;">④ 백필 · 1회성 도구 — SKU NSV / 운송비 히스토리 (적재 완료 · 필요 시에만 열기)</summary>
+        <div style="margin-top:14px;">
+      <!-- SKU NSV 백필 (25Y+26Y 전월, 지점분석 탭용) -->
+      <div style="margin-bottom:28px;padding:14px;border:2px dashed var(--primary);border-radius:8px;background:rgba(32,85,39,0.03);">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">💰 SKU NSV 백필 (지점분석 탭 · 1회성)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">NSV 컬럼이 있는 <b>전체 히스토리 DSR</b>(예: <code>DSR_Raw_202501-202606.xlsx</code>)을 업로드 → On만 필터해 <b>SKU×지점×월 NSV(MKRW)</b>를 25Y·26Y 전월 계산. 지점분석 탭의 매출(NSV) 소스. 물량(HL) 데이터는 건드리지 않음. 이후 최신월은 통합 DSR 업로드로 자동 갱신.</div>
+        <label class="upload-file-btn" id="nsvbf-btn-label" style="display:inline-flex;" title="NSV 포함 전체 히스토리 DSR">
+          Select File
+          <input type="file" id="nsvbf-file-input" accept=".xlsx" style="display:none" onchange="document.getElementById('nsvbf-filename').textContent=this.files[0]?this.files[0].name:''">
+        </label>
+        <span id="nsvbf-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
+          <button class="upload-apply-btn" id="nsvbf-apply-btn" onclick="handleNsvBackfill(document.getElementById('nsvbf-file-input'))">NSV 백필 실행</button>
+          <span id="nsv-backfill-status" style="font-size:12px;"></span>
         </div>
       </div>
+
+      <!-- 운송비(Freight) DSR 백필 — Freight 탭용 -->
+      <div style="margin-bottom:28px;padding:14px;border:2px dashed #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.03);">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🚚 운송비(Freight) DSR 백필 (Freight 탭 · 여러 월·여러 파일 한 번에)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;"><b>배송처코드(Code)</b>가 있는 DSR raw를 <b>여러 개 동시 선택</b> 가능(예: <code>DSR_Raw_202501-202606.xlsx</code> + <code>DSR_Raw_2026_TTL.xlsx</code>) → Team=On만(ALSM·제외코드 제외) <b>배송처(통합그룹)×배송일</b> 배송건으로 합산해 파일에 포함된 <b>모든 월</b>을 월 단위로 저장. 이미 저장된 월보다 덜 채워진(일수가 적은) 파일은 그 월을 덮어쓰지 않음. 이후 최신월은 통합 DSR / DSR Raw 업로드 시 자동 갱신. 박스=Qty(UnitsSold). LY 비교는 2025 백필분과 동일 소스로 비교. <b>담당 SR</b>은 <code>Customer.SR</code> 컬럼이 있는 파일(주간 DSR raw)에서 자동 갱신되며 가장 최신 기준으로 과거 월까지 소급 적용됩니다.</div>
+        <label class="upload-file-btn" id="frbf-btn-label" style="display:inline-flex;" title="배송처코드 포함 DSR raw (다중 선택 가능)">
+          Select File(s)
+          <input type="file" id="frbf-file-input" accept=".xlsx,.xlsb,.xls" multiple style="display:none" onchange="document.getElementById('frbf-filename').textContent=Array.from(this.files).map(f=>f.name).join(' + ')">
+        </label>
+        <span id="frbf-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
+          <button class="upload-apply-btn" id="frbf-apply-btn" onclick="handleFreightBackfill(document.getElementById('frbf-file-input'))">운송비 백필 실행</button>
+          <span id="freight-backfill-status" style="font-size:12px;"></span>
+        </div>
+      </div>
+        </div>
+      </details>
 
       <!-- Last updated timestamp -->
       <div id="upload-ts" style="margin-top:16px;font-size:12px;color:var(--text-muted);"></div>
@@ -4506,7 +4484,7 @@ async function handleUpload() {
   const statusEl  = document.getElementById('upload-status');
   const applyBtn  = document.getElementById('upload-apply-btn');
   const fcstFile  = fcstInput.files[0];
-  const dsrFile   = dsrInput.files[0];
+  const dsrFile   = dsrInput ? dsrInput.files[0] : null;   // 레거시 DSR 슬롯은 통합 DSR로 대체되어 제거됨
   const revFile   = revInput ? revInput.files[0] : null;
   const stockFile = stockInput ? stockInput.files[0] : null;
   const inbFile   = inbInput ? inbInput.files[0] : null;
