@@ -421,7 +421,7 @@
   // ═══════════════════════════════════════════════════════════════
   //  UI
   // ═══════════════════════════════════════════════════════════════
-  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, showAllCs: false, showAllRet: false, baseMon: 3, edgeAct: true, edgeBand: 'ALL', edgeSort: 'save', charts: {} };
+  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, showAllCs: false, showAllRet: false, edgeAct: true, edgeBand: 'ALL', edgeSort: 'save', charts: {} };
 
   function periodMonths(period, months) {
     // period: 'YYYY-MM' | 'YTD-YYYY'
@@ -745,83 +745,49 @@
       <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">교환 출고는 <b>정기 배송일 합류를 원칙</b>으로 (품질 이슈 등 긴급 건 제외) — 단독 출고 시 소량 구간(01~05) 요율이 적용돼 박스당 단가가 크게 오릅니다. · 회송(반송)은 집계 대상이 아닙니다.</div>
     </div>`;
 
-    // ── H. 액션 효과 (세이빙 산출) ──
-    //   ① 동일 코드배송(통합정산) 절감 — 분리 청구했다면 지불했을 비용 대비 실측(₩csave).
-    //     비교표의 '증가분'은 LY·기준선 시점의 통합 효과율(₩/박스) 대비 얼마나 커졌는가(같은 물량 기준).
-    //   ② 걸침오더 감소(오더 대형화) 절감 — 권역별 (기준 박스당 단가 − 액션월 단가) × 액션월 박스에서
-    //     ①의 증가분을 뺀 나머지. 걸침 상향·MOQ·빈도 개선이 지불비용에 남긴 효과.
-    //   비교축 2개: vs LY 동월(같은 일자까지) / vs 직전 N개월(원래 습관대로면 지불했을 비용).
-    //   총액 직접 비교는 물량 증감에 오염되므로 쓰지 않는다 — 모두 '기준 단가 × 현재 물량'으로 환산.
-    const actYm = S.period.startsWith('YTD-') ? keys[keys.length - 1] : S.period;
-    const baseN = S.baseMon || 3;
-    const baseKeys = keys.filter(k => k < actYm).slice(-baseN);
-    const RA = months[actYm] ? compute([months[actYm]], { branch: S.branch, sr: S.sr }) : null;
-    if (RA && RA.total.box) {
-      const TA = RA.total;
-      const mtA = months[actYm].meta || {};
-      const yA = +actYm.slice(0, 4);
-      const dimH = new Date(Date.UTC(yA, +actYm.slice(5), 0)).getUTCDate();
-      const lyYmH = (yA - 1) + actYm.slice(4);
-      const dayCapH = {}; let lyCapNote = '';
-      if (months[lyYmH] && mtA.maxDay && mtA.maxDay < dimH) { dayCapH[lyYmH] = mtA.maxDay; lyCapNote = ` 1~${mtA.maxDay}일`; }
-      const RB = baseKeys.length ? compute(baseKeys.map(k => months[k]), { branch: S.branch, sr: S.sr }) : null;
-      const RL2 = months[lyYmH] ? compute([months[lyYmH]], { branch: S.branch, sr: S.sr, dayCap: dayCapH }) : null;
-      const upb = o => o && o.box ? o.fee / o.box : null;
-      // RX(기준) 대비 액션월 절감 분해 — 권역별 shift-share
-      const calcVs = (RX) => {
-        if (!RX || !RX.total.box) return null;
-        let totalSave = 0, cfFee = 0;
-        const regRows = M().regions.map(rg => {
-          const a = RA.byRegion[rg], b = RX.byRegion[rg];
-          const ua = upb(a), ub = upb(b);
-          const save = (a && ua != null && ub != null) ? (ub - ua) * a.box : null;
-          if (a) cfFee += (ub != null ? ub * a.box : a.fee);         // 기준 단가가 없는 권역은 실제값(변화 없음 처리)
-          if (save != null) totalSave += save;
-          return { rg, a, b, ua, ub, save };
-        }).filter(r => r.a || r.b);
-        const TX = RX.total;
-        const csSave = ((TA.box ? TA.csave / TA.box : 0) - (TX.box ? TX.csave / TX.box : 0)) * TA.box;
-        return { regRows, totalSave, csSave, orderSave: totalSave - csSave, cfFee, TX };
-      };
-      const vsP = calcVs(RB), vsL = calcVs(RL2);
+    // ── H. 월별 손실 추이 (2025.01~) ──
+    //   요청 사양: 디테일 분해 없이 월별 건수·비용만. 연도(2025/2026)를 나란히 놓아 액션 효과가 한눈에 보이게.
+    //   · 걸침 오더 = B와 동일 정의(구간 경계, 제주 제외). 방치손실 = 전량 상향 시 절감 가능했던 금액.
+    //   · 동일 배송지 = 같은 날 같은 하차지로 2개+ 코드가 나간 건. 금액 = 분리 청구와 합산 청구의 차이
+    //     — 통합정산 적용 전(과거)엔 실제로 더 낸 손실, 적용 후엔 절감액.
+    //   지점·담당 SR 필터가 그대로 적용됨.
+    {
+      const mrow = {};                                              // ym → 월 지표
+      keys.forEach(k => {
+        const t = compute([months[k]], { branch: S.branch, sr: S.sr }).total;
+        mrow[k] = { edge: t.edge, edgeSave: t.edgeSave, cn: t.cn, csave: t.csave, n: t.n };
+      });
+      const yrs = [...new Set(keys.map(k => k.slice(0, 4)))].sort();
       const sig = masterSig();
       const mvOf = k => ((months[k].meta || {}).mv) || (months[k].ret ? '?' : '구버전');
-      const staleList = [actYm, ...baseKeys, ...(months[lyYmH] ? [lyYmH] : [])].filter(k => mvOf(k) !== sig);
-      const sv = v => v == null ? dash : `<span class="${v > 0 ? 'td-pos' : v < 0 ? 'td-neg' : ''}">${v >= 0 ? '+₩' + fmt(v) : '−₩' + fmt(-v)}</span>`;
-      const lyLbl = months[lyYmH] ? `${lyYmH.slice(0,4)} ${MON_NM[+lyYmH.slice(5)-1]}${lyCapNote}` : 'LY 동월 없음';
+      const staleMs = keys.filter(k => mvOf(k) !== sig);
+      const cell = (k, stale) => {
+        const r = mrow[k];
+        if (!r || !r.n) return '<td>-</td><td>-</td><td style="border-left:1px solid #e5e7eb;">-</td><td>-</td>';
+        const w = stale ? ' style="color:#b45309;"' : '';
+        return `<td${w}>${fmt(r.edge)}</td><td${w}>₩${fmt(r.edgeSave)}</td><td${stale ? ' style="border-left:1px solid #e5e7eb;color:#b45309;"' : ' style="border-left:1px solid #e5e7eb;"'}>${fmt(r.cn)}</td><td${w}>₩${fmt(r.csave)}</td>`;
+      };
+      const totRow = yr => {
+        const ks = keys.filter(k => k.startsWith(yr));
+        const t = ks.reduce((a, k) => { const r = mrow[k]; a.edge += r.edge; a.es += r.edgeSave; a.cn += r.cn; a.cs += r.csave; return a; }, { edge: 0, es: 0, cn: 0, cs: 0 });
+        return `<td>${fmt(t.edge)}</td><td>₩${fmt(t.es)}</td><td style="border-left:1px solid #e5e7eb;">${fmt(t.cn)}</td><td>₩${fmt(t.cs)}</td>`;
+      };
       html += `<div class="chart-card full" style="margin-bottom:16px;">
-        <div class="chart-title">H. 액션 효과(세이빙) — ${actYm.slice(0,4)} ${MON_NM[+actYm.slice(5)-1]}${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">물량·권역믹스 효과 제거(기준 단가 × 현재 물량 환산) · vs LY 동월(${lyLbl}) / vs 직전 ${baseKeys.length}개월</span></div>
-        ${staleList.length ? `<div style="font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:6px 10px;margin-bottom:10px;">⚠ <b>${staleList.join(', ')}</b> 은(는) 현재 기준(통합마스터 ${sig})과 다른 시점에 저장된 데이터입니다. 해당 월 DSR을 재업로드해야 절감액이 정확해집니다 — 지금 수치는 기준 차이가 섞여 있습니다.</div>` : ''}
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-          <span style="font-size:11px;font-weight:700;color:var(--text-muted);">기준선(원래대로)</span>
-          ${[3, 6, 12].map(n => `<button class="month-btn ${baseN === n ? '' : 'off'}" onclick="Freight.setBaseMon(${n})">직전 ${n}개월</button>`).join('')}
-          <span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${baseKeys.length ? baseKeys[0] + ' ~ ' + baseKeys[baseKeys.length-1] : '-'}</span>
-        </div>
-        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px;">
-          ${card('① 동일 코드배송 절감 (실측)', '₩' + fmt(TA.csave), `분리 청구 시 ₩${fmt(TA.fee + TA.csave)} → 실제 ₩${fmt(TA.fee)}${vsL ? ` · LY 동월 ₩${fmt(vsL.TX.csave)}` : ''}`, TA.csave ? 'positive' : '')}
-          ${card('② 걸침오더 감소 절감', vsL ? (vsL.orderSave >= 0 ? '₩' : '−₩') + fmt(Math.abs(vsL.orderSave)) : '-', `vs LY 동월 · vs 직전 ${baseKeys.length}개월 ${vsP ? (vsP.orderSave >= 0 ? '₩' : '−₩') + fmt(Math.abs(vsP.orderSave)) : '-'}`, vsL && vsL.orderSave > 0 ? 'positive' : vsL && vsL.orderSave < 0 ? 'negative' : '')}
-          ${card('총 절감 vs LY 동월', vsL ? (vsL.totalSave >= 0 ? '₩' : '−₩') + fmt(Math.abs(vsL.totalSave)) : '-', vsL ? `원래대로면 ₩${fmt(vsL.cfFee)} → 실제 ₩${fmt(TA.fee)}` : 'LY 동월 데이터 없음', vsL && vsL.totalSave > 0 ? 'positive' : vsL && vsL.totalSave < 0 ? 'negative' : '')}
-          ${card('총 절감 vs 직전 ' + baseKeys.length + '개월', vsP ? (vsP.totalSave >= 0 ? '₩' : '−₩') + fmt(Math.abs(vsP.totalSave)) : '-', vsP ? `원래대로면 ₩${fmt(vsP.cfFee)} → 실제 ₩${fmt(TA.fee)}` : '기준선 없음', vsP && vsP.totalSave > 0 ? 'positive' : vsP && vsP.totalSave < 0 ? 'negative' : '')}
-        </div>
-        <div class="table-wrap" style="margin:0 0 12px;">
-        <table><thead><tr><th style="text-align:left">절감 항목</th><th>vs LY 동월 (${lyLbl})</th><th>vs 직전 ${baseKeys.length}개월 (원래대로)</th></tr></thead><tbody>
-          <tr><td>① 동일 코드배송 통합 — 효과 증가분</td><td>${vsL ? sv(vsL.csSave) : dash}</td><td>${vsP ? sv(vsP.csSave) : dash}</td></tr>
-          <tr><td>② 걸침오더 감소 · 오더 대형화</td><td>${vsL ? sv(vsL.orderSave) : dash}</td><td>${vsP ? sv(vsP.orderSave) : dash}</td></tr>
-          <tr style="font-weight:700;background:#e0ebe0;"><td>합계 — 지불비용 개선</td><td>${vsL ? sv(vsL.totalSave) : dash}</td><td>${vsP ? sv(vsP.totalSave) : dash}</td></tr>
-          <tr><td style="color:var(--text-muted)">원래대로 지불했을 비용 → 실제</td><td>${vsL ? `₩${fmt(vsL.cfFee)} → ₩${fmt(TA.fee)}` : dash}</td><td>${vsP ? `₩${fmt(vsP.cfFee)} → ₩${fmt(TA.fee)}` : dash}</td></tr>
-          <tr><td style="color:var(--text-muted)">박스당 단가 (기준 → 액션월)</td><td>${vsL ? `₩${fmt(upb(vsL.TX))} → ₩${fmt(upb(TA))}` : dash}</td><td>${vsP ? `₩${fmt(upb(vsP.TX))} → ₩${fmt(upb(TA))}` : dash}</td></tr>
-          <tr><td style="color:var(--text-muted)">걸침 오더 수 (참고)</td><td>${vsL ? `${fmt(vsL.TX.edge)}건 → ${fmt(TA.edge)}건` : dash}</td><td>${vsP ? `월평균 ${fmt(Math.round(vsP.TX.edge / baseKeys.length))}건 → ${fmt(TA.edge)}건` : dash}</td></tr>
-        </tbody></table></div>
-        ${vsP ? `<div class="chart-title" style="font-size:12px;">권역별 상세 (vs 직전 ${baseKeys.length}개월)</div>
+        <div class="chart-title">H. 월별 손실 추이 — 걸침 오더 · 동일 배송지 (2025.01~)${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">걸침 방치손실 = 전량 상향 시 절감 가능액 · 동일 배송지 = 분리 청구 대비 차액(통합정산 적용 전엔 실제 손실, 적용 후엔 절감)</span></div>
         <div class="table-wrap" style="margin:0;">
-        <table><thead><tr><th style="text-align:left">권역</th><th>기준선 박스당</th><th>${MON_NM[+actYm.slice(5)-1]} 박스당</th><th>단가 개선</th><th>${MON_NM[+actYm.slice(5)-1]} 박스</th><th>절감액</th><th>배송건</th><th>건당 박스</th><th>걸침건</th></tr></thead><tbody>
-        ${vsP.regRows.map(r => `<tr><td><b>${r.rg}</b></td><td>${r.ub == null ? '-' : '₩' + fmt(r.ub)}</td><td>${r.ua == null ? '-' : '₩' + fmt(r.ua)}</td><td class="${r.save > 0 ? 'td-pos' : r.save < 0 ? 'td-neg' : ''}">${r.ua != null && r.ub != null ? (r.ub - r.ua >= 0 ? '−' : '+') + '₩' + fmt(Math.abs(r.ub - r.ua)) : '-'}</td><td>${r.a ? fmt(r.a.box) : '-'}</td><td class="${r.save > 0 ? 'td-pos' : r.save < 0 ? 'td-neg' : ''}"><b>${r.save == null ? '-' : (r.save >= 0 ? '+₩' : '−₩') + fmt(Math.abs(r.save))}</b></td><td>${r.a ? fmt(r.a.n) : '-'}</td><td>${r.a && r.a.n ? (r.a.box / r.a.n).toFixed(1) : '-'}<span style="color:var(--text-muted);font-size:10px;"> (${r.b && r.b.n ? (r.b.box / r.b.n).toFixed(1) : '-'})</span></td><td>${r.a ? r.a.edge : '-'}</td></tr>`).join('')}
-        </tbody></table></div>` : ''}
-        <div style="font-size:11px;color:var(--text-muted);line-height:1.7;margin-top:8px;">
-          · <b>①(실측)</b> = 이번 기간 통합정산으로 분리 청구 대비 덜 낸 금액(E섹션과 동일). 표의 '증가분'은 LY·기준선 시점보다 통합 효과율(₩/박스)이 얼마나 커졌는가 — 신규 통합그룹·동시발주 확대의 몫.<br>
-          · <b>②</b> = 권역별 (기준 박스당 단가 − 액션월 단가) × 액션월 박스 − ①증가분. 걸침 상향·MOQ 가이드·배송빈도 개선이 지불비용에 남긴 효과.<br>
-          · <b>'원래대로 지불했을 비용'</b> = 기준 시점의 권역별 박스당 단가로 이번 달 물량을 배송했다면 낸 금액. 물량 증감·권역 믹스가 절감으로 둔갑하지 않습니다.<br>
-          · <b>한계</b>: 신규 진입·이탈 도매장, SKU 믹스 변화도 단가에 섞입니다. 걸침 오더 수·건당 박스(괄호=기준선)를 함께 보세요. 반품 제외(출고 기준).
+        <table><thead>
+          <tr><th style="text-align:left" rowspan="2">월</th>${yrs.map(y => `<th colspan="4" style="text-align:center;border-left:2px solid #fff;">${y}</th>`).join('')}</tr>
+          <tr>${yrs.map(() => '<th>걸침 건</th><th>방치손실</th><th style="border-left:1px solid rgba(255,255,255,.3);">동일배송지 건</th><th>차액</th>').join('')}</tr>
+        </thead><tbody>
+        ${Array.from({ length: 12 }, (_, i) => {
+          const mm = String(i + 1).padStart(2, '0');
+          if (!yrs.some(y => mrow[y + '-' + mm])) return '';
+          return `<tr><td><b>${MON_NM[i]}</b></td>${yrs.map(y => cell(y + '-' + mm, staleMs.includes(y + '-' + mm))).join('')}</tr>`;
+        }).join('')}
+        <tr style="font-weight:700;background:#e0ebe0;"><td>Total</td>${yrs.map(totRow).join('')}</tr>
+        </tbody></table></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">
+          진행 중인 달은 월말까지 안 찬 수치입니다.${staleMs.length ? ` · <b style="color:#b45309">주황 표기(${staleMs.join(', ')})</b>는 현재 기준(통합마스터 ${sig}) 이전에 저장된 월 — 해당 월 DSR 재업로드 시 정확해집니다.` : ''}
         </div>
       </div>`;
     }
@@ -938,7 +904,6 @@
     setEdgeBand(v) { S.edgeBand = v; S.showAllB = false; rerender(); },
     setEdgeAct(v) { S.edgeAct = !!v; S.showAllB = false; rerender(); },
     setEdgeSort(v) { S.edgeSort = v; S.showAllB = false; rerender(); },
-    setBaseMon(v) { S.baseMon = v; rerender(); },
     toggleAllRep() { S.showAllRep = !S.showAllRep; rerender(); },
     toggleAllCs() { S.showAllCs = !S.showAllCs; rerender(); },
     toggleAllRet() { S.showAllRet = !S.showAllRet; rerender(); },
