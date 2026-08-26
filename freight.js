@@ -58,6 +58,13 @@
     return dt.getUTCFullYear() + '-W' + String(Math.ceil((((dt - yearStart) / 86400000) + 1) / 7)).padStart(2, '0');
   }
 
+  // 마스터 서명 — 저장 시점의 통합마스터 버전(코드수/그룹수). 달라지면 그 달은 재적재가 필요하다는 뜻.
+  function masterSig() {
+    const c = M().consol, g = new Set();
+    for (const k in c) g.add(c[k][0]);
+    return Object.keys(c).length + '/' + g.size;
+  }
+
   // ── 요율 ──
   function tierOf(box) { const T = M().tier_max; for (let i = 0; i < T.length; i++) if (box <= T[i]) return i; return T.length; }
   function rateOf(region, box) { const r = M().rates[region]; return r ? r[tierOf(box)] : null; }
@@ -219,7 +226,7 @@
     const hpb = sumQ ? sumH / sumQ : 0;
     // 물리 박스 1개 ≈ 0.08~0.20 HL (330ml×24=0.079, 500ml×24=0.12, 케그 0.2~0.3). 크게 벗어나면 단위 의심.
     if (onRows && (hpb < 0.04 || hpb > 0.35)) warnings.push(`박스 단위 의심 — HL/박스 = ${hpb.toFixed(3)} (물리 박스면 0.08~0.20 근처). Qty가 낱개/HL 단위가 아닌지 확인 필요`);
-    for (const ym in months) { const mt = months[ym].meta; mt.rows = rows; mt.onRows = onRows; mt.hlPerBox = Math.round(hpb * 1000) / 1000; mt.nDays = mt._days.size; delete mt._days; if (mt.minDay === 99) mt.minDay = 0; }
+    for (const ym in months) { const mt = months[ym].meta; mt.mv = masterSig(); mt.rows = rows; mt.onRows = onRows; mt.hlPerBox = Math.round(hpb * 1000) / 1000; mt.nDays = mt._days.size; delete mt._days; if (mt.minDay === 99) mt.minDay = 0; }
     return { months, warnings, hasCode: true, hlPerBox: hpb, onRows, srMap, srAsOf, hasSr: iSr >= 0 && Object.keys(srMap).length > 0 };
   }
 
@@ -414,7 +421,7 @@
   // ═══════════════════════════════════════════════════════════════
   //  UI
   // ═══════════════════════════════════════════════════════════════
-  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, showAllCs: false, showAllRet: false, edgeAct: true, edgeBand: 'ALL', edgeSort: 'save', charts: {} };
+  const S = { period: null, branch: 'ALL', sr: 'ALL', search: '', showAllA: false, showAllB: false, showAllRep: false, showAllCs: false, showAllRet: false, baseMon: 3, edgeAct: true, edgeBand: 'ALL', edgeSort: 'save', charts: {} };
 
   function periodMonths(period, months) {
     // period: 'YYYY-MM' | 'YTD-YYYY'
@@ -738,6 +745,70 @@
       <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">교환 출고는 <b>정기 배송일 합류를 원칙</b>으로 (품질 이슈 등 긴급 건 제외) — 단독 출고 시 소량 구간(01~05) 요율이 적용돼 박스당 단가가 크게 오릅니다. · 회송(반송)은 집계 대상이 아닙니다.</div>
     </div>`;
 
+    // ── H. 액션 효과 (세이빙 산출) ──
+    //   원칙: 총액 비교는 물량 증감에 오염되므로 쓰지 않는다.
+    //   절감액 = Σ_권역 (기준선 박스당 단가 − 액션월 박스당 단가) × 액션월 박스
+    //     · 권역별로 계산해 권역 믹스 변화(요율이 다른 권역 비중 변동)를 제거
+    //     · 박스당 단가는 물량 규모와 무관한 '운영 효율' 지표 → 오더 대형화·통합정산·빈도 개선 효과만 남음
+    //   분해: 통합정산 절감분(E)은 구조 효과이므로 따로 표기하고, 나머지를 오더 대형화 효과로 본다.
+    const actYm = S.period.startsWith('YTD-') ? keys[keys.length - 1] : S.period;   // 액션월(기본: 최신월)
+    const baseN = S.baseMon || 3;
+    const baseKeys = keys.filter(k => k < actYm).slice(-baseN);
+    const RA = months[actYm] ? compute([months[actYm]], { branch: S.branch, sr: S.sr }) : null;
+    const RB = baseKeys.length ? compute(baseKeys.map(k => months[k]), { branch: S.branch, sr: S.sr }) : null;
+    if (RA && RB) {
+      const TA = RA.total, TB = RB.total;
+      const upb = (o) => o && o.box ? o.fee / o.box : null;                          // 박스당 단가
+      const rows = M().regions.map(rg => {
+        const a = RA.byRegion[rg], b = RB.byRegion[rg];
+        const ua = upb(a), ub = upb(b);
+        const save = (ua != null && ub != null) ? (ub - ua) * a.box : null;
+        return { rg, a, b, ua, ub, save };
+      }).filter(r => r.a || r.b);
+      const totalSave = rows.reduce((t, r) => t + (r.save || 0), 0);
+      // 통합정산 절감 증가분(같은 물량 기준) — 구조 효과 분리
+      const csRateA = TA.box ? TA.csave / TA.box : 0, csRateB = TB.box ? TB.csave / TB.box : 0;
+      const csSave = (csRateA - csRateB) * TA.box;
+      const orderSave = totalSave - csSave;
+      // 걸침 방치손실(일평균 비교) — 진행월 보정
+      const daysA = (months[actYm].meta || {}).nDays || 1;
+      const daysB = baseKeys.reduce((t, k) => t + ((months[k].meta || {}).nDays || 0), 0) || 1;
+      const edgeA = TA.edgeSave / daysA, edgeB = TB.edgeSave / daysB;
+      // 액션월/기준선이 서로 다른 기준(통합마스터 버전·반품 로직)으로 저장돼 있으면 비교가 오염된다
+      const sig = masterSig();
+      const mvOf = k => ((months[k].meta || {}).mv) || (months[k].ret ? '?' : '구버전');
+      const staleList = [actYm, ...baseKeys].filter(k => mvOf(k) !== sig);
+      const stale = staleList.length > 0;
+      const won2 = v => v == null ? '-' : (v >= 0 ? '₩' : '-₩') + fmt(Math.abs(v));
+      html += `<div class="chart-card full" style="margin-bottom:16px;">
+        <div class="chart-title">H. 액션 효과 — ${actYm.slice(0,4)} ${MON_NM[+actYm.slice(5)-1]} vs 직전 ${baseKeys.length}개월${S.branch !== 'ALL' ? ' · ' + S.branch : ''}${S.sr !== 'ALL' ? ' · ' + esc(srName(S.sr)) : ''} <span style="font-weight:400;color:var(--text-muted);font-size:11px;margin-left:8px;">물량 증감 효과 제거 · 권역별 박스당 단가 개선분만 절감으로 인정</span></div>
+        ${stale ? `<div style="font-size:11px;color:#991b1b;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:6px 10px;margin-bottom:10px;">⚠ <b>${staleList.join(', ')}</b> 은(는) 현재 기준(통합마스터 ${sig})과 다른 시점에 저장된 데이터입니다. 해당 월 DSR을 재업로드해야 절감액이 정확해집니다 — 지금 수치는 기준 차이가 섞여 있습니다.</div>` : ''}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+          <span style="font-size:11px;font-weight:700;color:var(--text-muted);">기준선</span>
+          ${[3, 6, 12].map(n => `<button class="month-btn ${baseN === n ? '' : 'off'}" onclick="Freight.setBaseMon(${n})">직전 ${n}개월</button>`).join('')}
+          <span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${baseKeys.length ? baseKeys[0] + ' ~ ' + baseKeys[baseKeys.length-1] : '-'}</span>
+        </div>
+        <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:10px;">
+          ${card('절감액 (단가 개선분)', won2(totalSave), `${actYm.slice(5)}월 ${fmt(TA.box)}박스 기준 · 연환산 약 ${won2(totalSave * 12)}`, totalSave > 0 ? 'positive' : totalSave < 0 ? 'negative' : '')}
+          ${card('박스당 단가', '₩' + fmt(upb(TA)), `기준선 ₩${fmt(upb(TB))} → ${((upb(TA) / upb(TB) - 1) * 100).toFixed(1)}%`, upb(TA) < upb(TB) ? 'positive' : 'negative')}
+          ${card('걸침 방치손실 (일평균)', '₩' + fmt(edgeA), `기준선 ₩${fmt(edgeB)} → ${edgeB ? ((edgeA / edgeB - 1) * 100).toFixed(1) + '%' : '-'}`, edgeA < edgeB ? 'positive' : 'neutral')}
+          ${card('효과 분해', won2(orderSave) + ' / ' + won2(csSave), '오더 대형화·빈도 개선 / 통합정산 확대', '')}
+        </div>
+        <div class="table-wrap" style="margin:0;">
+        <table><thead><tr><th style="text-align:left">권역</th><th>기준선 박스당</th><th>${MON_NM[+actYm.slice(5)-1]} 박스당</th><th>단가 개선</th><th>${MON_NM[+actYm.slice(5)-1]} 박스</th><th>절감액</th><th>배송건</th><th>건당 박스</th><th>걸침건</th></tr></thead><tbody>
+        ${rows.map(r => `<tr><td><b>${r.rg}</b></td><td>${r.ub == null ? '-' : '₩' + fmt(r.ub)}</td><td>${r.ua == null ? '-' : '₩' + fmt(r.ua)}</td><td class="${r.save > 0 ? 'td-pos' : r.save < 0 ? 'td-neg' : ''}">${r.ua != null && r.ub != null ? (r.ub - r.ua >= 0 ? '−' : '+') + '₩' + fmt(Math.abs(r.ub - r.ua)) : '-'}</td><td>${r.a ? fmt(r.a.box) : '-'}</td><td class="${r.save > 0 ? 'td-pos' : r.save < 0 ? 'td-neg' : ''}"><b>${won2(r.save)}</b></td><td>${r.a ? fmt(r.a.n) : '-'}</td><td>${r.a && r.a.n ? (r.a.box / r.a.n).toFixed(1) : '-'}<span style="color:var(--text-muted);font-size:10px;"> (${r.b && r.b.n ? (r.b.box / r.b.n).toFixed(1) : '-'})</span></td><td>${r.a ? r.a.edge : '-'}</td></tr>`).join('')}
+        <tr style="font-weight:700;background:#e0ebe0;"><td>Total</td><td title="권역 믹스 포함 단순 평균">₩${fmt(upb(TB))}</td><td title="권역 믹스 포함 단순 평균">₩${fmt(upb(TA))}</td><td title="권역 믹스 효과를 제거한 가중 평균 개선폭 = 절감액 ÷ 박스">${(totalSave >= 0 ? '−' : '+') + '₩' + fmt(Math.abs(TA.box ? totalSave / TA.box : 0))}</td><td>${fmt(TA.box)}</td><td>${won2(totalSave)}</td><td>${fmt(TA.n)}</td><td>${TA.n ? (TA.box / TA.n).toFixed(1) : '-'}<span style="color:var(--text-muted);font-size:10px;"> (${TB.n ? (TB.box / TB.n).toFixed(1) : '-'})</span></td><td>${TA.edge}</td></tr>
+        </tbody></table></div>
+        <div style="font-size:11px;color:var(--text-muted);line-height:1.7;margin-top:8px;">
+          · <b>산출식</b>: 절감액 = Σ<sub>권역</sub> (기준선 박스당 단가 − 액션월 박스당 단가) × 액션월 박스. 물량이 늘어도 절감으로 잡히지 않고, 권역 믹스 변화도 제거됩니다.<br>
+          · <b>왜 총액 비교를 쓰지 않나</b>: 배송료는 물량에 비례해 늘기 때문에 총액이 늘었는지 줄었는지로는 액션 효과를 알 수 없습니다. 단가(₩/박스)는 규모와 무관한 효율 지표입니다.<br>
+          · <b>효과 분해</b>: 통합정산 확대분은 구조 변화(추가 발주 없이 얻는 절감)라 따로 표기하고, 나머지를 오더 대형화·배송빈도 개선 효과로 봅니다.<br>
+          · <b>Total 행 주의</b>: 좌측 두 단가는 권역 믹스가 섞인 단순 평균이라 방향이 반대로 보일 수 있습니다(예: 비싼 권역 비중이 늘면 전체 단가는 올라감). 절감 판단은 <b>권역별 개선폭과 절감액 합계</b>로 하세요.<br>
+          · <b>한계</b>: 신규 진입·이탈 도매장이 많은 달은 단가가 그 영향도 받습니다. 건당 박스(괄호=기준선)와 걸침건을 함께 보세요. 반품은 제외(출고 기준).
+        </div>
+      </div>`;
+    }
+
     // ── F. KCTC 계약 요율표 (권역 × 합산박스 구간) ──
     //   요율은 freight_master.js(=Freight/build_master.py RATES 상수)가 원본. 표에는 선택 기간의 실제 사용량 병기.
     const TL_ = M().tier_labels, TMAX = M().tier_max;
@@ -850,6 +921,7 @@
     setEdgeBand(v) { S.edgeBand = v; S.showAllB = false; rerender(); },
     setEdgeAct(v) { S.edgeAct = !!v; S.showAllB = false; rerender(); },
     setEdgeSort(v) { S.edgeSort = v; S.showAllB = false; rerender(); },
+    setBaseMon(v) { S.baseMon = v; rerender(); },
     toggleAllRep() { S.showAllRep = !S.showAllRep; rerender(); },
     toggleAllCs() { S.showAllCs = !S.showAllCs; rerender(); },
     toggleAllRet() { S.showAllRet = !S.showAllRet; rerender(); },
