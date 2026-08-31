@@ -2966,6 +2966,7 @@ function _upGetFcstMonth() { return DASHBOARD_DATA?.wk_meta?.month || _UP_FCST_M
 // FCST Excel SKU명 → 대시보드 SKU명 변환 (소스마다 이름이 다를 때 사용)
 const _UP_SKU_ALIAS = {
   "PA ORI 20000 Keg": "PA WHE 20000 Keg",
+  "PA ORI 330 Bottle": "PA WHE 330 Bottle",  // 신규(9월~) 파울라너 밀맥주 병 — FCST가 ORI로 적어도 대시보드 표준명으로 정규화
 };
 
 function _upSafeDiv(n, d) { return (d && isFinite(d) && d !== 0) ? Math.round(n / d * 10000) / 10000 : null; }
