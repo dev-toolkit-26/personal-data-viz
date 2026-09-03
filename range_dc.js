@@ -390,10 +390,14 @@
       return opts.join('');
     };
 
+    // 분기 뷰에서는 구간 3개월을 각각 컬럼으로 표시 (연간 뷰는 QTD 툴팁으로 갈음)
+    const monCols = isYear ? [] : mons;
+    const nCols = 13 + monCols.length;
+    const monTds = bm => monCols.map(m => `<td style="color:var(--text-muted);">${(bm && bm[m] != null) ? fmt(bm[m]) : '-'}</td>`).join('');
     let lastTeam = null;
     const trs = filt.map(r => {
       const teamHdr = r.team !== lastTeam
-        ? `<tr><td colspan="13" style="background:rgba(32,85,39,.06);font-weight:700;padding:6px 10px;">${esc(r.team)}</td></tr>` : '';
+        ? `<tr><td colspan="${nCols}" style="background:rgba(32,85,39,.06);font-weight:700;padding:6px 10px;">${esc(r.team)}</td></tr>` : '';
       lastTeam = r.team;
       const isOpen = _expanded.has(r.code);
       const subBadge = r.subs.length
@@ -404,7 +408,7 @@
           <td>${r.no}</td>${srCell(r)}<td>${r.code}</td>
           <td style="text-align:left;">${esc(r.name)}</td>
           <td>${rangeChip(r.tobe)}</td>
-          <td colspan="7" style="text-align:left;font-size:11px;">↳ <b>${r.member}</b> ${esc(p ? p.name : '')} 에 합산 평가${p && p.next != null ? ` · 차기 ${p.next === 0 ? '제외' : 'R' + p.next} 연동` : ''}</td>
+          <td colspan="${7 + monCols.length}" style="text-align:left;font-size:11px;">↳ <b>${r.member}</b> ${esc(p ? p.name : '')} 에 합산 평가${p && p.next != null ? ` · 차기 ${p.next === 0 ? '제외' : 'R' + p.next} 연동` : ''}</td>
           <td style="text-align:left;font-size:11px;">${esc(r.remark)}</td></tr>`;
       }
       // 펼침 시: 대표코드(본체) + 파생코드별 이번 구간 실적 분해 행
@@ -418,6 +422,7 @@
           <td></td><td></td><td>${p.c}</td>
           <td style="text-align:left;padding-left:18px;">↳ ${esc(p.name)}</td>
           <td></td><td></td>
+          ${monTds(p.byMon)}
           <td title="${esc(Object.entries(p.byMon || {}).map(([m, v]) => m + '월 ' + fmt(v)).join(' · '))}" style="font-weight:600;">${fmt(p.act)}</td>
           <td>${r.act > 0 ? Math.round(p.act / r.act * 100) + '%' : '-'}</td>
           <td colspan="5"></td></tr>`).join('');
@@ -428,7 +433,8 @@
         <td style="text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="${esc(r.name)}">${esc(r.name)}${subBadge}</td>
         <td>${rangeChip(r.tobe)}</td>
         <td style="color:var(--text-muted)">${fmt(r.thr)}</td>
-        <td title="${esc(Object.entries(r.byMon || {}).map(([m, v]) => m + '월 ' + fmt(v)).join(' · '))}">${fmt(r.act)}</td>
+        ${monTds(r.byMon)}
+        <td title="${esc(Object.entries(r.byMon || {}).map(([m, v]) => m + '월 ' + fmt(v)).join(' · '))}" style="font-weight:600;">${fmt(r.act)}</td>
         ${achCell(r)}
         <td><input type="number" inputmode="decimal" class="range-fcst-in" value="${fcstVal}" placeholder="-"
               style="width:76px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:right;"
@@ -532,10 +538,10 @@
       </details>
 
       <div class="table-wrap" style="overflow-x:auto;">
-        <table style="width:100%;font-size:12px;text-align:center;min-width:1080px;">
+        <table style="width:100%;font-size:12px;text-align:center;min-width:${isYear ? 1080 : 1280}px;">
           <thead><tr>
             <th>No</th><th>SR</th><th>코드</th><th style="text-align:left;">도매장</th>
-            <th>Range(3Q)</th><th>${thrLabel}(cs)</th><th>${actLabel}(cs)</th><th>달성률</th>
+            <th>Range(3Q)</th><th>${thrLabel}(cs)</th>${monCols.map(m => `<th style="color:var(--text-muted);">${m}월</th>`).join('')}<th>${actLabel}(cs)</th><th>달성률</th>
             <th>${fcstLabel}</th><th>FCST 자격</th><th>${nextLabel}</th><th>메모</th><th style="text-align:left;">Remark(3Q)</th>
           </tr></thead>
           <tbody>${trs}</tbody>
