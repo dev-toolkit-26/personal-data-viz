@@ -275,6 +275,13 @@
     const bench = elapsedFrac(cache.months, mons);
     const nextQ = isYear ? null : (qi + 1 < 4 ? (qi + 2) + 'Q' : '차년 1Q');
 
+    // ── Remark(nQ) = "그 분기 Range를 정할 때(=직전 분기 화면)에 남긴 메모" ──
+    //    3Q 화면에서 입력한 메모가 4Q 화면의 Remark(4Q)로 넘어온다.
+    //    직전 분기 메모가 없는 행은 range_master의 최초 등록 Remark로 폴백(흐리게 표시).
+    const prevQKey   = (!isYear && qi >= 1) ? (YEAR + 'Q' + qi) : null;
+    const prevQLabel = prevQKey ? (qi + 'Q') : '';
+    const prevDec    = (prevQKey && cache.quarters[prevQKey] && cache.quarters[prevQKey].dec) || {};
+
     // ── 엔티티 평가 ──
     const evals = [];                                     // 평가 대상(대표코드)
     const evalByCode = {};
@@ -283,6 +290,9 @@
       const member = M().member_of[code] || null;
       const row = { no, team, sr, code, name, qtd2q, fcst2q, asis, guide, tobe, remark, member,
                     subs: (M().subs && M().subs[code]) || [] };
+      const carried = (prevDec[code] && prevDec[code].memo) || '';
+      row.remarkShown   = carried || remark || '';
+      row.remarkCarried = !!carried;
       if (!member) {
         const a = sumActual(cache.months, groupCodesOf(code), mons);
         row.act = a.act; row.byMon = a.byMon;
@@ -406,6 +416,9 @@
     const monCols = isYear ? [] : mons;
     const nCols = 13 + monCols.length;
     const monTds = bm => monCols.map(m => `<td style="color:var(--text-muted);">${(bm && bm[m] != null) ? fmt(bm[m]) : '-'}</td>`).join('');
+    // 직전 분기에서 넘어온 메모는 진하게, 최초 등록 Remark 폴백은 흐리게 + 출처 툴팁
+    const remarkTd = r => `<td style="text-align:left;font-size:11px;max-width:220px;${r.remarkCarried ? '' : 'color:var(--text-muted);'}"`
+      + ` title="${esc(r.remarkShown ? (r.remarkCarried ? prevQLabel + ' 화면에서 남긴 메모' : '최초 등록 Remark') : '')}">${esc(r.remarkShown)}</td>`;
     let lastTeam = null;
     const trs = filt.map(r => {
       const teamHdr = r.team !== lastTeam
@@ -421,7 +434,7 @@
           <td style="text-align:left;">${esc(r.name)}</td>
           <td>${rangeChip(r.applied)}</td>
           <td colspan="${7 + monCols.length}" style="text-align:left;font-size:11px;">↳ <b>${r.member}</b> ${esc(p ? p.name : '')} 에 합산 평가${p && p.next != null ? ` · 차기 ${p.next === 0 ? '제외' : 'R' + p.next} 연동` : ''}</td>
-          <td style="text-align:left;font-size:11px;">${esc(r.remark)}</td></tr>`;
+          ${remarkTd(r)}</tr>`;
       }
       // 펼침 시: 대표코드(본체) + 파생코드별 이번 구간 실적 분해 행
       let subDetail = '';
@@ -460,7 +473,7 @@
         <td><input type="text" class="range-memo-in" value="${esc(r.memo)}" placeholder="메모"
               style="width:110px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;"
               onchange="RangeDC._onMemo('${qkey}','${r.code}',this.value)"></td>
-        <td style="text-align:left;font-size:11px;color:var(--text-muted);max-width:220px;">${esc(r.remark)}</td>
+        ${remarkTd(r)}
       </tr>` + subDetail;
     }).join('');
 
@@ -468,6 +481,8 @@
     const actLabel = isYear ? 'YTD 실적' : (qi + 1) + 'Q 실적';
     const fcstLabel = isYear ? '연간 FCST' : (qi + 1) + 'Q 마감 FCST';
     const nextLabel = nextQ ? nextQ + ' 결정' : '차기 결정';
+    // Remark 헤더는 보고 있는 분기 기준 — 내용은 직전 분기 메모에서 넘어온다
+    const remarkLabel = isYear ? 'Remark' : `Remark(${qi + 1}Q)`;
 
     // ── 매트릭스 HTML — prev(전분기)가 있으면 레벨별 등차(Δ)열 + vs.LQ 행 표시 ──
     function matrixHtml(title, M1, prev, hi) {
@@ -477,29 +492,31 @@
       const rows = LEVELS.map(l => {
         const cells = BRANCH_COL.map(b => `<td${M1.mx[l][b] ? '' : ' style="color:var(--text-muted)"'}>${M1.mx[l][b] || '·'}</td>`).join('');
         const sum = lvlSum(M1, l);
-        const dCell = prev ? `<td style="font-size:10px;">${dfmt(sum - lvlSum(prev, l))}</td>` : '';
+        const dCell = prev ? `<td style="font-size:10px;">${dfmt(sum - lvlSum(prev, l))}</td>` : '<td></td>';
         return `<tr><td style="font-weight:700;">R${l}</td>${cells}<td style="font-weight:700;">${sum}</td>${dCell}</tr>`;
       }).join('');
       const tCells = BRANCH_COL.map(b => `<td style="font-weight:700;">${M1.tot[b]}</td>`).join('');
       const grand = BRANCH_COL.reduce((a, b) => a + M1.tot[b], 0);
       const grandPrev = prev ? BRANCH_COL.reduce((a, b) => a + prev.tot[b], 0) : 0;
-      const totalRow = `<tr style="border-top:2px solid var(--border);"><td style="font-weight:700;">Total</td>${tCells}<td style="font-weight:700;">${grand}</td>${prev ? `<td style="font-size:10px;">${dfmt(grand - grandPrev)}</td>` : ''}</tr>`;
+      const totalRow = `<tr style="border-top:2px solid var(--border);"><td style="font-weight:700;">Total</td>${tCells}<td style="font-weight:700;">${grand}</td>${prev ? `<td style="font-size:10px;">${dfmt(grand - grandPrev)}</td>` : '<td></td>'}</tr>`;
       const lqRow = prev ? `<tr style="font-size:10px;"><td style="color:var(--text-muted);">vs.LQ</td>${BRANCH_COL.map(b => `<td>${dfmt(M1.tot[b] - prev.tot[b])}</td>`).join('')}<td>${dfmt(grand - grandPrev)}</td><td></td></tr>` : '';
-      return `<div class="table-wrap" style="flex:1;min-width:${prev ? 300 : 280}px;">
-        <div style="font-weight:700;font-size:12px;padding:8px 10px 2px;${hi ? 'color:var(--primary);' : ''}">${title} <span style="color:var(--text-muted);font-weight:400;">TTL ${grand}${prev ? ` <span style="font-size:10px;">(${grand - grandPrev >= 0 ? '+' : ''}${grand - grandPrev})</span>` : ''}</span></div>
-        <table style="width:100%;font-size:11px;text-align:center;">
-          <thead><tr><th></th>${BRANCH_COL.map(b => `<th>${BR_SHORT[b]}</th>`).join('')}<th>TTL</th>${prev ? '<th style="font-size:10px;">Δ</th>' : ''}</tr></thead>
+      // 4개 분기 블록이 항상 같은 폭이 되도록: 그리드 셀 안에서 min-width:0 + table-layout:fixed(내부 스크롤 없음)
+      return `<div class="rdc-q">
+        <div style="font-weight:700;font-size:12px;padding:8px 4px 2px;${hi ? 'color:var(--primary);' : ''}">${title} <span style="color:var(--text-muted);font-weight:400;">TTL ${grand}${prev ? ` <span style="font-size:10px;">(${grand - grandPrev >= 0 ? '+' : ''}${grand - grandPrev})</span>` : ''}</span></div>
+        <table class="rdc-mx">
+          <colgroup><col style="width:34px;">${BRANCH_COL.map(() => '<col>').join('')}<col style="width:30px;"><col style="width:26px;"></colgroup>
+          <thead><tr><th></th>${BRANCH_COL.map(b => `<th>${BR_SHORT[b]}</th>`).join('')}<th>TTL</th><th style="font-size:9px;">${prev ? 'Δ' : ''}</th></tr></thead>
           <tbody>${rows}${totalRow}${lqRow}</tbody>
         </table></div>`;
     }
     // 분기 스트립 블록 — 데이터 없는 분기는 자리 표시(내년 1Q 대비)
-    const qTitles = [`1Q. ${String(YEAR).slice(2)}Y`, `2Q. ${String(YEAR).slice(2)}Y (AS-IS)`, `3Q. ${String(YEAR).slice(2)}Y (TO-BE)`, `4Q. ${String(YEAR).slice(2)}Y (${bqi + 1}Q 마감 결정)`];
+    const qTitles = [1, 2, 3, 4].map(n => `${n}Q. ${String(YEAR).slice(2)}Y`);
     const qPlaceholder = ['데이터 없음 — 차년 시즌부터 표시', '데이터 없음', '데이터 없음', `${bqi + 1}Q 마감 FCST·결정 입력 시 표시`];
     const stripBlocks = mQ.map((mm, i) => mm
       ? matrixHtml(qTitles[i], mm, i > 0 ? mQ[i - 1] : null, i === 2)
-      : `<div class="table-wrap" style="flex:1;min-width:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 12px;gap:6px;">
+      : `<div class="rdc-q" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:18px 6px;gap:6px;">
            <div style="font-weight:700;font-size:12px;color:var(--text-muted);">${qTitles[i]}</div>
-           <div style="font-size:11px;color:var(--text-muted);">${qPlaceholder[i]}</div>
+           <div style="font-size:11px;color:var(--text-muted);text-align:center;">${qPlaceholder[i]}</div>
          </div>`).join('');
 
     // ── 가이드라인 카드 ──
@@ -508,6 +525,18 @@
     const moqTrs = M().moq.rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
 
     root.innerHTML = `
+      <style>
+        /* 1~4Q 스트립: 4칸 동일 폭. 좁아지면 2×2 → 1열로 접히고, 블록 내부엔 가로 스크롤이 생기지 않는다. */
+        .rdc-strip { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+        @media (max-width:1180px) { .rdc-strip { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+        @media (max-width:620px)  { .rdc-strip { grid-template-columns:minmax(0,1fr); } }
+        .rdc-q { min-width:0; overflow:hidden; background:var(--card-bg);
+                 border-radius:var(--radius); box-shadow:var(--shadow); }
+        .rdc-mx { width:100%; table-layout:fixed; border-collapse:collapse; font-size:11px; }
+        .rdc-mx th, .rdc-mx td { padding:2px 1px; text-align:center;
+                                 white-space:nowrap; overflow:hidden; text-overflow:clip; }
+        @media (max-width:1400px) { .rdc-mx { font-size:10px; } }
+      </style>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
         <div style="display:flex;gap:6px;">${viewBtns}</div>
         <div style="display:flex;gap:6px;margin-left:8px;">${teamBtns}</div>
@@ -536,7 +565,7 @@
           <div style="font-size:22px;font-weight:800;">${hasNext ? nextActive : '-'}<span style="font-size:12px;color:var(--text-muted);font-weight:400;">${hasNext ? ' / 판정 ' + nextKnown.length : ' (FCST 입력 필요)'}</span></div></div>
       </div>
 
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+      <div class="rdc-strip">
         ${stripBlocks}
       </div>
 
@@ -557,14 +586,15 @@
           <thead><tr>
             <th>No</th><th>SR</th><th>코드</th><th style="text-align:left;">도매장</th>
             <th>Range(${isYear ? '현재' : (qi + 1) + 'Q 적용'})</th><th>${thrLabel}(cs)</th>${monCols.map(m => `<th style="color:var(--text-muted);">${m}월</th>`).join('')}<th>${actLabel}(cs)</th><th>달성률</th>
-            <th>${fcstLabel}</th><th>FCST 자격</th><th>${nextLabel}</th><th>메모</th><th style="text-align:left;">Remark(3Q)</th>
+            <th>${fcstLabel}</th><th>FCST 자격</th><th>${nextLabel}</th><th>메모</th><th style="text-align:left;">${remarkLabel}</th>
           </tr></thead>
           <tbody>${trs}</tbody>
         </table>
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">
         달성률 = ${actLabel} ÷ 현재 Range의 ${thrLabel} · 색상은 구간 경과율(${bench != null ? Math.round(bench*100) + '%' : '-'}) 대비 페이스 ·
-        <b>${fcstLabel}</b>를 입력하면 guideline ${isYear ? '연간' : (qi+1) + 'Q'} 컬럼으로 자격 Range가 산출되고, ${nextLabel}(기본 '자동')이 ${nextQ || '차기'} 적용안이 됩니다. 입력은 자동 저장됩니다.
+        <b>${fcstLabel}</b>를 입력하면 guideline ${isYear ? '연간' : (qi+1) + 'Q'} 컬럼으로 자격 Range가 산출되고, ${nextLabel}(기본 '자동')이 ${nextQ || '차기'} 적용안이 됩니다. 입력은 자동 저장됩니다.<br>
+        <b>메모</b>는 ${nextQ || '차기'} 결정 사유 — 저장 후 <b>${(!isYear && qi < 3) ? nextQ + ' 탭의 Remark(' + nextQ + ')' : '차년 1Q Remark'}</b> 컬럼으로 그대로 넘어갑니다.${prevQKey ? ` 지금 보이는 <b>${remarkLabel}</b>는 ${prevQLabel} 탭에서 남긴 메모이며, 비어 있으면 최초 등록 Remark(흐림)를 표시합니다.` : ''}
       </div>`;
   }
 
