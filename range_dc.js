@@ -120,6 +120,8 @@
     const rows = [], skipped = [];
     for (const ym of yms) {
       const ex = exMap['m:' + ym];
+      // 마감 잠금(🔒) — 잠근 달은 어떤 업로드로도 덮어쓰지 않음. 휴리스틱(maxDay)보다 우선.
+      if (ex && ex.locked) { skipped.push(ym + '(🔒 마감 잠금 — Range DC 탭 상단 칩 클릭으로 해제)'); continue; }
       // 부분월 보호 — 저장돼 있는 달보다 덜 채워진(마지막 일자가 이른) 파일은 그 월을 건드리지 않음
       if (ex && ex.meta && ex.meta.maxDay > months[ym].meta.maxDay) { skipped.push(ym); continue; }
       rows.push({ id: 'm:' + ym, data: months[ym], updated_at: new Date().toISOString() });
@@ -408,6 +410,29 @@
         + (bench != null ? ` · 구간 경과 <b>${Math.round(bench*100)}%</b>` : '')
       : '실적 데이터 없음 — Data Update의 운송비/Range DSR 백필 또는 통합 DSR 업로드로 적재하세요') + ytdWarn;
 
+    // ── 마감월 잠금 칩 (Freight 탭과 동일 UX) ──
+    //    잠근 달은 saveMonths가 어떤 업로드로도 건드리지 않음 → 마감 후엔 재업로드해도 값이 고정된다.
+    const lockedYms = loadedYms.filter(ym => cache.months[ym] && cache.months[ym].locked);
+    const openYms   = loadedYms.filter(ym => !(cache.months[ym] && cache.months[ym].locked));
+    const monthChips = loadedYms.map(ym => {
+      const mm = cache.months[ym] || {}, lk = !!mm.locked, mt = mm.meta || {};
+      return `<span onclick="RangeDC._toggleLock('${ym}')" title="클릭하여 마감 잠금/해제${mt.maxDay ? ` · ~${mt.maxDay}일, ${mt.nDays || '?'}일치, ${fmt(mt.rows)}행` : ''}"
+        style="display:inline-block;padding:1px 6px;margin:1px;border:1px solid ${lk ? 'var(--primary)' : 'var(--border)'};border-radius:8px;cursor:pointer;${lk ? 'background:#eaf5ea;font-weight:600;' : ''}">${lk ? '🔒 ' : ''}${ym}${mt.maxDay ? ` <span style="font-weight:400;color:var(--text-muted);">(~${mt.maxDay}일)</span>` : ''}</span>`;
+    }).join('');
+    // 일괄 잠금 상한 = '이번 달 직전'까지 적재된 마지막 월.
+    //   진행 중인 달(아직 마감 전)을 실수로 얼려버리지 않기 위한 안전장치 — 굳이 잠그려면 그 달 칩을 직접 누르면 된다.
+    const _now = new Date();
+    const curYm = _now.getFullYear() + '-' + String(_now.getMonth() + 1).padStart(2, '0');
+    const bulkThru = loadedYms.filter(ym => ym < curYm).pop() || null;
+    const bulkTargets = bulkThru ? openYms.filter(ym => ym <= bulkThru) : [];
+    const lockBar = loadedYms.length ? `
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
+        저장된 월 <span style="font-weight:400;">(칩 클릭 = 마감 잠금/해제 · 🔒 잠긴 달은 업로드가 덮어쓰지 않음)</span>: ${monthChips}
+        ${bulkTargets.length ? `<button onclick="RangeDC._lockThrough('${bulkThru}')" style="margin-left:8px;padding:2px 8px;font-size:11px;border:1px solid var(--primary);background:transparent;color:var(--primary);border-radius:8px;cursor:pointer;">🔒 ${bulkThru}까지 일괄 잠금 (${bulkTargets.length}개월)</button>` : ''}
+        ${lockedYms.length ? `<button onclick="RangeDC._unlockAll()" style="margin-left:6px;padding:2px 8px;font-size:11px;border:1px solid var(--border);background:transparent;color:var(--text-muted);border-radius:8px;cursor:pointer;">전체 해제</button>` : ''}
+        <span id="range-lock-chip" style="margin-left:8px;"></span>
+      </div>` : '';
+
     // ── 표 ──
     const filt = evals.filter(r => (_teamFilter === '전체' || r.team === _teamFilter)
                                 && (_srFilter === '전체' || srDisp(r.code, r.sr) === _srFilter));
@@ -590,6 +615,7 @@
         isYear ? '' :
         qi === 0 ? ' · <b style="color:var(--neutral);">1Q 적용 Range 데이터 없음 — 차년 Proposal 반영 시 표시</b>' :
         qi === 3 ? ' · <b>4Q 적용 Range = 3Q 마감 결정</b>(3Q 탭에서 입력) · 이 탭의 마감 FCST는 <b>차년 1Q</b> 결정' : ''}</div>
+      ${lockBar}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">
         <div class="chart-card" style="padding:12px;"><div style="font-size:11px;color:var(--text-muted);">Range WS (3Q 적용)</div>
@@ -694,7 +720,50 @@
     markQDirty(qkey);           // 메모는 리렌더 불필요(포커스 유지)
   }
 
+  // ── 마감월 잠금 ──
+  //    on_range_dc의 'm:YYYY-MM' 행 data에 locked 플래그를 세운다. saveMonths가 이 플래그를 보고
+  //    해당 월을 아예 건너뛰므로, 마감한 달은 어떤 DSR을 다시 올려도 값이 바뀌지 않는다.
+  //    (Freight 탭 Freight.toggleLock과 동일 방식 — 두 탭 동작을 일부러 맞춰 둠)
+  function setLockChip(txt, color) {
+    const el = document.getElementById('range-lock-chip');
+    if (el) { el.textContent = txt || ''; el.style.color = color || 'var(--text-muted)'; }
+  }
+  async function _setLocked(yms, locked) {
+    const sb = _sb || global._supabase;
+    if (!sb || !_cache || !yms.length) return;
+    try {
+      setLockChip(locked ? '잠그는 중…' : '해제 중…', 'var(--text-muted)');
+      const rows = yms.map(ym => {
+        const d = Object.assign({}, _cache.months[ym]);
+        if (locked) d.locked = true; else delete d.locked;
+        return { id: 'm:' + ym, data: d, updated_at: new Date().toISOString() };
+      });
+      const { error } = await sb.from(TABLE).upsert(rows);
+      if (error) throw error;
+      rows.forEach(r => { _cache.months[r.id.slice(2)] = r.data; });   // 캐시만 갱신(재조회 불필요)
+      setLockChip(`✓ ${yms.length}개월 ${locked ? '잠금' : '해제'}`, 'var(--positive)');
+      rerender();
+    } catch (e) {
+      console.error('Range 마감 잠금 실패:', e);
+      setLockChip('⚠ 실패: ' + e.message, 'var(--negative)');
+    }
+  }
+  function _toggleLock(ym) {
+    if (!_cache || !_cache.months[ym]) return;
+    _setLocked([ym], !_cache.months[ym].locked);
+  }
+  function _lockThrough(thruYm) {
+    if (!_cache) return;
+    const t = Object.keys(_cache.months).filter(ym => ym <= thruYm && !_cache.months[ym].locked).sort();
+    if (t.length) _setLocked(t, true);
+  }
+  function _unlockAll() {
+    if (!_cache) return;
+    const t = Object.keys(_cache.months).filter(ym => _cache.months[ym].locked).sort();
+    if (t.length) _setLocked(t, false);
+  }
+
   global.RangeDC = { parseWorkbook, ingestWorkbook, saveMonths, render, invalidate,
                      _setView, _setTeam, _setSr, _toggleSub, _toggleSrEdit, _onSrEdit, _saveSr,
-                     _onFcst, _onDec, _onMemo };
+                     _onFcst, _onDec, _onMemo, _toggleLock, _lockThrough, _unlockAll };
 })(window);
