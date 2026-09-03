@@ -4481,11 +4481,15 @@ async function handleCombinedDsrUpload(input) {
       else if (fr.warnings && fr.warnings.length) console.warn('Freight skipped:', fr.warnings);
     } catch (frErr) { console.warn('Freight 반영 실패:', frErr); frMsg = ` · ⚠ Freight 미반영(${frErr.message})`; }
 
-    // ── Range DC: 코드×월 케이스 재집계 → on_range_dc (최신월만 — 부분월 보호는 saveMonths가 처리) ──
+    // ── Range DC: 코드×월 케이스 재집계 → on_range_dc ──
+    //    바로 위 Freight와 동일하게 **파일에 든 모든 월**을 넘긴다(onlyYm=null).
+    //    2026-09-03 이전엔 maxMon 한 달로 잘랐는데, 1~6월이 든 TTL 파일을 올려도 6월만 저장되는
+    //    문제가 있었다. 과거월 덮어쓰기는 saveMonths의 부분월 보호(meta.maxDay 비교)가 막아주므로
+    //    여기서 월을 제한할 이유가 없다. (지표/OrderPattern의 maxMon 제한과는 무관한 별도 경로) ──
     let rgMsg = '';
     try {
-      if (window.RangeDC && maxMon >= 0) {
-        const rg = await RangeDC.ingestWorkbook(_supabase, wb, '2026-' + String(maxMon + 1).padStart(2, '0'));
+      if (window.RangeDC) {
+        const rg = await RangeDC.ingestWorkbook(_supabase, wb, null);
         if (!rg.skipped) { rgMsg = ` · Range ${rg.months.join(',')}${rg.protectedSkip && rg.protectedSkip.length ? ` (보호: ${rg.protectedSkip.join(', ')})` : ''}`; delete _tabInitialized['range']; }
       }
     } catch (rgErr) { console.warn('Range DC 반영 실패:', rgErr); rgMsg = ` · ⚠ Range 미반영(${rgErr.message})`; }
