@@ -337,6 +337,18 @@
       }
     });
 
+    // ── 연간 진척: 어느 뷰에서든 "현재 적용(TO-BE) Range의 연간 임계값" 대비 YTD — 항상 함께 표시 ──
+    const MONS_Y = [1,2,3,4,5,6,7,8,9,10,11,12];
+    const yBench = elapsedFrac(cache.months, MONS_Y);      // 연간 경과율(데이터 마지막 일자 기준)
+    evals.forEach(r => {
+      if (r.member) return;
+      const ya = sumActual(cache.months, groupCodesOf(r.code), MONS_Y);
+      r.yAct = ya.act;
+      const g = glRow(r.tobe);
+      r.yThr = g ? g.yr : null;
+      r.yAch = (r.yThr && r.yAct != null) ? r.yAct / r.yThr : null;
+    });
+
     // ── KPI ──
     const active = evals.filter(r => r.tobe > 0);
     const activeLQ = evals.filter(r => r.asis > 0);
@@ -346,6 +358,9 @@
     const downgraded = evals.filter(r => !r.member && r.tobe > 0 && r.asis > 0 && r.tobe < r.asis).length;
     const fcstFilled = evals.filter(r => !r.member && r.fcst != null).length;
     const fcstTotal  = evals.filter(r => !r.member).length;
+    // 연간 페이스: 현재 Range 연간 임계값 기준, YTD 진척이 연간 경과율 이상인 도매장 수
+    const yTargets = evals.filter(r => !r.member && r.yThr != null);
+    const yOnPace = yBench != null ? yTargets.filter(r => (r.yAch || 0) >= yBench).length : 0;
 
     // ── 매트릭스 (레벨 × 지점): 분기별 적용 Range — 1Q(현재 데이터 없음)~4Q ──
     const LEVELS = M().guideline.map(g => g.r);           // 12..3
@@ -397,6 +412,22 @@
       const cls = r.ach == null ? '' : bench == null ? '' : r.ach >= bench ? 'var(--positive)' : r.ach >= bench - 0.10 ? 'var(--neutral)' : 'var(--negative)';
       return `<td style="font-weight:700;${cls ? 'color:' + cls + ';' : ''}">${fpct(r.ach)}</td>`;
     };
+    // 연간 타겟 대비 프로그레스 바 — 채움=YTD/연간 임계값, 세로선=연간 경과율(페이스 기준선)
+    const yProgCell = r => {
+      if (r.yThr == null) return '<td style="color:var(--text-muted)">-</td>';
+      const pct = r.yAch != null ? r.yAch : 0;
+      const color = yBench == null ? 'var(--primary)'
+        : pct >= yBench ? 'var(--positive)' : pct >= yBench - 0.10 ? 'var(--neutral)' : 'var(--negative)';
+      const mark = yBench != null
+        ? `<div style="position:absolute;left:${Math.min(yBench, 1) * 100}%;top:-1px;bottom:-1px;width:1.5px;background:rgba(0,0,0,.4);"></div>` : '';
+      return `<td title="YTD ${fmt(r.yAct)} / 연간 ${fmt(r.yThr)}cs (현재 Range R${r.tobe})${yBench != null ? ' · 연간 경과 ' + Math.round(yBench * 100) + '%' : ''}">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="position:relative;flex:1;height:8px;background:rgba(0,0,0,.08);border-radius:4px;min-width:52px;">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:${Math.min(pct, 1) * 100}%;background:${color};border-radius:4px;"></div>${mark}
+          </div>
+          <span style="font-size:11px;font-weight:700;color:${color};min-width:30px;text-align:right;">${fpct(r.yAch)}</span>
+        </div></td>`;
+    };
     const rangeChip = v => v == null ? '<span style="color:var(--text-muted)">-</span>'
       : v === 0 ? '<span style="color:var(--negative);font-weight:700;">제외</span>'
       : `<span style="font-weight:700;">R${v}</span> <span style="color:var(--text-muted);font-size:11px;">${v}%</span>`;
@@ -414,7 +445,8 @@
 
     // 분기 뷰에서는 구간 3개월을 각각 컬럼으로 표시 (연간 뷰는 QTD 툴팁으로 갈음)
     const monCols = isYear ? [] : mons;
-    const nCols = 13 + monCols.length;
+    const extraY = isYear ? 0 : 1;                    // 분기 뷰의 '연간 진척' 추가 컬럼 (연간 뷰는 달성률 자리가 진척 바)
+    const nCols = 13 + monCols.length + extraY;
     const monTds = bm => monCols.map(m => `<td style="color:var(--text-muted);">${(bm && bm[m] != null) ? fmt(bm[m]) : '-'}</td>`).join('');
     // 직전 분기에서 넘어온 메모는 진하게, 최초 등록 Remark 폴백은 흐리게 + 출처 툴팁
     const remarkTd = r => `<td style="text-align:left;font-size:11px;max-width:220px;${r.remarkCarried ? '' : 'color:var(--text-muted);'}"`
@@ -433,7 +465,7 @@
           <td>${r.no}</td>${srCell(r)}<td>${r.code}</td>
           <td style="text-align:left;">${esc(r.name)}</td>
           <td>${rangeChip(r.applied)}</td>
-          <td colspan="${7 + monCols.length}" style="text-align:left;font-size:11px;">↳ <b>${r.member}</b> ${esc(p ? p.name : '')} 에 합산 평가${p && p.next != null ? ` · 차기 ${p.next === 0 ? '제외' : 'R' + p.next} 연동` : ''}</td>
+          <td colspan="${7 + monCols.length + extraY}" style="text-align:left;font-size:11px;">↳ <b>${r.member}</b> ${esc(p ? p.name : '')} 에 합산 평가${p && p.next != null ? ` · 차기 ${p.next === 0 ? '제외' : 'R' + p.next} 연동` : ''}</td>
           ${remarkTd(r)}</tr>`;
       }
       // 펼침 시: 대표코드(본체) + 파생코드별 이번 구간 실적 분해 행
@@ -450,7 +482,7 @@
           ${monTds(p.byMon)}
           <td title="${esc(Object.entries(p.byMon || {}).map(([m, v]) => m + '월 ' + fmt(v)).join(' · '))}" style="font-weight:600;">${fmt(p.act)}</td>
           <td>${r.act > 0 ? Math.round(p.act / r.act * 100) + '%' : '-'}</td>
-          <td colspan="5"></td></tr>`).join('');
+          <td colspan="${5 + extraY}"></td></tr>`).join('');
       }
       const fcstVal = r.fcst != null ? r.fcst : '';
       return teamHdr + `<tr>
@@ -460,7 +492,7 @@
         <td style="color:var(--text-muted)">${fmt(r.thr)}</td>
         ${monTds(r.byMon)}
         <td title="${esc(Object.entries(r.byMon || {}).map(([m, v]) => m + '월 ' + fmt(v)).join(' · '))}" style="font-weight:600;">${fmt(r.act)}</td>
-        ${achCell(r)}
+        ${isYear ? yProgCell(r) : achCell(r) + yProgCell(r)}
         <td><input type="number" inputmode="decimal" class="range-fcst-in" value="${fcstVal}" placeholder="-"
               style="width:76px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:right;"
               onchange="RangeDC._onFcst('${qkey}','${r.code}',this.value)"></td>
@@ -563,6 +595,8 @@
           <div style="font-size:22px;font-weight:800;">${fcstFilled}<span style="font-size:12px;color:var(--text-muted);font-weight:400;"> / ${fcstTotal}</span></div></div>
         <div class="chart-card" style="padding:12px;"><div style="font-size:11px;color:var(--text-muted);">${bqi + 2 <= 4 ? (bqi + 2) + 'Q' : '차년 1Q'} 적용(결정) Range WS</div>
           <div style="font-size:22px;font-weight:800;">${hasNext ? nextActive : '-'}<span style="font-size:12px;color:var(--text-muted);font-weight:400;">${hasNext ? ' / 판정 ' + nextKnown.length : ' (FCST 입력 필요)'}</span></div></div>
+        <div class="chart-card" style="padding:12px;"><div style="font-size:11px;color:var(--text-muted);">연간 페이스 도달 (경과 ${yBench != null ? Math.round(yBench * 100) + '%' : '-'})</div>
+          <div style="font-size:22px;font-weight:800;">${yBench != null ? yOnPace : '-'}<span style="font-size:12px;color:var(--text-muted);font-weight:400;"> / ${yTargets.length}</span></div></div>
       </div>
 
       <div class="rdc-strip">
@@ -582,10 +616,10 @@
       </details>
 
       <div class="table-wrap" style="overflow-x:auto;">
-        <table style="width:100%;font-size:12px;text-align:center;min-width:${isYear ? 1080 : 1280}px;">
+        <table style="width:100%;font-size:12px;text-align:center;min-width:${isYear ? 1120 : 1380}px;">
           <thead><tr>
             <th>No</th><th>SR</th><th>코드</th><th style="text-align:left;">도매장</th>
-            <th>Range(${isYear ? '현재' : (qi + 1) + 'Q 적용'})</th><th>${thrLabel}(cs)</th>${monCols.map(m => `<th style="color:var(--text-muted);">${m}월</th>`).join('')}<th>${actLabel}(cs)</th><th>달성률</th>
+            <th>Range(${isYear ? '현재' : (qi + 1) + 'Q 적용'})</th><th>${thrLabel}(cs)</th>${monCols.map(m => `<th style="color:var(--text-muted);">${m}월</th>`).join('')}<th>${actLabel}(cs)</th>${isYear ? '<th style="min-width:100px;">연간 진척</th>' : '<th>달성률</th><th style="min-width:100px;">연간 진척</th>'}
             <th>${fcstLabel}</th><th>FCST 자격</th><th>${nextLabel}</th><th>메모</th><th style="text-align:left;">${remarkLabel}</th>
           </tr></thead>
           <tbody>${trs}</tbody>
@@ -593,6 +627,7 @@
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:8px;">
         달성률 = ${actLabel} ÷ 현재 Range의 ${thrLabel} · 색상은 구간 경과율(${bench != null ? Math.round(bench*100) + '%' : '-'}) 대비 페이스 ·
+        <b>연간 진척</b> = YTD ÷ 현재 적용 Range의 연간 임계값 — 바의 세로선이 연간 경과율(${yBench != null ? Math.round(yBench*100) + '%' : '-'}) 기준선 ·
         <b>${fcstLabel}</b>를 입력하면 guideline ${isYear ? '연간' : (qi+1) + 'Q'} 컬럼으로 자격 Range가 산출되고, ${nextLabel}(기본 '자동')이 ${nextQ || '차기'} 적용안이 됩니다. 입력은 자동 저장됩니다.<br>
         <b>메모</b>는 ${nextQ || '차기'} 결정 사유 — 저장 후 <b>${(!isYear && qi < 3) ? nextQ + ' 탭의 Remark(' + nextQ + ')' : '차년 1Q Remark'}</b> 컬럼으로 그대로 넘어갑니다.${prevQKey ? ` 지금 보이는 <b>${remarkLabel}</b>는 ${prevQLabel} 탭에서 남긴 메모이며, 비어 있으면 최초 등록 Remark(흐림)를 표시합니다.` : ''}
       </div>`;
