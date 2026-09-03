@@ -395,11 +395,18 @@
       + (_srEdit ? `<button class="subtab-btn" style="padding:3px 10px;font-size:11px;background:var(--primary);color:#fff;" onclick="RangeDC._saveSr()">💾 SR 저장</button>` : '');
     const loadedYms = Object.keys(cache.months).sort();
     const scopeYms = mons.map(m => YEAR + '-' + String(m).padStart(2, '0')).filter(ym => cache.months[ym]);
-    const metaTxt = loadedYms.length
+    // YTD 공백 감지 — 최신 적재월 이전에 빠진 2026 월이 있으면 연간 수치가 과소집계됨
+    const loaded26 = loadedYms.filter(k => k.startsWith(String(YEAR))).map(k => parseInt(k.slice(5), 10));
+    const lastLoaded26 = loaded26.length ? Math.max(...loaded26) : 0;
+    const missingY = [];
+    for (let m = 1; m <= lastLoaded26; m++) if (!loaded26.includes(m)) missingY.push(m);
+    const ytdWarn = missingY.length
+      ? ` · <b style="color:var(--negative);">⚠ ${missingY.join('·')}월 실적 미적재 — YTD·연간 진척이 과소집계됩니다. Data Update의 운송비+Range 백필에 해당 월 포함 DSR을 올려주세요.</b>` : '';
+    const metaTxt = (loadedYms.length
       ? `실적 적재: ${loadedYms[0]} ~ ${loadedYms[loadedYms.length-1]} (${loadedYms.length}개월)`
         + ` · 이번 구간 반영: ${scopeYms.length ? scopeYms.map(m => m.slice(5)).join('·') + '월' : '없음'}`
         + (bench != null ? ` · 구간 경과 <b>${Math.round(bench*100)}%</b>` : '')
-      : '실적 데이터 없음 — Data Update의 운송비/Range DSR 백필 또는 통합 DSR 업로드로 적재하세요';
+      : '실적 데이터 없음 — Data Update의 운송비/Range DSR 백필 또는 통합 DSR 업로드로 적재하세요') + ytdWarn;
 
     // ── 표 ──
     const filt = evals.filter(r => (_teamFilter === '전체' || r.team === _teamFilter)
@@ -596,7 +603,7 @@
         <div class="chart-card" style="padding:12px;"><div style="font-size:11px;color:var(--text-muted);">${bqi + 2 <= 4 ? (bqi + 2) + 'Q' : '차년 1Q'} 적용(결정) Range WS</div>
           <div style="font-size:22px;font-weight:800;">${hasNext ? nextActive : '-'}<span style="font-size:12px;color:var(--text-muted);font-weight:400;">${hasNext ? ' / 판정 ' + nextKnown.length : ' (FCST 입력 필요)'}</span></div></div>
         <div class="chart-card" style="padding:12px;"><div style="font-size:11px;color:var(--text-muted);">연간 페이스 도달 (경과 ${yBench != null ? Math.round(yBench * 100) + '%' : '-'})</div>
-          <div style="font-size:22px;font-weight:800;">${yBench != null ? yOnPace : '-'}<span style="font-size:12px;color:var(--text-muted);font-weight:400;"> / ${yTargets.length}</span></div></div>
+          <div style="font-size:22px;font-weight:800;">${(yBench != null && !missingY.length) ? yOnPace : '-'}<span style="font-size:12px;color:var(--text-muted);font-weight:400;">${missingY.length ? ` ⚠ ${missingY.join('·')}월 미적재` : ' / ' + yTargets.length}</span></div></div>
       </div>
 
       <div class="rdc-strip">
