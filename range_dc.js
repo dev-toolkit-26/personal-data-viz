@@ -17,7 +17,7 @@
 
   const M = () => global.RANGE_MASTER;
   const TABLE = 'on_range_dc';
-  const YEAR = 2026;
+  const YEAR = (global.RANGE_MASTER && global.RANGE_MASTER.year) || 2026;
   const Q_MONTHS = [[1,2,3],[4,5,6],[7,8,9],[10,11,12]];
   const BRANCH_COL = ['Seoul','Busan','Daejeon','Gwangju','Daegu','Jeju'];   // Summary 매트릭스 열 순서
   const BR_SHORT = { Seoul:'SU', Busan:'BS', Daejeon:'DJ', Gwangju:'GJ', Daegu:'DG', Jeju:'JJ' };
@@ -286,11 +286,8 @@
       if (!member) {
         const a = sumActual(cache.months, groupCodesOf(code), mons);
         row.act = a.act; row.byMon = a.byMon;
-        const g = glRow(tobe);
-        row.thr = g ? (isYear ? g.yr : g.q[qi]) : null;   // 현재(적용) Range의 이번 구간 기준
-        row.ach = (row.thr && row.act != null) ? row.act / row.thr : null;
         row.fcst = qdata.fcst[code] != null ? qdata.fcst[code] : null;
-        row.qual = isYear ? qualifyY(row.fcst) : qualifyQ(row.fcst, qi);   // 마감 FCST 자격 레벨
+        row.qual = isYear ? qualifyY(row.fcst) : qualifyQ(row.fcst, qi);   // 마감 FCST 자격 레벨(마감 분기 컬럼)
         const dec = qdata.dec[code] || {};
         row.decR = (dec.r != null) ? dec.r : null;        // null = 자동(제안 따름)
         row.next = row.decR != null ? row.decR : row.qual;
@@ -314,6 +311,21 @@
       next4[r.code] = d.r != null ? d.r : qualifyQ(bqFcst[r.code] != null ? bqFcst[r.code] : null, bqi);
     });
     evals.forEach(r => { if (r.member) next4[r.code] = next4[r.member] != null ? next4[r.member] : null; });
+
+    // ── 뷰 분기의 '적용 Range' 체인: 1Q=미상 · 2Q=AS-IS · 3Q=TO-BE · 4Q=3Q 마감 결정(next4) · 연간=TO-BE ──
+    //    토글로 4Q에 들어가면 기준·달성률이 4Q 적용 Range로 잡히고, 마감 FCST(4Q 컬럼)로 차년 1Q를 결정해 q:YYYYQ4에 저장.
+    evals.forEach(r => {
+      r.applied = isYear ? r.tobe
+        : qi === 0 ? null
+        : qi === 1 ? r.asis
+        : qi === 2 ? r.tobe
+        : next4[r.code];                                   // 4Q — 3Q 마감 미결정이면 null(기준 '-')
+      if (!r.member) {
+        const g = glRow(r.applied);
+        r.thr = g ? (isYear ? g.yr : g.q[qi]) : null;
+        r.ach = (r.thr && r.act != null) ? r.act / r.thr : null;
+      }
+    });
 
     // ── KPI ──
     const active = evals.filter(r => r.tobe > 0);
@@ -407,7 +419,7 @@
         return teamHdr + `<tr style="color:var(--text-muted);background:rgba(0,0,0,.015);">
           <td>${r.no}</td>${srCell(r)}<td>${r.code}</td>
           <td style="text-align:left;">${esc(r.name)}</td>
-          <td>${rangeChip(r.tobe)}</td>
+          <td>${rangeChip(r.applied)}</td>
           <td colspan="${7 + monCols.length}" style="text-align:left;font-size:11px;">↳ <b>${r.member}</b> ${esc(p ? p.name : '')} 에 합산 평가${p && p.next != null ? ` · 차기 ${p.next === 0 ? '제외' : 'R' + p.next} 연동` : ''}</td>
           <td style="text-align:left;font-size:11px;">${esc(r.remark)}</td></tr>`;
       }
@@ -431,7 +443,7 @@
       return teamHdr + `<tr>
         <td>${r.no}</td>${srCell(r)}<td>${r.code}</td>
         <td style="text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;" title="${esc(r.name)}">${esc(r.name)}${subBadge}</td>
-        <td>${rangeChip(r.tobe)}</td>
+        <td>${rangeChip(r.applied)}</td>
         <td style="color:var(--text-muted)">${fmt(r.thr)}</td>
         ${monTds(r.byMon)}
         <td title="${esc(Object.entries(r.byMon || {}).map(([m, v]) => m + '월 ' + fmt(v)).join(' · '))}" style="font-weight:600;">${fmt(r.act)}</td>
@@ -443,7 +455,7 @@
         <td style="white-space:nowrap;">
           <select style="padding:3px 4px;border:1px solid var(--border);border-radius:6px;font-size:12px;"
               onchange="RangeDC._onDec('${qkey}','${r.code}',this.value)">${decOptions(r)}</select>
-          ${diffChip(r.next, r.tobe)}
+          ${diffChip(r.next, r.applied != null ? r.applied : r.tobe)}
         </td>
         <td><input type="text" class="range-memo-in" value="${esc(r.memo)}" placeholder="메모"
               style="width:110px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;font-size:11px;"
@@ -506,7 +518,10 @@
         <span style="margin-left:8px;display:inline-flex;gap:6px;">${srEditBtns}</span>
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">${metaTxt}
-        · 단위: 환산 케이스(cs) · 기준/실적은 파생코드 합산 · 자격판정: ${isYear ? '연간 임계값' : '마감 FCST → guideline ' + (qi+1) + 'Q 컬럼'} (마스터 ${esc(M().version)})</div>
+        · 단위: 환산 케이스(cs) · 기준/실적은 파생코드 합산 · 자격판정: ${isYear ? '연간 임계값' : '마감 FCST → guideline ' + (qi+1) + 'Q 컬럼'} (마스터 ${esc(M().version)})${
+        isYear ? '' :
+        qi === 0 ? ' · <b style="color:var(--neutral);">1Q 적용 Range 데이터 없음 — 차년 Proposal 반영 시 표시</b>' :
+        qi === 3 ? ' · <b>4Q 적용 Range = 3Q 마감 결정</b>(3Q 탭에서 입력) · 이 탭의 마감 FCST는 <b>차년 1Q</b> 결정' : ''}</div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">
         <div class="chart-card" style="padding:12px;"><div style="font-size:11px;color:var(--text-muted);">Range WS (3Q 적용)</div>
@@ -541,7 +556,7 @@
         <table style="width:100%;font-size:12px;text-align:center;min-width:${isYear ? 1080 : 1280}px;">
           <thead><tr>
             <th>No</th><th>SR</th><th>코드</th><th style="text-align:left;">도매장</th>
-            <th>Range(3Q)</th><th>${thrLabel}(cs)</th>${monCols.map(m => `<th style="color:var(--text-muted);">${m}월</th>`).join('')}<th>${actLabel}(cs)</th><th>달성률</th>
+            <th>Range(${isYear ? '현재' : (qi + 1) + 'Q 적용'})</th><th>${thrLabel}(cs)</th>${monCols.map(m => `<th style="color:var(--text-muted);">${m}월</th>`).join('')}<th>${actLabel}(cs)</th><th>달성률</th>
             <th>${fcstLabel}</th><th>FCST 자격</th><th>${nextLabel}</th><th>메모</th><th style="text-align:left;">Remark(3Q)</th>
           </tr></thead>
           <tbody>${trs}</tbody>

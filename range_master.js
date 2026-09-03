@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════
 window.RANGE_MASTER = {
   version: '2026Q3-v1',
+  year: 2026,                      // 실적·분기 입력의 기준 연도 (차년 시즌엔 새 Proposal로 교체)
   base_quarter: '2026Q3',          // entities의 tobe가 적용되는 분기
   unit: 'cs',                      // 환산 케이스 (DSR Volume in Case)
 
