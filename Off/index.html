@@ -1913,7 +1913,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
           <!-- 저장 / 삭제 -->
           <div style="display:flex;gap:10px;align-items:center;">
-            <button onclick="minutesSave()"
+            <button id="min-save-btn" onclick="minutesSave()"
               style="background:#205527;color:#fff;border:none;border-radius:8px;padding:9px 24px;font-size:13px;font-weight:600;
                      cursor:pointer;font-family:inherit;transition:background .15s;"
               onmouseover="this.style.background='#174019'" onmouseout="this.style.background='#205527'">저장</button>
@@ -6954,38 +6954,69 @@ function minutesNew() {
   document.getElementById('min-month').focus();
 }
 
+// Postgres 57014("canceling statement due to statement timeout") 판별.
+// 이 테이블은 RLS=open_all·트리거/FK 없음이라 단건 upsert가 느릴 이유가 없다 → 원인은
+// 대개 순간 락 경합(더블클릭/두 탭 동시 저장)이나 콜드스타트. 짧은 백오프로 자동 재시도한다.
+// (statement_timeout은 문장을 롤백하므로 재시도해도 중복 insert가 생기지 않는다.)
+function _isTimeoutErr(e){
+  return !!e && (e.code === '57014' || /statement timeout|canceling statement/i.test(e.message || ''));
+}
+async function _minutesUpsertWithRetry(payload, tries = 3){
+  let last = null;
+  for (let i = 0; i < tries; i++){
+    const res = await _supabase.from('off_meeting_minutes').upsert(payload).select('id');
+    if (!res.error) return res;
+    last = res.error;
+    if (!_isTimeoutErr(res.error)) break;                 // 타임아웃이 아니면 즉시 중단
+    await new Promise(r => setTimeout(r, 600 * (i + 1)));  // 0.6s → 1.2s 백오프 후 재시도
+  }
+  return { data: null, error: last };
+}
+
+let _minutesSaving = false;
 async function minutesSave() {
+  if (_minutesSaving) return;   // 중복 저장(더블클릭·두 탭) 차단 — 자기 자신과의 락 경합 방지
   const statusEl = document.getElementById('min-status');
   const meeting_date = document.getElementById('min-date').value;
   if (!meeting_date) { statusEl.textContent = '날짜를 입력하세요.'; statusEl.style.color = '#e53e3e'; return; }
   const month = document.getElementById('min-month').value;
   if (!month) { statusEl.textContent = '월을 선택하세요.'; statusEl.style.color = '#e53e3e'; return; }
+  const saveBtn = document.getElementById('min-save-btn');
+  _minutesSaving = true;
+  if (saveBtn){ saveBtn.disabled = true; saveBtn.style.opacity = '0.6'; saveBtn.style.cursor = 'wait'; }
   statusEl.textContent = '저장 중...'; statusEl.style.color = 'var(--text-muted)';
-  // 별도 off-trade Supabase 프로젝트로 직접 upsert (엣지함수 save-minutes 대체)
-  const payload = {
-    meeting_date,
-    week_label:   month,                          // 월(Jan~Dec)이 제목 역할
-    attendees:    (document.getElementById('min-week')?.value || ''),   // 주차(W1~W5) — attendees 컬럼 재활용
-
-    agenda:       _minutesCollectCards(),         // jsonb로 직접 저장
-    action_items: _minutesActions,                // jsonb로 직접 저장
-  };
-  if (_minutesCurrentId) payload.id = _minutesCurrentId;
-  // .single()은 select 결과가 정확히 1행이 아니면(RLS로 0행 등) 쓰기 성공에도 예외를 던져
-  // '저장 실패' 오탐이 났다. error가 null이면 쓰기 성공으로 보고, id만 있으면 취한다.
-  const { data: result, error } = await _supabase
-    .from('off_meeting_minutes')
-    .upsert(payload)
-    .select('id');
-  if (error) { statusEl.textContent = `저장 실패: ${error.message}`; statusEl.style.color = '#e53e3e'; return; }
-  if (!_minutesCurrentId && result && result[0] && result[0].id) _minutesCurrentId = result[0].id;
-  statusEl.textContent = '저장되었습니다.'; statusEl.style.color = 'var(--accent)';
-  document.getElementById('min-delete-btn').style.display = '';
-  await minutesLoad();
-  if (_minutesCurrentId) {
-    document.querySelectorAll('.min-list-item').forEach(el => el.classList.remove('active'));
-    const item = document.getElementById(`min-item-${_minutesCurrentId}`);
-    if (item) item.classList.add('active');
+  try {
+    // 별도 off-trade Supabase 프로젝트로 직접 upsert (엣지함수 save-minutes 대체)
+    const payload = {
+      meeting_date,
+      week_label:   month,                          // 월(Jan~Dec)이 제목 역할
+      attendees:    (document.getElementById('min-week')?.value || ''),   // 주차(W1~W5) — attendees 컬럼 재활용
+      agenda:       _minutesCollectCards(),         // jsonb로 직접 저장
+      action_items: _minutesActions,                // jsonb로 직접 저장
+    };
+    if (_minutesCurrentId) payload.id = _minutesCurrentId;
+    // .single()은 select 결과가 정확히 1행이 아니면(RLS로 0행 등) 쓰기 성공에도 예외를 던져
+    // '저장 실패' 오탐이 났다. error가 null이면 쓰기 성공으로 보고, id만 있으면 취한다.
+    const { data: result, error } = await _minutesUpsertWithRetry(payload);
+    if (error) {
+      statusEl.textContent = _isTimeoutErr(error)
+        ? '저장 실패: 서버 응답 지연(타임아웃)으로 재시도했지만 실패했습니다. 잠시 후 다시 눌러 주세요.'
+        : `저장 실패: ${error.message}`;
+      statusEl.style.color = '#e53e3e';
+      return;
+    }
+    if (!_minutesCurrentId && result && result[0] && result[0].id) _minutesCurrentId = result[0].id;
+    statusEl.textContent = '저장되었습니다.'; statusEl.style.color = 'var(--accent)';
+    document.getElementById('min-delete-btn').style.display = '';
+    await minutesLoad();
+    if (_minutesCurrentId) {
+      document.querySelectorAll('.min-list-item').forEach(el => el.classList.remove('active'));
+      const item = document.getElementById(`min-item-${_minutesCurrentId}`);
+      if (item) item.classList.add('active');
+    }
+  } finally {
+    _minutesSaving = false;
+    if (saveBtn){ saveBtn.disabled = false; saveBtn.style.opacity = ''; saveBtn.style.cursor = 'pointer'; }
   }
 }
 
