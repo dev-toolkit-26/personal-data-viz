@@ -4934,6 +4934,7 @@ const STOCK_IN_SCHEMA   = 2;    // 1: 입고일 기준(통관 개념 없음) / 2
 const STOCK_IN_LEAD_IN  = 3;    // 여주입고일만 있을 때 통관 추정
 const STOCK_IN_LEAD_ETA = 12;   // ETA만 있을 때 통관 추정
 const STOCK_PEND_STALE  = 30;   // 여주입고 후 이 일수를 넘도록 통관일자가 없으면 미기입 이력으로 본다
+const STOCK_IN_OVERDUE_KEEP = 90;   // 비추적(신규) SKU: 추정 도착이 이 일수 이내로 지난 지연분은 예정으로 유지
 
 // 반입일정 워크북 → {file, cutoff, rows:[{code, sku, hl, ch, arr, qty, exp, eta}]}
 // 워크북에 연도별 시트가 여러 장 있고 과거 이력이 더 크다. 시트를 고르지 않고 전부 읽은 뒤
@@ -4966,7 +4967,11 @@ async function parseInboundExcel(file, cutoff) {
       const inn = _stockNormDate(c.inn >= 0 ? g[c.inn] : null);
       const cus = _stockNormDate(c.cus >= 0 ? g[c.cus] : null);
       const eta = _stockNormDate(c.eta >= 0 ? g[c.eta] : null);
-      if (cus && cus <= cut) continue;                  // 통관 완료 → 이미 데일리스탁에 있다
+      // '데일리스탁에서 잔량을 확인할 수 있는 코드'인지. tracked면 통관 후 재고로 넘어가
+      // 이중계상되므로 이력 처리하고, 맵에 없는 신규 SKU(예: 파울라너 위트 330병 511385)는
+      // 재고로 확인할 길이 없으니 예정 물량을 함부로 버리지 않는다.
+      const tracked = !!STOCK_SKU_MAP[code];
+      if (cus && cus <= cut && tracked) continue;       // 통관완료 & 재고에 잡히는 코드 → 이미 데일리스탁에 있다
       // 통관 예정일: 통관일자 > 입고일+3 > ETA+12
       const plus = (base, d) => { const t = new Date(base + 'T00:00:00'); t.setDate(t.getDate() + d);
                                   return t.toISOString().slice(0, 10); };
@@ -4974,7 +4979,12 @@ async function parseInboundExcel(file, cutoff) {
       if (!arr) continue;
       // 창고에는 들어왔는데 통관이 안 된 물량 — 데일리스탁에 없고 가장 빨리 풀린다
       const pending = !!inn && inn <= cut;
-      if (!pending && arr <= cut) continue;             // 도착 전인데 날짜가 과거면 이력 행
+      if (!pending && arr <= cut) {                     // 추정 도착일이 과거
+        // tracked면 이미 재고에 반영됐다고 보고 이력 처리(드롭). 비추적 신규 SKU는
+        // ETA가 지나도록 통관·입고 칸이 안 채워진 지연분이 통째로 사라지므로 최근분은 살린다.
+        const overdue = Math.round((Date.parse(cut) - Date.parse(arr)) / 86400000);
+        if (tracked || overdue > STOCK_IN_OVERDUE_KEEP) continue;   // 재고로 확인되거나 오래된 이력이면 제외
+      }
       seen++;
       if (STOCK_IN_EXCL_CODE.has(code)) { excluded++; continue; }   // 면세 전용
       const m = STOCK_SKU_MAP[code] || STOCK_IN_EXTRA[code];
