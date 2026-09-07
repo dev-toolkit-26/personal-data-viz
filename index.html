@@ -2470,6 +2470,12 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     <div id="range-root"><div class="chart-card" style="padding:24px;color:var(--text-muted);font-size:13px;">Range DC 데이터 로드 중…</div></div>
   </div>
 
+  <!-- Tab: Value Chain (밸류체인 시뮬레이터 — 도매·아울렛 마진, value_chain.html 임베드) -->
+  <div id="tab-vc" class="tab-content">
+    <iframe id="vc-frame" title="밸류체인 시뮬레이터"
+      style="width:100%;height:calc(100vh - 165px);min-height:600px;border:1px solid rgba(0,0,0,.08);border-radius:8px;display:block;background:#FAFAF7;"></iframe>
+  </div>
+
   <!-- Tab: 회의록 -->
   <div id="tab-minutes" class="tab-content">
     <div style="display:flex;gap:0;height:calc(100vh - 160px);min-height:500px;">
@@ -9033,7 +9039,7 @@ const TAB_GROUPS = [
   { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['rofo-sheet','Rofo'], ['order','Order Pattern']] },
   { key: 'perf',   label: 'Performance', tabs: [['ytd','YTD'], ['branch','Branch Analysis'], ['revenue','Revenue']] },
   { key: 'sku',    label: 'SKU',         tabs: [['sku','SKU Detail'], ['sku-hist','SKU History']] },
-  { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['range','Range DC']] },
+  { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['range','Range DC'], ['vc','Value Chain']] },
   { key: 'work',   label: 'Workspace',   tabs: [['minutes','Minutes'], ['calendar','Calendar & To-Do']] },
 ];
 const _tabGroupOf = tabId => TAB_GROUPS.find(g => g.tabs.some(t => t[0] === tabId)) || null;
@@ -9075,6 +9081,7 @@ function switchTab(tabId) {
     if (tabId === 'order')    { renderOrderPattern(); }
     if (tabId === 'freight')  { if (window.Freight) Freight.render(_supabase); }
     if (tabId === 'range')    { if (window.RangeDC) RangeDC.render(_supabase); }
+    if (tabId === 'vc')       { const f = document.getElementById('vc-frame'); if (f && !f.src) f.src = 'value_chain.html?v=' + Math.floor(Date.now() / 60000); }
     if (tabId === 'minutes')  { minutesLoad(); }
     if (tabId === 'calendar') { calendarInit(); todoInit(); }
   } else {

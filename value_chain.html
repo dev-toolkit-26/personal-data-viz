@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>On-Trade Value Chain — 도매·아울렛 마진 (26Y AP)</title>
+<style>
+:root{
+  --green:#145A38; --green2:#1F7A4D; --tint:#EAF3EC; --paper:#FAFAF7; --ink:#17201B;
+  --line:#E3E6E1; --gray:#6B746E; --gold:#B9860F; --goldbg:#FBF3DF; --red:#C24A3A;
+  --band-low:#F8DDD8; --band-mid:#FBEFCB; --band-hi:#DDEBD8; --band-top:#AFD3A6;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{font-family:"Malgun Gothic","Pretendard","Apple SD Gothic Neo",-apple-system,sans-serif; background:var(--paper); color:var(--ink); font-size:13px;}
+.num{font-variant-numeric:tabular-nums;}
+header{background:var(--green); color:#fff; padding:14px 22px; display:flex; flex-wrap:wrap; gap:14px; align-items:center;}
+header h1{font-size:17px; font-weight:800; letter-spacing:-0.3px; margin-right:6px;}
+header .sub{font-size:11px; color:#CADCB8;}
+.modeSwitch{display:flex; border:1px solid rgba(255,255,255,.45); border-radius:8px; overflow:hidden;}
+.modeSwitch button{border:0; background:transparent; color:#DCEAD9; padding:8px 16px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit;}
+.modeSwitch button.on{background:#fff; color:var(--green);}
+.modeSwitch button .tag{display:block; font-size:9.5px; font-weight:400; opacity:.75;}
+.gset{display:flex; gap:10px; align-items:center; font-size:11.5px; color:#DCEAD9;}
+.gset input{width:56px; padding:4px 6px; border-radius:6px; border:1px solid rgba(255,255,255,.4); background:rgba(255,255,255,.12); color:#fff; font-family:inherit; text-align:right;}
+.saveBar{display:flex; gap:8px; margin-left:auto; align-items:center;}
+.saveBar button{border:1px solid rgba(255,255,255,.5); background:rgba(255,255,255,.1); color:#fff; border-radius:7px; padding:7px 13px; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;}
+.saveBar button:hover{background:#fff; color:var(--green);}
+nav{display:flex; gap:2px; background:#fff; border-bottom:2px solid var(--green); padding:0 16px; overflow-x:auto;}
+nav button{border:0; background:transparent; padding:11px 15px; font-size:13px; cursor:pointer; color:var(--gray); font-family:inherit; font-weight:700; white-space:nowrap; border-bottom:3px solid transparent;}
+nav button.on{color:var(--green); border-bottom-color:var(--green);}
+nav button.main::after{content:"메인"; font-size:9px; background:var(--green); color:#fff; border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:2px;}
+main{padding:18px 22px 60px; max-width:1280px; margin:0 auto;}
+.modeBanner{margin-bottom:14px; padding:9px 14px; border-radius:8px; font-size:12.5px; font-weight:700; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+.modeBanner.norm{background:#EEF1ED; color:var(--gray); border:1px dashed #C6CCC5;}
+.modeBanner.real{background:var(--goldbg); color:var(--gold); border:1px solid #E5CE93;}
+.modeBanner .dot{width:9px;height:9px;border-radius:50%;}
+.modeBanner.norm .dot{background:#9AA39C;}
+.modeBanner.real .dot{background:var(--gold);}
+h2{font-size:15px; font-weight:800; margin:22px 0 10px; letter-spacing:-0.2px;}
+h2:first-child{margin-top:0;}
+h3.settingsHead{font-size:13.5px; font-weight:800; color:var(--gold); margin:20px 0 8px; padding-top:14px; border-top:2px dashed #E5CE93;}
+.card{background:#fff; border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:16px; overflow-x:auto;}
+.setLabel{font-size:13px; font-weight:800; color:var(--green); margin-bottom:8px;}
+table{border-collapse:collapse; width:100%;}
+th,td{border:1px solid var(--line); padding:5px 9px; text-align:right; white-space:nowrap;}
+th{background:var(--green); color:#fff; font-weight:700; font-size:12px; text-align:center;}
+th.gold{background:var(--gold);}
+td:first-child,th:first-child{text-align:left;}
+tr.setrow td{background:#DFE3DE; font-weight:800; color:#2A332D; text-align:left; font-size:12px;}
+td.hkr{background:var(--tint); font-weight:700;}
+td.gold{color:var(--gold); font-weight:800; background:var(--goldbg);}
+td.pctcell{font-weight:800;}
+.delta{display:inline-block; font-size:10px; border-radius:4px; padding:0 4px; margin-left:5px; font-weight:700;}
+.delta.up{background:var(--goldbg); color:var(--gold);}
+.delta.dn{background:var(--band-low); color:var(--red);}
+.note{font-size:11px; color:var(--gray); margin:6px 0 0; line-height:1.5;}
+.b-low{background:var(--band-low)!important;} .b-mid{background:var(--band-mid)!important;}
+.b-hi{background:var(--band-hi)!important;} .b-top{background:var(--band-top)!important;}
+.kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-bottom:16px;}
+.kpi{background:#fff; border:1px solid var(--line); border-left:4px solid var(--green); border-radius:8px; padding:11px 14px;}
+.kpi .v{font-size:21px; font-weight:800; letter-spacing:-0.5px;}
+.kpi .l{font-size:11px; color:var(--gray); margin-top:3px; line-height:1.4;}
+.kpi.gold{border-left-color:var(--gold);}
+.settings input{width:82px; padding:5px 7px; border:1px solid #C6CCC5; border-radius:6px; font-family:inherit; text-align:right; font-size:12.5px;}
+.settings input:focus{outline:2px solid var(--green2); border-color:var(--green2);}
+.settings td{padding:4px 8px;}
+button.reset{border:1px solid var(--line); background:#fff; color:var(--gray); border-radius:7px; padding:7px 14px; font-family:inherit; font-size:12px; cursor:pointer; font-weight:700;}
+button.reset:hover{border-color:var(--red); color:var(--red);}
+.pill{display:inline-block; font-size:10px; border:1px solid var(--line); border-radius:10px; padding:1px 8px; color:var(--gray); margin-left:8px; vertical-align:1px;}
+@media print{header,nav,.settingsBlock{display:none;} body{background:#fff;}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>On-Trade Value Chain — 도매·아울렛 마진</h1>
+    <div class="sub">26Y AP 참고자료 · 밸류체인 Outlet / NKA 분리 · 지점 탭 하단에서 DC·지원금 입력</div>
+  </div>
+  <div class="gset">
+    <label>잔 용량(ml) <input type="number" id="glassIn" value="430" step="10"></label>
+    <label>로스율(%) <input type="number" id="lossIn" value="5" step="1"></label>
+  </div>
+  <div class="modeSwitch">
+    <button id="mNorm" onclick="setMode('norm')" class="">정상가<span class="tag">참고자료</span></button>
+    <button id="mReal" class="on" onclick="setMode('real')">실거래 DC 반영<span class="tag">메인 · 납품가/지원금 적용</span></button>
+  </div>
+  <div class="saveBar">
+    <button onclick="saveHtml()">HTML로 저장</button>
+  </div>
+</header>
+<nav id="nav"><button class="on main" onclick="go('vc')">밸류체인 · Outlet</button><button class=" main" onclick="go('nka')">밸류체인 · NKA</button><button class=" main" onclick="go('sum')">서머리</button><button class=" " onclick="go('seoul')">서울</button><button class=" " onclick="go('busan')">부산</button><button class=" " onclick="go('gwangju')">광주</button><button class=" " onclick="go('daejeon')">대전</button><button class=" " onclick="go('daegu')">대구</button><button class=" " onclick="go('jeju')">제주</button></nav>
+<main id="main"><div class="modeBanner real"><span class="dot"></span>실거래 모드 (메인) — 하단 입력(매입DC·도매마진·지원금·납품가)이 원가에 반영됩니다. 변동 값은 <b style="color:var(--gold)">금색</b>, 델타는 정상가 대비. 상단 [HTML로 저장]을 누르면 현재 입력 상태가 내장된 완성 파일이 저장됩니다 — 배포·보고는 그 파일 하나로.</div><h2>밸류체인 · Outlet <span class="pill">일반 유흥 아울렛 — 서울 베이스 × 매뉴얼 믹스</span></h2>
+  <div class="kpis">
+    <div class="kpi"><div class="v num">20.0%</div><div class="l">하이네켄 20L 도매 마진 (실거래)</div></div>
+    <div class="kpi gold"><div class="v num">3,573원</div><div class="l">하이네켄 잔당 원가 (430ml · 로스 5%)</div></div>
+    <div class="kpi"><div class="v num">58.0%</div><div class="l">하이네켄 생 아울렛 마진 (믹스 RSP 8,500원)</div></div>
+    <div class="kpi"><div class="v num">66.3%</div><div class="l">스텔라 생 아울렛 마진 — 하이네켄 대비 8.3%p</div></div>
+  </div><div class="card"><div class="setLabel">① 바틀 · 프리미엄 — 하이네켄 vs 스텔라 vs 코로나 vs 버드와이저</div><table>
+      <tbody><tr><th style="min-width:230px">구분 (VAT포함)</th><th>하이네켄 330 병</th><th>스텔라 330 병 (24입)</th><th>코로나 355 병 (24입)</th><th>버드와이저 병 (30입)</th></tr>
+      <tr><td style="text-align:left">규격 · 입수</td><td class="num  hkr">24입</td><td class="num  ">24입</td><td class="num  ">24입</td><td class="num  ">30입</td></tr>
+      <tr><td style="text-align:left">믹스 RSP (병당, 매뉴얼)</td><td class="num  hkr">8,000</td><td class="num  ">7,500</td><td class="num  ">7,500</td><td class="num  ">7,000</td></tr>
+      <tr><td style="text-align:left">RSP 환산 (Carton)</td><td class="num  hkr">192,000</td><td class="num  ">180,000</td><td class="num  ">180,000</td><td class="num  ">210,000</td></tr>
+      <tr><td style="text-align:left">업장 납품가 (Carton)</td><td class="num  hkr">84,216</td><td class="num gold ">73,123<span class="delta up">+4.2%</span></td><td class="num gold ">75,873<span class="delta up">+4.2%</span></td><td class="num  ">43,099</td></tr>
+      <tr><td style="text-align:left">지원금 (−, Carton당)</td><td class="num  hkr">—</td><td class="num  ">—</td><td class="num  ">—</td><td class="num  ">—</td></tr>
+      <tr><td style="text-align:left">Outlet Margin</td><td class="num  hkr">107,784</td><td class="num  ">106,877</td><td class="num  ">104,127</td><td class="num  ">166,901</td></tr>
+      <tr><td style="text-align:left"><b>Outlet_Margin%</b></td><td class="num pctcell b-hi hkr">56.1%</td><td class="num pctcell b-hi ">59.4%<span class="delta dn">-1.6%p</span></td><td class="num pctcell b-hi ">57.8%<span class="delta dn">-1.7%p</span></td><td class="num pctcell b-top ">79.5%</td></tr>
+      <tr><td style="text-align:left">도매 매입가</td><td class="num  hkr">70,180</td><td class="num  ">58,498</td><td class="num  ">60,698</td><td class="num  ">33,153</td></tr>
+      <tr><td style="text-align:left">Wholesaler Margin</td><td class="num  hkr">14,036</td><td class="num  ">14,625</td><td class="num  ">15,175</td><td class="num  ">9,946</td></tr>
+      <tr><td style="text-align:left"><b>WS 마진율 (매입가 대비)</b></td><td class="num pctcell b-mid hkr">20.0%</td><td class="num pctcell b-hi ">25.0%<span class="delta up">+5.0%p</span></td><td class="num pctcell b-hi ">25.0%<span class="delta up">+5.0%p</span></td><td class="num pctcell b-hi ">30.0%</td></tr>
+      <tr><td style="text-align:left">WS_Margin% (판매가 대비)</td><td class="num  hkr">16.7%</td><td class="num  ">20.0%</td><td class="num  ">20.0%</td><td class="num  ">23.1%</td></tr>
+      <tr><td style="text-align:left">공급가 (VAT별도, 정상)</td><td class="num  hkr">63,800</td><td class="num  ">53,180</td><td class="num  ">55,180</td><td class="num  ">30,139</td></tr>
+    </tbody></table></div><div class="card"><div class="setLabel">② 20L 생맥주 · 메인 — 하이네켄 vs 스텔라 vs 아사히</div><table>
+      <tbody><tr><th style="min-width:230px">구분 (VAT포함)</th><th>하이네켄 20L 생</th><th>스텔라 20L 생</th><th>아사히 19L 생</th></tr>
+      <tr><td style="text-align:left">규격 · 유효 잔수</td><td class="num  hkr">20L · 44.2잔</td><td class="num  ">20L · 44.2잔</td><td class="num  ">19L · 42.0잔</td></tr>
+      <tr><td style="text-align:left">믹스 RSP (잔당, 매뉴얼)</td><td class="num  hkr">8,500</td><td class="num  ">7,000</td><td class="num  ">8,000</td></tr>
+      <tr><td style="text-align:left">RSP 환산 (KEG)</td><td class="num  hkr">375,581</td><td class="num  ">309,302</td><td class="num  ">335,814</td></tr>
+      <tr><td style="text-align:left">업장 납품가 (KEG)</td><td class="num gold ">157,872<span class="delta dn">-20.0%</span></td><td class="num  ">104,280</td><td class="num gold ">180,576<span class="delta dn">-10.0%</span></td></tr>
+      <tr><td style="text-align:left">지원금 (−, KEG당)</td><td class="num  hkr">—</td><td class="num  ">—</td><td class="num  ">—</td></tr>
+      <tr><td style="text-align:left">Outlet Margin</td><td class="num  hkr">217,709</td><td class="num  ">205,022</td><td class="num  ">155,238</td></tr>
+      <tr><td style="text-align:left"><b>Outlet_Margin%</b></td><td class="num pctcell b-hi hkr">58.0%<span class="delta up">+10.5%p</span></td><td class="num pctcell b-top ">66.3%</td><td class="num pctcell b-mid ">46.2%<span class="delta up">+6.0%p</span></td></tr>
+      <tr><td style="text-align:left">도매 매입가</td><td class="num gold ">131,560<span class="delta dn">-20.0%</span></td><td class="num  ">86,900</td><td class="num gold ">150,480<span class="delta dn">-10.0%</span></td></tr>
+      <tr><td style="text-align:left">Wholesaler Margin</td><td class="num  hkr">26,312</td><td class="num  ">17,380</td><td class="num  ">30,096</td></tr>
+      <tr><td style="text-align:left"><b>WS 마진율 (매입가 대비)</b></td><td class="num pctcell b-mid hkr">20.0%</td><td class="num pctcell b-mid ">20.0%</td><td class="num pctcell b-mid ">20.0%</td></tr>
+      <tr><td style="text-align:left">WS_Margin% (판매가 대비)</td><td class="num  hkr">16.7%</td><td class="num  ">16.7%</td><td class="num  ">16.7%</td></tr>
+      <tr><td style="text-align:left">공급가 (VAT별도, 정상)</td><td class="num  hkr">149,500</td><td class="num  ">79,000</td><td class="num  ">152,000</td></tr>
+    </tbody></table></div><div class="card"><div class="setLabel">③ 20L 생맥주 · 밀맥 — 파울라너 vs 블랑 vs 호가든</div><table>
+      <tbody><tr><th style="min-width:230px">구분 (VAT포함)</th><th>파울라너 20L 생</th><th>블랑 20L 생</th><th>호가든 20L 생</th></tr>
+      <tr><td style="text-align:left">규격 · 유효 잔수</td><td class="num  hkr">20L · 44.2잔</td><td class="num  ">20L · 44.2잔</td><td class="num  ">20L · 44.2잔</td></tr>
+      <tr><td style="text-align:left">믹스 RSP (잔당, 매뉴얼)</td><td class="num  hkr">8,000</td><td class="num  ">8,000</td><td class="num  ">7,000</td></tr>
+      <tr><td style="text-align:left">RSP 환산 (KEG)</td><td class="num  hkr">353,488</td><td class="num  ">353,488</td><td class="num  ">309,302</td></tr>
+      <tr><td style="text-align:left">업장 납품가 (KEG)</td><td class="num gold ">118,404<span class="delta dn">-40.0%</span></td><td class="num  ">132,000</td><td class="num  ">100,100</td></tr>
+      <tr><td style="text-align:left">지원금 (−, KEG당)</td><td class="num  hkr">—</td><td class="num gold ">30,000</td><td class="num  ">—</td></tr>
+      <tr><td style="text-align:left">Outlet Margin</td><td class="num  hkr">235,084</td><td class="num  ">251,488</td><td class="num  ">209,202</td></tr>
+      <tr><td style="text-align:left"><b>Outlet_Margin%</b></td><td class="num pctcell b-top hkr">66.5%<span class="delta up">+22.3%p</span></td><td class="num pctcell b-top ">71.1%<span class="delta up">+8.5%p</span></td><td class="num pctcell b-top ">67.6%</td></tr>
+      <tr><td style="text-align:left">도매 매입가</td><td class="num gold ">98,670<span class="delta dn">-40.0%</span></td><td class="num  ">110,000</td><td class="num  ">77,000</td></tr>
+      <tr><td style="text-align:left">Wholesaler Margin</td><td class="num  hkr">19,734</td><td class="num  ">22,000</td><td class="num  ">23,100</td></tr>
+      <tr><td style="text-align:left"><b>WS 마진율 (매입가 대비)</b></td><td class="num pctcell b-mid hkr">20.0%</td><td class="num pctcell b-mid ">20.0%</td><td class="num pctcell b-hi ">30.0%</td></tr>
+      <tr><td style="text-align:left">WS_Margin% (판매가 대비)</td><td class="num  hkr">16.7%</td><td class="num  ">16.7%</td><td class="num  ">23.1%</td></tr>
+      <tr><td style="text-align:left">공급가 (VAT별도, 정상)</td><td class="num  hkr">149,500</td><td class="num  ">100,000</td><td class="num  ">70,000</td></tr>
+    </tbody></table></div><div class="card"><div class="setLabel">④ 바틀 · 아시안/라지 — 설화 vs 칭따오 vs 카스</div><table>
+      <tbody><tr><th style="min-width:230px">구분 (VAT포함)</th><th>설화 500 병</th><th>칭따오 640 병</th><th>카스 500 병</th></tr>
+      <tr><td style="text-align:left">규격 · 입수</td><td class="num  hkr">12입</td><td class="num  ">12입</td><td class="num  ">20입</td></tr>
+      <tr><td style="text-align:left">믹스 RSP (병당, 매뉴얼)</td><td class="num  hkr">6,500</td><td class="num  ">6,500</td><td class="num  ">5,500</td></tr>
+      <tr><td style="text-align:left">RSP 환산 (Carton)</td><td class="num  hkr">78,000</td><td class="num  ">78,000</td><td class="num  ">110,000</td></tr>
+      <tr><td style="text-align:left">업장 납품가 (Carton)</td><td class="num gold ">27,562<span class="delta dn">-20.0%</span></td><td class="num gold ">32,762<span class="delta dn">-18.6%</span></td><td class="num  ">36,388</td></tr>
+      <tr><td style="text-align:left">지원금 (−, Carton당)</td><td class="num  hkr">—</td><td class="num gold ">3,000</td><td class="num  ">—</td></tr>
+      <tr><td style="text-align:left">Outlet Margin</td><td class="num  hkr">50,438</td><td class="num  ">48,238</td><td class="num  ">73,612</td></tr>
+      <tr><td style="text-align:left"><b>Outlet_Margin%</b></td><td class="num pctcell b-hi hkr">64.7%<span class="delta up">+8.8%p</span></td><td class="num pctcell b-hi ">61.8%<span class="delta up">+13.5%p</span></td><td class="num pctcell b-top ">66.9%</td></tr>
+      <tr><td style="text-align:left">도매 매입가</td><td class="num gold ">22,968<span class="delta dn">-20.0%</span></td><td class="num gold ">31,201<span class="delta dn">-7.0%</span></td><td class="num  ">27,991</td></tr>
+      <tr><td style="text-align:left">Wholesaler Margin</td><td class="num  hkr">4,594</td><td class="num  ">1,560</td><td class="num  ">8,397</td></tr>
+      <tr><td style="text-align:left"><b>WS 마진율 (매입가 대비)</b></td><td class="num pctcell b-mid hkr">20.0%</td><td class="num pctcell b-low ">5.0%<span class="delta dn">-15.0%p</span></td><td class="num pctcell b-hi ">30.0%</td></tr>
+      <tr><td style="text-align:left">WS_Margin% (판매가 대비)</td><td class="num  hkr">16.7%</td><td class="num  ">4.8%</td><td class="num  ">23.1%</td></tr>
+      <tr><td style="text-align:left">공급가 (VAT별도, 정상)</td><td class="num  hkr">26,100</td><td class="num  ">30,500</td><td class="num  ">25,446</td></tr>
+    </tbody></table></div><h2 style="margin-top:28px;color:var(--gray)">참고자료 (비교군 제외)</h2><div class="card"><div class="setLabel">참고 · 카스 330 병 — 국산 벤치마크 (비교군 제외)</div><table>
+      <tbody><tr><th style="min-width:230px">구분 (VAT포함)</th><th>카스 330 병 (30입)</th></tr>
+      <tr><td style="text-align:left">규격 · 입수</td><td class="num  ">30입</td></tr>
+      <tr><td style="text-align:left">믹스 RSP (병당, 매뉴얼)</td><td class="num  ">4,000</td></tr>
+      <tr><td style="text-align:left">RSP 환산 (Carton)</td><td class="num  ">120,000</td></tr>
+      <tr><td style="text-align:left">업장 납품가 (Carton)</td><td class="num  ">37,036</td></tr>
+      <tr><td style="text-align:left">지원금 (−, Carton당)</td><td class="num  ">—</td></tr>
+      <tr><td style="text-align:left">Outlet Margin</td><td class="num  ">82,964</td></tr>
+      <tr><td style="text-align:left"><b>Outlet_Margin%</b></td><td class="num pctcell b-top ">69.1%</td></tr>
+      <tr><td style="text-align:left">도매 매입가</td><td class="num  ">28,489</td></tr>
+      <tr><td style="text-align:left">Wholesaler Margin</td><td class="num  ">8,547</td></tr>
+      <tr><td style="text-align:left"><b>WS 마진율 (매입가 대비)</b></td><td class="num pctcell b-hi ">30.0%</td></tr>
+      <tr><td style="text-align:left">WS_Margin% (판매가 대비)</td><td class="num  ">23.1%</td></tr>
+      <tr><td style="text-align:left">공급가 (VAT별도, 정상)</td><td class="num  ">25,899</td></tr>
+    </tbody></table></div><div class="card"><div class="setLabel">참고 · 일본계 생맥주 — 서울 도매 실측 (비교군 제외 · RSP는 아사히 생과 동일 적용)</div><table>
+      <tbody><tr><th style="min-width:230px">구분 (VAT포함)</th><th>기린생 15L</th><th>산토리생 15L</th><th>산토리생 10L</th><th>삿뽀로생 10L</th><th>삿뽀로생 20L</th></tr>
+      <tr><td style="text-align:left">규격 · 유효 잔수</td><td class="num  ">15L · 33.1잔</td><td class="num  ">15L · 33.1잔</td><td class="num  ">10L · 22.1잔</td><td class="num  ">10L · 22.1잔</td><td class="num  ">20L · 44.2잔</td></tr>
+      <tr><td style="text-align:left">믹스 RSP (잔당, 매뉴얼)</td><td class="num  ">8,000</td><td class="num  ">8,000</td><td class="num  ">8,000</td><td class="num  ">8,000</td><td class="num  ">8,000</td></tr>
+      <tr><td style="text-align:left">RSP 환산 (KEG)</td><td class="num  ">265,116</td><td class="num  ">265,116</td><td class="num  ">176,744</td><td class="num  ">176,744</td><td class="num  ">353,488</td></tr>
+      <tr><td style="text-align:left">업장 납품가 (KEG)</td><td class="num  ">117,700</td><td class="num gold ">142,162</td><td class="num gold ">117,331</td><td class="num  ">117,370</td><td class="num  ">174,900</td></tr>
+      <tr><td style="text-align:left">지원금 (−, KEG당)</td><td class="num  ">—</td><td class="num  ">—</td><td class="num  ">—</td><td class="num  ">—</td><td class="num  ">—</td></tr>
+      <tr><td style="text-align:left">Outlet Margin</td><td class="num  ">147,416</td><td class="num  ">122,954</td><td class="num  ">59,413</td><td class="num  ">59,374</td><td class="num  ">178,588</td></tr>
+      <tr><td style="text-align:left"><b>Outlet_Margin%</b></td><td class="num pctcell b-hi ">55.6%</td><td class="num pctcell b-mid ">46.4%</td><td class="num pctcell b-low ">33.6%</td><td class="num pctcell b-low ">33.6%</td><td class="num pctcell b-mid ">50.5%</td></tr>
+      <tr><td style="text-align:left">도매 매입가</td><td class="num  ">80,300</td><td class="num gold ">75,860<span class="delta dn">-17.9%</span></td><td class="num gold ">50,574<span class="delta dn">-17.9%</span></td><td class="num  ">66,000</td><td class="num  ">131,175</td></tr>
+      <tr><td style="text-align:left">Wholesaler Margin</td><td class="num  ">37,400</td><td class="num  ">66,302</td><td class="num  ">66,757</td><td class="num  ">51,370</td><td class="num  ">43,725</td></tr>
+      <tr><td style="text-align:left"><b>WS 마진율 (매입가 대비)</b></td><td class="num pctcell b-top ">46.6%</td><td class="num pctcell b-top ">87.4%<span class="delta up">+33.5%p</span></td><td class="num pctcell b-top ">132.0%<span class="delta up">+41.5%p</span></td><td class="num pctcell b-top ">77.8%</td><td class="num pctcell b-hi ">33.3%</td></tr>
+      <tr><td style="text-align:left">WS_Margin% (판매가 대비)</td><td class="num  ">31.8%</td><td class="num  ">46.6%</td><td class="num  ">56.9%</td><td class="num  ">43.8%</td><td class="num  ">25.0%</td></tr>
+      <tr><td style="text-align:left">공급가 (VAT별도, 정상)</td><td class="num  ">73,000</td><td class="num  ">84,000</td><td class="num  ">56,000</td><td class="num  ">60,000</td><td class="num  ">119,250</td></tr>
+    </tbody></table></div><p class="note">일본계 생맥주: 서울 대정 ERP 실측 — 매입가·기준가를 VAT별도로 가정, 기준가를 업장 납품 리스트가로 해석(납품가 = 기준가×1.1). RSP는 아사히 생(서울 8,000)과 동일 일괄 적용. 산토리 행사 매입은 기준가 유지 구조라 실거래 도매 마진이 크게 확대됨.</p><p class="note">베이스 정상가는 서울 체계(부산 마진율 준용). 하단 매뉴얼 입력으로 최종 믹스 값(RSP·DC·지원금·납품가)을 직접 확정 — 지점 값을 참고해 가중치는 매뉴얼로 반영. 전 항목 VAT포함(비율은 VAT별도와 동일).</p><div class="settingsBlock"><h3 class="settingsHead">밸류체인 매뉴얼 입력 — 최종 믹스 값 직접 작업</h3><div class="card settings"><table>
+   <tbody><tr><th style="min-width:150px">품목</th><th class="gold">믹스 RSP<br><small>잔·병당 (매뉴얼)</small></th><th class="gold">매입DC %<br><small>공급사→도매 행사</small></th><th class="gold">도매 마진 %<br><small>매입가 대비 markup · 수정 가능</small></th><th class="gold">지원금 (원/박스·통)</th><th class="gold">납품가 직접입력 (원/박스·통)<br><small>입력 시 마진 계산 무시</small></th></tr><tr><td class="hkr" style="text-align:left">하이네켄 330 병</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','hk330','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','hk330','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="20.00" onchange="upd('vc','hk330','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','hk330','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','hk330','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">스텔라 330 병 (24입)</td>
+      <td><input type="number" step="100" value="7500" onchange="upd('vc','st330','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','st330','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="25.00" onchange="upd('vc','st330','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','st330','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','st330','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">코로나 355 병 (24입)</td>
+      <td><input type="number" step="100" value="7500" onchange="upd('vc','co355','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','co355','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="25.00" onchange="upd('vc','co355','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','co355','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','co355','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">버드와이저 병 (30입)</td>
+      <td><input type="number" step="100" value="7000" onchange="upd('vc','bud','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','bud','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="30.00" onchange="upd('vc','bud','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','bud','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','bud','dlv',this.value)"></td></tr><tr><td class="hkr" style="text-align:left">하이네켄 20L 생</td>
+      <td><input type="number" step="100" value="8500" onchange="upd('vc','hk20','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="20" onchange="upd('vc','hk20','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="20.00" onchange="upd('vc','hk20','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','hk20','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','hk20','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">스텔라 20L 생</td>
+      <td><input type="number" step="100" value="7000" onchange="upd('vc','st20','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','st20','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="20.00" onchange="upd('vc','st20','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','st20','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','st20','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">아사히 19L 생</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','as19','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="10" onchange="upd('vc','as19','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="20.00" onchange="upd('vc','as19','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','as19','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','as19','dlv',this.value)"></td></tr><tr><td class="hkr" style="text-align:left">파울라너 20L 생</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','pl20','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="40" onchange="upd('vc','pl20','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="20.00" onchange="upd('vc','pl20','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','pl20','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','pl20','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">블랑 20L 생</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','bl20','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','bl20','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="20.00" onchange="upd('vc','bl20','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="30000" onchange="upd('vc','bl20','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','bl20','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">호가든 20L 생</td>
+      <td><input type="number" step="100" value="7000" onchange="upd('vc','hg20','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','hg20','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="30.00" onchange="upd('vc','hg20','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','hg20','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','hg20','dlv',this.value)"></td></tr><tr><td class="hkr" style="text-align:left">설화 500 병</td>
+      <td><input type="number" step="100" value="6500" onchange="upd('vc','sn500','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="20" onchange="upd('vc','sn500','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="20.00" onchange="upd('vc','sn500','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','sn500','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','sn500','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">칭따오 640 병</td>
+      <td><input type="number" step="100" value="6500" onchange="upd('vc','ts640','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="7" onchange="upd('vc','ts640','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="5.00" onchange="upd('vc','ts640','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="3000" onchange="upd('vc','ts640','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','ts640','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">카스 500 병</td>
+      <td><input type="number" step="100" value="5500" onchange="upd('vc','cs500','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','cs500','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="30.00" onchange="upd('vc','cs500','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','cs500','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','cs500','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">카스 330 병 (30입)</td>
+      <td><input type="number" step="100" value="4000" onchange="upd('vc','cass330','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','cass330','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="30.00" onchange="upd('vc','cass330','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','cass330','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','cass330','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">기린생 15L</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','kr15','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','kr15','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="46.58" onchange="upd('vc','kr15','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','kr15','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','kr15','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">산토리생 15L</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','su15','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="17.9" onchange="upd('vc','su15','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="87.40" onchange="upd('vc','su15','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','su15','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','su15','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">산토리생 10L</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','su10','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="17.9" onchange="upd('vc','su10','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="132.00" onchange="upd('vc','su10','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','su10','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','su10','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">삿뽀로생 10L</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','sp10','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','sp10','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="77.83" onchange="upd('vc','sp10','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','sp10','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','sp10','dlv',this.value)"></td></tr><tr><td class="" style="text-align:left">삿뽀로생 20L</td>
+      <td><input type="number" step="100" value="8000" onchange="upd('vc','sp20','rsp',this.value)"></td>
+      <td><input type="number" step="0.5" value="0" onchange="upd('vc','sp20','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="33.33" onchange="upd('vc','sp20','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="0" onchange="upd('vc','sp20','sub',this.value)"></td>
+      <td><input type="number" step="500" value="" placeholder="자동" onchange="upd('vc','sp20','dlv',this.value)"></td></tr></tbody></table><p class="note">믹스 RSP 기본값 = 서울 조사값, 도매 마진 기본값 = 서울 정상 마진. 지점 값을 참고해 최종 반영치를 직접 입력하세요. 지원금은 박스·통당. 납품가 직접입력 시 마진 계산 무시. 프리필: 아사히 25%(3+1) · 칭따오 4.5%.</p>
+  <p style="margin-top:10px"><button class="reset" onclick="resetSet();render()">전체 기본값으로 초기화</button></p></div></div></main>
+
+<script type="application/json" id="savedState">{"ver":2,"saved":"2026-09-01T06:00:12.970Z","glass":430,"loss":0.05,"mode":"real","tab":"vc","set":{"nka":{"n_hk":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_st":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_kb":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_ob":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_cb":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_sp":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_pe":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_pl":{"dcp":"","ws":18.999999999999993,"sub":0,"rsp":"","glass":""},"n_wh":{"dcp":"","ws":12.00000000000001,"sub":0,"rsp":"","glass":""},"n_bd":{"dcp":"","ws":19.999999999999996,"sub":0,"rsp":"","glass":""}},"vc":{"hk330":{"dc":0,"ws":20,"sub":0,"dlv":"","rsp":8000},"st330":{"dc":0,"ws":25,"sub":0,"dlv":"","rsp":7500},"co355":{"dc":0,"ws":25,"sub":0,"dlv":"","rsp":7500},"bud":{"dc":0,"ws":30,"sub":0,"dlv":"","rsp":7000},"hk20":{"dc":20,"ws":20,"sub":0,"dlv":"","rsp":8500},"st20":{"dc":0,"ws":20,"sub":0,"dlv":"","rsp":7000},"as19":{"dc":10,"ws":20,"sub":0,"dlv":"","rsp":8000},"as10":{"dc":25,"ws":20,"sub":0,"dlv":"","rsp":""},"pl20":{"dc":40,"ws":20,"sub":0,"dlv":"","rsp":8000},"bl20":{"dc":0,"ws":20,"sub":30000,"dlv":"","rsp":8000},"hg20":{"dc":0,"ws":30,"sub":0,"dlv":"","rsp":7000},"sn500":{"dc":20,"ws":20,"sub":0,"dlv":"","rsp":6500},"ts640":{"dc":7,"ws":5,"sub":3000,"dlv":"","rsp":6500},"cs500":{"dc":0,"ws":30,"sub":0,"dlv":"","rsp":5500},"cass330":{"dc":0,"ws":30,"sub":0,"dlv":"","rsp":4000},"kr15":{"dc":0,"ws":46.57534246575344,"sub":0,"dlv":"","rsp":8000},"su15":{"dc":17.9,"ws":87.4,"sub":0,"dlv":"","rsp":8000},"su10":{"dc":17.9,"ws":132,"sub":0,"dlv":"","rsp":8000},"sp10":{"dc":0,"ws":77.83333333333333,"sub":0,"dlv":"","rsp":8000},"sp20":{"dc":0,"ws":33.33333333333333,"sub":0,"dlv":"","rsp":8000}},"seoul":{"hk330":{"dc":0,"ws":20,"sub":0,"dlv":""},"st330":{"dc":40.1,"ws":25,"sub":0,"dlv":""},"co355":{"dc":37.2,"ws":25,"sub":0,"dlv":""},"bud":{"dc":0,"ws":30,"sub":0,"dlv":""},"hk20":{"dc":0,"ws":20,"sub":0,"dlv":""},"st20":{"dc":0,"ws":20,"sub":0,"dlv":""},"as19":{"dc":25,"ws":20,"sub":0,"dlv":""},"as10":{"dc":25,"ws":20,"sub":0,"dlv":""},"pl20":{"dc":0,"ws":20,"sub":0,"dlv":""},"bl20":{"dc":0,"ws":20,"sub":0,"dlv":""},"hg20":{"dc":0,"ws":30,"sub":0,"dlv":""},"sn500":{"dc":0,"ws":20,"sub":0,"dlv":""},"ts640":{"dc":4.5,"ws":20,"sub":0,"dlv":""},"cs500":{"dc":0,"ws":30,"sub":0,"dlv":""},"cass330":{"dc":0,"ws":30,"sub":0,"dlv":""},"kr15":{"dc":0,"ws":46.57534246575344,"sub":0,"dlv":""},"su15":{"dc":17.9,"ws":87.4,"sub":0,"dlv":""},"su10":{"dc":17.9,"ws":132,"sub":0,"dlv":""},"sp10":{"dc":0,"ws":77.83333333333333,"sub":0,"dlv":""},"sp20":{"dc":0,"ws":33.33333333333333,"sub":0,"dlv":""}},"busan":{"hk330":{"dc":0,"ws":20,"sub":0,"dlv":""},"st330":{"dc":0,"ws":20,"sub":0,"dlv":""},"co355":{"dc":0,"ws":20,"sub":0,"dlv":""},"bud":{"dc":0,"ws":30,"sub":0,"dlv":""},"hk20":{"dc":0,"ws":20,"sub":0,"dlv":""},"st20":{"dc":0,"ws":20,"sub":0,"dlv":""},"as19":{"dc":25,"ws":20,"sub":0,"dlv":""},"as10":{"dc":25,"ws":20,"sub":0,"dlv":""},"pl20":{"dc":0,"ws":20,"sub":0,"dlv":""},"bl20":{"dc":0,"ws":20,"sub":0,"dlv":""},"hg20":{"dc":0,"ws":30,"sub":0,"dlv":""},"sn500":{"dc":0,"ws":20,"sub":0,"dlv":""},"ts640":{"dc":4.5,"ws":20,"sub":0,"dlv":""},"cs500":{"dc":0,"ws":30,"sub":0,"dlv":""},"cass330":{"dc":0,"ws":30,"sub":0,"dlv":""},"kr15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp20":{"dc":0,"ws":20,"sub":0,"dlv":""}},"gwangju":{"hk330":{"dc":0,"ws":25,"sub":0,"dlv":""},"st330":{"dc":30.1,"ws":35,"sub":0,"dlv":""},"co355":{"dc":0,"ws":19.999999999999996,"sub":0,"dlv":""},"bud":{"dc":0,"ws":30.004313348153545,"sub":0,"dlv":""},"hk20":{"dc":0,"ws":25,"sub":0,"dlv":""},"st20":{"dc":0,"ws":25,"sub":0,"dlv":""},"as19":{"dc":25,"ws":25,"sub":0,"dlv":""},"as10":{"dc":25,"ws":20,"sub":0,"dlv":""},"pl20":{"dc":0,"ws":25,"sub":0,"dlv":""},"bl20":{"dc":0,"ws":24.99999999999998,"sub":0,"dlv":""},"hg20":{"dc":0,"ws":25,"sub":0,"dlv":""},"sn500":{"dc":0,"ws":24.99999999999998,"sub":0,"dlv":""},"ts640":{"dc":4.5,"ws":14.590163934426226,"sub":0,"dlv":""},"cs500":{"dc":0,"ws":50.00589483612357,"sub":0,"dlv":""},"cass330":{"dc":0,"ws":39.99999999999999,"sub":0,"dlv":""},"kr15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp20":{"dc":0,"ws":20,"sub":0,"dlv":""}},"daejeon":{"hk330":{"dc":0,"ws":18.999999999999993,"sub":0,"dlv":""},"st330":{"dc":30.1,"ws":25,"sub":0,"dlv":""},"co355":{"dc":29.9,"ws":35,"sub":0,"dlv":""},"bud":{"dc":0,"ws":26.411264172968263,"sub":0,"dlv":""},"hk20":{"dc":0,"ws":18.999999999999993,"sub":0,"dlv":""},"st20":{"dc":0,"ws":26.363636363636367,"sub":0,"dlv":""},"as19":{"dc":25,"ws":12.99999999999999,"sub":0,"dlv":""},"as10":{"dc":25,"ws":20,"sub":0,"dlv":""},"pl20":{"dc":0,"ws":18.999999999999993,"sub":0,"dlv":""},"bl20":{"dc":0,"ws":19.99999999999997,"sub":0,"dlv":""},"hg20":{"dc":0,"ws":13.636363636363647,"sub":0,"dlv":""},"sn500":{"dc":0,"ws":18.999999999999993,"sub":0,"dlv":""},"ts640":{"dc":4.5,"ws":13.636363636363647,"sub":0,"dlv":""},"cs500":{"dc":0,"ws":33.19471536873093,"sub":0,"dlv":""},"cass330":{"dc":0,"ws":40.4055614642896,"sub":0,"dlv":""},"kr15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp20":{"dc":0,"ws":20,"sub":0,"dlv":""}},"daegu":{"hk330":{"dc":0,"ws":20,"sub":0,"dlv":""},"st330":{"dc":0,"ws":20,"sub":0,"dlv":""},"co355":{"dc":25,"ws":20,"sub":0,"dlv":""},"bud":{"dc":0,"ws":20,"sub":0,"dlv":""},"hk20":{"dc":0,"ws":20,"sub":0,"dlv":""},"st20":{"dc":0,"ws":20,"sub":0,"dlv":""},"as19":{"dc":25,"ws":20,"sub":0,"dlv":""},"as10":{"dc":25,"ws":20,"sub":0,"dlv":""},"pl20":{"dc":0,"ws":20,"sub":0,"dlv":""},"bl20":{"dc":0,"ws":20,"sub":0,"dlv":""},"hg20":{"dc":0,"ws":20,"sub":0,"dlv":""},"sn500":{"dc":0,"ws":20,"sub":0,"dlv":""},"ts640":{"dc":4.5,"ws":19.977,"sub":0,"dlv":""},"cs500":{"dc":0,"ws":20,"sub":0,"dlv":""},"cass330":{"dc":0,"ws":20,"sub":0,"dlv":""},"kr15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp20":{"dc":0,"ws":20,"sub":0,"dlv":""}},"jeju":{"hk330":{"dc":0,"ws":25,"sub":0,"dlv":""},"st330":{"dc":0,"ws":25,"sub":0,"dlv":""},"co355":{"dc":0,"ws":25,"sub":0,"dlv":""},"bud":{"dc":0,"ws":20,"sub":0,"dlv":""},"hk20":{"dc":0,"ws":30,"sub":0,"dlv":""},"st20":{"dc":0,"ws":64.557,"sub":0,"dlv":""},"as19":{"dc":25,"ws":75,"sub":0,"dlv":""},"as10":{"dc":25,"ws":75,"sub":0,"dlv":""},"pl20":{"dc":0,"ws":50,"sub":0,"dlv":""},"bl20":{"dc":0,"ws":30,"sub":0,"dlv":""},"hg20":{"dc":0,"ws":60,"sub":0,"dlv":""},"sn500":{"dc":0,"ws":35,"sub":0,"dlv":""},"ts640":{"dc":4.5,"ws":43.062,"sub":0,"dlv":""},"cs500":{"dc":0,"ws":75,"sub":0,"dlv":""},"cass330":{"dc":0,"ws":20,"sub":0,"dlv":""},"kr15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su15":{"dc":0,"ws":20,"sub":0,"dlv":""},"su10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp10":{"dc":0,"ws":20,"sub":0,"dlv":""},"sp20":{"dc":0,"ws":20,"sub":0,"dlv":""}}}}</script>
+
+<script>
+/* ================= 기본 데이터 (v9 확정본 · 버드 30입) ================= */
+const GLASS0=430, LOSS0=0.05;
+let GLASS=GLASS0, LOSS=LOSS0, MODE='real', TAB='vc';
+
+const SKUS=[
+ {k:'hk330',n:'하이네켄 330 병',   set:1,t:'b',u:24,sup:63800, hkr:true},
+ {k:'st330',n:'스텔라 330 병 (24입)',set:1,t:'b',u:24,sup:53180},
+ {k:'co355',n:'코로나 355 병 (24입)',set:1,t:'b',u:24,sup:55180},
+ {k:'bud',n:'버드와이저 병 (30입)',set:1,t:'b',u:30,sup:30139},
+ {k:'hk20',n:'하이네켄 20L 생',    set:2,t:'k',u:20,sup:149500,hkr:true},
+ {k:'st20',n:'스텔라 20L 생',      set:2,t:'k',u:20,sup:79000},
+ {k:'as19',n:'아사히 19L 생',      set:2,t:'k',u:19,sup:152000},
+ {k:'as10',n:'아사히 10L 생',      set:2,t:'k',u:10,sup:80000},
+ {k:'pl20',n:'파울라너 20L 생',    set:3,t:'k',u:20,sup:149500,hkr:true},
+ {k:'bl20',n:'블랑 20L 생',        set:3,t:'k',u:20,sup:100000},
+ {k:'hg20',n:'호가든 20L 생',      set:3,t:'k',u:20,sup:70000},
+ {k:'sn500',n:'설화 500 병',       set:4,t:'b',u:12,sup:26100, hkr:true},
+ {k:'ts640',n:'칭따오 640 병',     set:4,t:'b',u:12,sup:30500},
+ {k:'cs500',n:'카스 500 병',       set:4,t:'b',u:20,sup:25446},
+ {k:'cass330',n:'카스 330 병 (30입)',set:5,t:'b',u:30,sup:25899},
+ {k:'kr15',n:'기린생 15L',    set:6,t:'k',u:15,sup:73000},
+ {k:'su15',n:'산토리생 15L',  set:6,t:'k',u:15,sup:84000},
+ {k:'su10',n:'산토리생 10L',  set:6,t:'k',u:10,sup:56000},
+ {k:'sp10',n:'삿뽀로생 10L',  set:6,t:'k',u:10,sup:60000},
+ {k:'sp20',n:'삿뽀로생 20L',  set:6,t:'k',u:20,sup:119250},
+];
+const SETNAMES={1:'① 바틀 · 프리미엄 — 하이네켄 vs 스텔라 vs 코로나 vs 버드와이저',
+ 5:'참고 · 카스 330 병 — 국산 벤치마크 (비교군 제외)',
+ 6:'참고 · 일본계 생맥주 — 서울 도매 실측 (비교군 제외 · RSP는 아사히 생과 동일 적용)',
+ 2:'② 20L 생맥주 · 메인 — 하이네켄 vs 스텔라 vs 아사히',
+ 3:'③ 20L 생맥주 · 밀맥 — 파울라너 vs 블랑 vs 호가든',
+ 4:'④ 바틀 · 아시안/라지 — 설화 vs 칭따오 vs 카스'};
+
+const REGIONS={
+ seoul:{n:'서울', src:'부산 마진율 준용(추정) × 서울 RSP 조사',
+   mk:{hk330:.20,cass330:.30,bud:.30,hk20:.20,st20:.20,as19:.20,pl20:.20,bl20:.20,hg20:.30,sn500:.20,ts640:.20,cs500:.30},
+   rsp:{hk330:8000,cass330:4000,bud:7000,hk20:8500,st20:7000,as19:8000,pl20:8000,bl20:8000,hg20:7000,sn500:6500,ts640:6500,cs500:5500}},
+ busan:{n:'부산', src:'지점 제품별 단가표 (버드 330ml)',
+   mk:{hk330:.20,cass330:.30,bud:.30,hk20:.20,st20:.20,as19:.20,pl20:.20,bl20:.20,hg20:.30,sn500:.20,ts640:.20,cs500:.30},
+   rsp:{hk330:8000,cass330:5000,bud:6000,hk20:9000,st20:9000,as19:9000,pl20:9000,bl20:9000,hg20:8000,sn500:6000,ts640:7000,cs500:5000}},
+ gwangju:{n:'광주', src:'실측 입고가(고창·우진주류) × 충호남 RSP',
+   meas:{hk330:87725,cass330:39884.46,bud:43100.2,hk20:205562.5,st20:108625,as19:209000,pl20:205562.5,bl20:137500,hg20:96250,sn500:35887.5,ts640:38445,cs500:41987.55},
+   rsp:{hk330:7000,cass330:3500,bud:5000,hk20:7000,st20:7000,as19:7000,pl20:7000,bl20:7000,hg20:7000,sn500:4500,ts640:5500,cs500:4500}},
+ daejeon:{n:'대전', src:'실측 입고가(동서·충청주류) × 충호남 RSP',
+   meas:{hk330:83514.2,cass330:40000,bud:41909,hk20:195695.5,st20:109810,as19:188936,pl20:195695.5,bl20:132000,hg20:87500,sn500:34164.9,ts640:38125,cs500:37282},
+   rsp:{hk330:7000,cass330:3500,bud:5000,hk20:7000,st20:7000,as19:7000,pl20:7000,bl20:7000,hg20:7000,sn500:4500,ts640:5500,cs500:4500}},
+ daegu:{n:'대구', src:'IPS 조사 — 전 품목 일괄 20% (바틀 330 미조사)',
+   mk:{hk20:.20,st20:.20,as19:.20,as10:.20,pl20:.20,bl20:.20,hg20:.20,sn500:.20,ts640:.19977,cs500:.20},
+   rsp:{hk20:9000,st20:9000,as19:9500,as10:9500,pl20:9500,bl20:9000,hg20:9000,sn500:7000,ts640:7000,cs500:5000}},
+ jeju:{n:'제주', src:'IPS 조사 (바틀 330 미조사)',
+   mk:{hk20:.30,st20:.64557,as19:.75,as10:.75,pl20:.50,bl20:.30,hg20:.60,sn500:.35,ts640:.43062,cs500:.75},
+   rsp:{hk20:9000,st20:8500,as19:9500,as10:9500,pl20:9500,bl20:9000,hg20:9000,sn500:7000,ts640:7000,cs500:5000}},
+};
+/* 신규 SKU 지역 데이터 — 스텔라 330·코로나 355 (9/1 지점 회신). 광주·대전 입고가 = 매입가×1.1×(1+제시 마진) */
+Object.assign(REGIONS.seoul.mk,{st330:.20,co355:.20});   Object.assign(REGIONS.seoul.rsp,{st330:7500,co355:7500});
+Object.assign(REGIONS.busan.mk,{st330:.20,co355:.20});   Object.assign(REGIONS.busan.rsp,{st330:8000,co355:8000});
+Object.assign(REGIONS.gwangju.meas,{st330:53180*1.1*1.25,co355:55180*1.1*1.20}); Object.assign(REGIONS.gwangju.rsp,{st330:7500,co355:8000});
+Object.assign(REGIONS.daejeon.meas,{st330:53180*1.1*1.25,co355:55180*1.1*1.25}); Object.assign(REGIONS.daejeon.rsp,{st330:8000,co355:6000});
+Object.assign(REGIONS.daegu.mk,{hk330:.20,st330:.20,co355:.20});   Object.assign(REGIONS.daegu.rsp,{hk330:8000,st330:8000,co355:7000});
+Object.assign(REGIONS.jeju.mk,{hk330:.25,st330:.25,co355:.25});     Object.assign(REGIONS.jeju.rsp,{hk330:8000,st330:8000,co355:8000});
+REGIONS.daegu.src='IPS 조사 — 전 품목 일괄 20% (카스·버드 330 미조사)';
+REGIONS.jeju.src='IPS 조사 — 바틀 330은 하이네켄·스텔라·코로나 25% (카스·버드 미조사)';
+REGIONS.busan.src='지점 제품별 단가표 (버드 330ml · 바틀 프로모션 현재 중단)';
+/* 일본계 생맥주 (서울 대정 ERP): markup = 기준가÷매입가−1, RSP = 아사히 생(서울 8,000) 일괄 */
+Object.assign(REGIONS.seoul.mk,{kr15:107000/73000-1, su15:129300/84000-1, su10:106700/56000-1, sp10:106700/60000-1, sp20:159000/119250-1});
+Object.assign(REGIONS.seoul.rsp,{kr15:8000, su15:8000, su10:8000, sp10:8000, sp20:8000});
+/* 지점별 비고 (pill) */
+const NOTES={
+ busan:{st330:'프로모션 중단',co355:'프로모션 중단'},
+ gwangju:{st330:'행사 매입 37,180 · 마진 35%',co355:'Gift 비치타올 6장/박스'},
+ daejeon:{st330:'행사 매입 37,180 · 마진 25%',co355:'행사 38,690 · 마진 35% · 3+1 병당 5,000'},
+ daegu:{co355:'3+1 또는 25,000원 카드'},
+ jeju:{st330:'프로모션 없음',co355:'프로모션 없음'},
+ seoul:{st330:'행사 매입 31,862 · 마진 25%',co355:'행사 매입 34,656 · 마진 25%',
+        su15:'행사 매입 69,000 · 기준가 유지',su10:'행사 매입 46,000 · 기준가 유지',sp10:'정상 매입 미확보 — 행사 매입가 기준',
+        kr15:'기준가 107,000',sp20:'기준가 159,000'},
+};
+const REGION_ORDER=['seoul','busan','gwangju','daejeon','daegu','jeju'];
+
+/* ================= NKA 밸류체인 — 일반 아울렛과 별도 꼭지 ================= */
+/* 금액 VAT별도(Standard/DC Price·WS→Outlet), RSP는 잔당 VAT포함. 잔수는 NKA 제시값(20L=45잔) */
+const NKA=[
+ {k:'n_hk',n:'하이네켄 20L',        ml:20000,glass:45,std:149500,dc:104650,wso:117208,rsp:13000,hkr:true},
+ {k:'n_st',n:'스텔라 20L',          ml:20000,glass:45,std:79000, dc:79000, wso:88480, rsp:13000},
+ {k:'n_kb',n:'카브루 20L',          ml:20000,glass:45,std:60000, dc:60000, wso:67200, rsp:12000},
+ {k:'n_ob',n:'OBC 20L',             ml:20000,glass:45,std:110000,dc:110000,wso:123200,rsp:13000},
+ {k:'n_cb',n:'칼스버그 20L',        ml:20000,glass:45,std:140000,dc:70000, wso:78400, rsp:13000},
+ {k:'n_sp',n:'삿뽀로 20L',          ml:20000,glass:45,std:159000,dc:98000, wso:109760,rsp:15000},
+ {k:'n_pe',n:'페로니 20L',          ml:20000,glass:45,std:142300,dc:106725,wso:119532,rsp:13000},
+ {k:'n_pl',n:'파울라너 20L',        ml:20000,glass:45,std:149500,dc:84000, wso:99960, rsp:13000,hkr:true},
+ {k:'n_wh',n:'바이엔슈테판 30L',    ml:30000,glass:60,std:168950,dc:168950,wso:189224,rsp:13000},
+ {k:'n_bd',n:'버드와이저 20L',      ml:20000,glass:45,std:60205, dc:60205, wso:72246, rsp:13000},
+];
+function calcNKA(it){
+  const st=SET.nka[it.k];
+  const ws=(st.ws!=null?st.ws:(it.wso/it.dc-1)*100)/100;
+  const dcPrice=(st.dcp!==''&&!isNaN(parseFloat(st.dcp)))?parseFloat(st.dcp):it.dc;
+  const glass=(st.glass&&+st.glass>0)?+st.glass:it.glass;
+  const rsp=(st.rsp&&+st.rsp>0)?+st.rsp:it.rsp;
+  const normBuy=it.std*1.1, normIn=normBuy*(1+ws);
+  const realBuy=dcPrice*1.1, realIn=realBuy*(1+ws);
+  const buy=MODE==='real'?realBuy:normBuy, inn=MODE==='real'?realIn:normIn;
+  const sub=MODE==='real'?(st.sub||0):0;
+  const unitCost=(inn-sub)/glass;
+  return {std:it.std,dcPrice,dcPct:1-dcPrice/it.std,buy,inn,normBuy,normIn,ws,glass,sub,unitCost,rsp,
+    outlet:(rsp-unitCost)/rsp, outletNorm:(rsp-normIn/glass)/rsp,
+    changed:MODE==='real'&&(Math.abs(inn-normIn)>0.5||sub>0)};
+}
+
+/* ================= 설정 상태 — 전부 지점별(+밸류체인 매뉴얼) ================= */
+/* SET[scope][sku] = {dc, pass, sub, dlv} ; scope 'vc'는 rsp도 포함(믹스 RSP 매뉴얼) */
+const DEF_DC={as19:25, as10:25, ts640:4.5};
+/* 지점별 실거래 프리필 — 행사 매입 DC%(정상 매입가 대비) · 행사 시 도매 마진% */
+const DEF_R={
+ seoul:  {st330:{dc:40.1,ws:25}, co355:{dc:37.2,ws:25}, su15:{dc:17.9,ws:87.4}, su10:{dc:17.9,ws:132.0}},
+ gwangju:{st330:{dc:30.1,ws:35}},
+ daejeon:{st330:{dc:30.1,ws:25}, co355:{dc:29.9,ws:35}},
+ daegu:  {co355:{dc:25}},
+};
+let SET={};
+function mkOf(s,rkey){
+  const R=REGIONS[rkey];
+  if(R.meas) return (s.k in R.meas)? R.meas[s.k]/(s.sup*1.1)-1 : null;
+  return (s.k in R.mk)? R.mk[s.k] : null;
+}
+function resetSet(){
+  SET={};
+  SET.nka={};
+  NKA.forEach(it=>{ SET.nka[it.k]={dcp:'', ws:(it.wso/it.dc-1)*100, sub:0, rsp:'', glass:''}; });
+  const scopes=['vc',...REGION_ORDER];
+  scopes.forEach(sc=>{
+    SET[sc]={};
+    const base = sc==='vc'? 'seoul' : sc;
+    SKUS.forEach(s=>{
+      const m=mkOf(s,base);
+      const ov=(DEF_R[base]||{})[s.k]||{};
+      SET[sc][s.k]={dc:(ov.dc!=null?ov.dc:(DEF_DC[s.k]||0)), ws:(ov.ws!=null?ov.ws:(m==null?20:m*100)), sub:0, dlv:''};
+      if(sc==='vc') SET[sc][s.k].rsp=REGIONS.seoul.rsp[s.k]||'';
+    });
+  });
+}
+resetSet();
+
+/* ================= 계산 ================= */
+function units(s){ return s.t==='b'? s.u : s.u*1000/GLASS*(1-LOSS); }
+function carries(s,rkey){ const R=REGIONS[rkey]; return R.mk? (s.k in R.mk) : (s.k in R.meas); }
+function chain(s,scope){
+  const rkey = scope==='vc'? 'seoul' : scope;
+  if(!carries(s,rkey)) return null;
+  const R=REGIONS[rkey], st=SET[scope][s.k];
+  const normBuy=s.sup*1.1;
+  const normIn = R.meas? R.meas[s.k] : s.sup*1.1*(1+R.mk[s.k]);
+  const mk=normIn/normBuy-1;
+  const realBuy=s.sup*1.1*(1-st.dc/100);
+  let realIn = realBuy*(1+(st.ws!=null?st.ws:mk*100)/100);
+  if(st.dlv!=='' && !isNaN(parseFloat(st.dlv))) realIn=parseFloat(st.dlv);
+  const rsp = scope==='vc'? (parseFloat(st.rsp)||R.rsp[s.k]) : R.rsp[s.k];
+  return {sup:s.sup,normBuy,normIn,realBuy,realIn,rsp,sub:st.sub||0};
+}
+function view(ch,un){
+  const buy=MODE==='real'?ch.realBuy:ch.normBuy, inn=MODE==='real'?ch.realIn:ch.normIn;
+  const sub=MODE==='real'?ch.sub:0;
+  const unitCost=(inn-sub)/un;
+  return {sup:ch.sup,buy,inn,normBuy:ch.normBuy,normIn:ch.normIn,sub,un,unitCost,rsp:ch.rsp,
+    ws:inn/buy-1, wsNorm:ch.normIn/ch.normBuy-1,
+    outlet:(ch.rsp-unitCost)/ch.rsp, outletNorm:(ch.rsp-ch.normIn/un)/ch.rsp,
+    changed:MODE==='real'&&(Math.abs(inn-ch.normIn)>0.5||sub>0||Math.abs(buy-ch.normBuy)>0.5)};
+}
+function calc(s,scope){ const ch=chain(s,scope); return ch? view(ch,units(s)) : null; }
+
+/* ================= 유틸 ================= */
+const fmt=v=>v==null?'—':Math.round(v).toLocaleString('ko-KR');
+const pct=v=>v==null?'—':(v*100).toFixed(1)+'%';
+function band(v){ if(v==null)return''; if(v<0.15)return 'b-low'; if(v<0.25)return 'b-mid'; if(v<0.40)return 'b-hi'; return 'b-top'; }
+function bandO(v){ if(v==null)return''; if(v<0.40)return 'b-low'; if(v<0.55)return 'b-mid'; if(v<0.65)return 'b-hi'; return 'b-top'; }
+function dchip(real,norm,unitIsP){ if(MODE!=='real')return''; const d=(real-norm)*100; if(Math.abs(d)<0.05)return'';
+  return `<span class="delta ${d>=0?'up':'dn'}">${d>=0?'+':''}${d.toFixed(1)}${unitIsP?'%p':'%'}</span>`; }
+
+/* ================= 저장 — HTML 자체 저장 (현재 상태를 소스에 내장) ================= */
+function collectState(){
+  return {ver:2, saved:new Date().toISOString(), glass:GLASS, loss:LOSS, mode:MODE, tab:TAB, set:SET};
+}
+function saveHtml(){
+  const st=document.getElementById('savedState');
+  st.textContent=JSON.stringify(collectState()).replace(/<\//g,'<\\/');
+  const html='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const d=new Date(); const pad=n=>String(n).padStart(2,'0');
+  a.download=`VC_밸류체인_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.html`;
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function applyState(p){
+  if(!p) return;
+  if(p.glass) GLASS=p.glass;
+  if(p.loss!=null) LOSS=p.loss;
+  if(p.mode) MODE=p.mode;
+  if(p.tab) TAB=p.tab;
+  if(p.set){
+    for(const sc in p.set){ if(!SET[sc]) continue;
+      for(const k in p.set[sc]){ if(SET[sc][k]) Object.assign(SET[sc][k], p.set[sc][k]); } }
+  }
+}
+function bootState(){
+  try{
+    const el=document.getElementById('savedState');
+    if(!el) return;
+    const raw=(el.textContent||'').trim();
+    if(!raw || raw==='null') return;
+    applyState(JSON.parse(raw));
+    document.getElementById('glassIn').value=GLASS;
+    document.getElementById('lossIn').value=Math.round(LOSS*100);
+    document.getElementById('mNorm').className=MODE==='norm'?'on':'';
+    document.getElementById('mReal').className=MODE==='real'?'on':'';
+  }catch(e){ /* 손상된 저장 상태는 무시하고 기본값으로 시작 */ }
+}
+
+/* ================= 렌더 ================= */
+const TABS=[['vc','밸류체인 · Outlet',true],['nka','밸류체인 · NKA',true],['sum','서머리',true],['seoul','서울'],['busan','부산'],['gwangju','광주'],['daejeon','대전'],['daegu','대구'],['jeju','제주']];
+function renderNav(){
+  document.getElementById('nav').innerHTML = TABS.map(t=>
+    `<button class="${TAB===t[0]?'on':''} ${t[2]?'main':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
+}
+function go(t){ TAB=t; render(); }
+function setMode(m){ MODE=m; document.getElementById('mNorm').className=m==='norm'?'on':''; document.getElementById('mReal').className=m==='real'?'on':''; render(); }
+function banner(){
+  return MODE==='real'
+   ? `<div class="modeBanner real"><span class="dot"></span>실거래 모드 (메인) — 하단 입력(매입DC·도매마진·지원금·납품가)이 원가에 반영됩니다. 변동 값은 <b style="color:var(--gold)">금색</b>, 델타는 정상가 대비. 상단 [HTML로 저장]을 누르면 현재 입력 상태가 내장된 완성 파일이 저장됩니다 — 배포·보고는 그 파일 하나로.</div>`
+   : `<div class="modeBanner norm"><span class="dot"></span>정상가 모드 (참고자료) — 공급사 정상 출고가 기준. DC·지원금 미반영.</div>`;
+}
+
+/* 설정 입력 블록 (탭 하단 공용) */
+function settingsBlock(scope, skuFilter, title, sub){
+  let h=`<div class="settingsBlock"><h3 class="settingsHead">${title}</h3><div class="card settings"><table>
+   <tr><th style="min-width:150px">품목</th>${scope==='vc'?'<th class="gold">믹스 RSP<br><small>잔·병당 (매뉴얼)</small></th>':''}<th class="gold">매입DC %<br><small>공급사→도매 행사</small></th><th class="gold">도매 마진 %<br><small>매입가 대비 markup · 수정 가능</small></th><th class="gold">지원금 (원/박스·통)</th><th class="gold">납품가 직접입력 (원/박스·통)<br><small>입력 시 마진 계산 무시</small></th></tr>`;
+  for(const s of SKUS){
+    if(!skuFilter(s)) continue;
+    const st=SET[scope][s.k];
+    h+=`<tr><td class="${s.hkr?'hkr':''}" style="text-align:left">${s.n}</td>
+      ${scope==='vc'?`<td><input type="number" step="100" value="${st.rsp}" onchange="upd('${scope}','${s.k}','rsp',this.value)"></td>`:''}
+      <td><input type="number" step="0.5" value="${st.dc}" onchange="upd('${scope}','${s.k}','dc',this.value)"></td>
+      <td><input type="number" step="0.5" value="${(+st.ws).toFixed(2)}" onchange="upd('${scope}','${s.k}','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="${st.sub}" onchange="upd('${scope}','${s.k}','sub',this.value)"></td>
+      <td><input type="number" step="500" value="${st.dlv}" placeholder="자동" onchange="upd('${scope}','${s.k}','dlv',this.value)"></td></tr>`;
+  }
+  h+=`</table><p class="note">${sub}</p>
+  <p style="margin-top:10px"><button class="reset" onclick="resetSet();render()">전체 기본값으로 초기화</button></p></div></div>`;
+  return h;
+}
+function upd(scope,k,f,v){
+  if(f==='dlv'||f==='rsp') SET[scope][k][f]=v;
+  else SET[scope][k][f]=parseFloat(v)||0;
+  render();
+}
+
+/* ---- 밸류체인 (매뉴얼 믹스) ---- */
+function renderVC(){
+  let h=banner();
+  const c=k=>calc(SKUS.find(s=>s.k===k),'vc');
+  const hk=c('hk20');
+  h+=`<h2>밸류체인 · Outlet <span class="pill">일반 유흥 아울렛 — 서울 베이스 × 매뉴얼 믹스</span></h2>
+  <div class="kpis">
+    <div class="kpi"><div class="v num">${pct(hk.ws)}</div><div class="l">하이네켄 20L 도매 마진${MODE==='real'?' (실거래)':''}</div></div>
+    <div class="kpi ${MODE==='real'?'gold':''}"><div class="v num">${fmt(hk.unitCost)}원</div><div class="l">하이네켄 잔당 원가 (${GLASS}ml · 로스 ${(LOSS*100).toFixed(0)}%${MODE==='real'&&hk.sub>0?' · 지원금 차감':''})</div></div>
+    <div class="kpi"><div class="v num">${pct(hk.outlet)}</div><div class="l">하이네켄 생 아울렛 마진 (믹스 RSP ${fmt(hk.rsp)}원)</div></div>
+    <div class="kpi"><div class="v num">${pct(c('st20').outlet)}</div><div class="l">스텔라 생 아울렛 마진 — 하이네켄 대비 ${((c('st20').outlet-hk.outlet)*100).toFixed(1)}%p</div></div>
+  </div>`;
+  for(const set of [1,2,3,4,5,6]){
+    if(set===5) h+=`<h2 style="margin-top:28px;color:var(--gray)">참고자료 (비교군 제외)</h2>`;
+    const items=SKUS.filter(s=>s.set===set && s.k!=='as10');
+    const cs=items.map(s=>({s,d:calc(s,'vc')}));
+    const col=(f,cls)=>cs.map(x=>{const cl=typeof cls==='function'?cls(x):(cls||''); return `<td class="num ${cl} ${x.s.hkr&&!cl.includes('gold')?'hkr':''}">${f(x)}</td>`}).join('');
+    h+=`<div class="card"><div class="setLabel">${SETNAMES[set]}</div><table>
+      <tr><th style="min-width:230px">구분 (VAT포함)</th>${cs.map(x=>`<th>${x.s.n}</th>`).join('')}</tr>
+      <tr><td style="text-align:left">규격 · ${items[0].t==='k'?'유효 잔수':'입수'}</td>${col(x=>x.s.t==='k'?`${x.s.u}L · ${x.d.un.toFixed(1)}잔`:`${x.s.u}입`)}</tr>
+      <tr><td style="text-align:left">믹스 RSP (${items[0].t==='k'?'잔':'병'}당, 매뉴얼)</td>${col(x=>fmt(x.d.rsp))}</tr>
+      <tr><td style="text-align:left">RSP 환산 (${items[0].t==='k'?'KEG':'Carton'})</td>${col(x=>fmt(x.d.rsp*x.d.un))}</tr>
+      <tr><td style="text-align:left">업장 납품가 (${items[0].t==='k'?'KEG':'Carton'})</td>${col(x=>fmt(x.d.inn)+dchip((x.d.inn-x.d.normIn)/x.d.normIn,0),x=>MODE==='real'&&Math.abs(x.d.inn-x.d.normIn)>0.5?'gold':'')}</tr>
+      ${MODE==='real'?`<tr><td style="text-align:left">지원금 (−, ${items[0].t==='k'?'KEG':'Carton'}당)</td>${col(x=>x.d.sub>0?fmt(x.d.sub):'—',x=>x.d.sub>0?'gold':'')}</tr>`:''}
+      <tr><td style="text-align:left">Outlet Margin</td>${col(x=>fmt(x.d.rsp*x.d.un-x.d.unitCost*x.d.un))}</tr>
+      <tr><td style="text-align:left"><b>Outlet_Margin%</b></td>${col(x=>pct(x.d.outlet)+dchip(x.d.outlet,x.d.outletNorm,1),x=>'pctcell '+bandO(x.d.outlet))}</tr>
+      <tr><td style="text-align:left">도매 매입가</td>${col(x=>fmt(x.d.buy)+dchip((x.d.buy-x.d.normBuy)/x.d.normBuy,0),x=>MODE==='real'&&Math.abs(x.d.buy-x.d.normBuy)>0.5?'gold':'')}</tr>
+      <tr><td style="text-align:left">Wholesaler Margin</td>${col(x=>fmt(x.d.inn-x.d.buy))}</tr>
+      <tr><td style="text-align:left"><b>WS 마진율 (매입가 대비)</b></td>${col(x=>pct(x.d.ws)+dchip(x.d.ws,x.d.wsNorm,1),x=>'pctcell '+band(x.d.ws))}</tr>
+      <tr><td style="text-align:left">WS_Margin% (판매가 대비)</td>${col(x=>pct((x.d.inn-x.d.buy)/x.d.inn))}</tr>
+      <tr><td style="text-align:left">공급가 (VAT별도, 정상)</td>${col(x=>fmt(x.d.sup))}</tr>
+    </table></div>`;
+  }
+  h+=`<p class="note">일본계 생맥주: 서울 대정 ERP 실측 — 매입가·기준가를 VAT별도로 가정, 기준가를 업장 납품 리스트가로 해석(납품가 = 기준가×1.1). RSP는 아사히 생(서울 8,000)과 동일 일괄 적용. 산토리 행사 매입은 기준가 유지 구조라 실거래 도매 마진이 크게 확대됨.</p>`;
+  h+=`<p class="note">베이스 정상가는 서울 체계(부산 마진율 준용). 하단 매뉴얼 입력으로 최종 믹스 값(RSP·DC·지원금·납품가)을 직접 확정 — 지점 값을 참고해 가중치는 매뉴얼로 반영. 전 항목 VAT포함(비율은 VAT별도와 동일).</p>`;
+  h+=settingsBlock('vc', s=>s.k!=='as10', '밸류체인 매뉴얼 입력 — 최종 믹스 값 직접 작업',
+   '믹스 RSP 기본값 = 서울 조사값, 도매 마진 기본값 = 서울 정상 마진. 지점 값을 참고해 최종 반영치를 직접 입력하세요. 지원금은 박스·통당. 납품가 직접입력 시 마진 계산 무시. 프리필: 아사히 25%(3+1) · 칭따오 4.5%.');
+  return h;
+}
+
+/* ---- 서머리 ---- */
+function matrix(title,f,bandFn,note){
+  let h=`<h2>${title}</h2><div class="card"><table><tr><th style="min-width:150px">품목</th>${REGION_ORDER.map(r=>`<th>${REGIONS[r].n}</th>`).join('')}<th style="border-left:2px solid #fff">밸류체인<br><small>매뉴얼</small></th></tr>`;
+  let lastSet=0;
+  for(const s of SKUS){
+    if(s.set!==lastSet){h+=`<tr class="setrow"><td colspan="8">${SETNAMES[s.set]}</td></tr>`; lastSet=s.set;}
+    h+=`<tr><td class="${s.hkr?'hkr':''}" style="text-align:left">${s.n}</td>`;
+    for(const r of REGION_ORDER){
+      const d=calc(s,r);
+      h+= d? `<td class="num pctcell ${bandFn(f(d))}">${pct(f(d))}</td>` : `<td class="num">—</td>`;
+    }
+    const m=s.k==='as10'? null : calc(s,'vc');
+    h+= m? `<td class="num pctcell ${bandFn(f(m))}" style="border-left:2px solid var(--green)">${pct(f(m))}</td>`:`<td class="num" style="border-left:2px solid var(--green)">—</td>`;
+    h+=`</tr>`;
+  }
+  h+=`</table><p class="note">${note}</p></div>`;
+  return h;
+}
+function renderSum(){
+  let h=banner();
+  h+=matrix(`아울렛 마진율 매트릭스 ${MODE==='real'?'(실거래 반영)':'(정상가)'}`, d=>d.outlet, bandO,
+    '아울렛 마진% = (RSP − 단위당 원가) ÷ RSP. 색상: 40% 미만 / 40~55 / 55~65 / 65% 이상. 실거래 모드는 각 지점 하단 입력(지원금 등) 반영. 밸류체인 열 = 밸류체인 탭 매뉴얼 입력 기준.');
+  h+=matrix(`도매(WS) 마진율 매트릭스 ${MODE==='real'?'(실거래: 실매입가 대비)':'(정상가)'}`, d=>d.ws, band,
+    'WS 마진% = 납품가 ÷ 매입가 − 1 (markup). 색상: 15% 미만 / 15~25 / 25~40 / 40% 이상. 참고(카스 330·일본계 생)는 비교군 제외.');
+  return h;
+}
+/* ---- 지점별 ---- */
+function renderRegion(rkey){
+  const R=REGIONS[rkey];
+  let h=banner();
+  h+=`<h2>${R.n} — 도매·아울렛 체인 <span class="pill">${R.src}</span></h2><div class="card"><table>
+   <tr><th style="min-width:150px">품목</th><th>공급가<br>(VAT별도)</th><th>도매 매입가</th><th>업장 납품가</th><th>WS 마진율</th><th>단위당 원가</th>${MODE==='real'?`<th>지원금(−)<br><small>박스·통당</small></th><th>실질 단위원가</th>`:''}<th>RSP</th><th>아울렛 마진율</th></tr>`;
+  let lastSet=0;
+  for(const s of SKUS){
+    const d=calc(s,rkey);
+    if(!d) continue;
+    if(s.set!==lastSet){h+=`<tr class="setrow"><td colspan="${MODE==='real'?10:8}">${SETNAMES[s.set]}</td></tr>`; lastSet=s.set;}
+    const hk=s.hkr?'hkr':'';
+    h+=`<tr><td class="${hk}" style="text-align:left">${s.n}${s.k==='ts640'&&rkey==='gwangju'?'<span class="pill">인상 전 실측</span>':''}${s.k==='bud'&&rkey==='busan'?'<span class="pill">330ml</span>':''}${(NOTES[rkey]||{})[s.k]?`<span class="pill">${NOTES[rkey][s.k]}</span>`:''}</td>
+     <td class="num ${hk}">${fmt(d.sup)}</td>
+     <td class="num ${MODE==='real'&&Math.abs(d.buy-d.normBuy)>0.5?'gold':hk}">${fmt(d.buy)}</td>
+     <td class="num ${MODE==='real'&&Math.abs(d.inn-d.normIn)>0.5?'gold':hk}">${fmt(d.inn)}${dchip((d.inn-d.normIn)/(d.normIn||1),0)}</td>
+     <td class="num pctcell ${band(d.ws)}">${pct(d.ws)}${dchip(d.ws,d.wsNorm,1)}</td>
+     <td class="num ${hk}">${fmt(d.inn/d.un)}</td>
+     ${MODE==='real'?`<td class="num ${d.sub>0?'gold':hk}">${d.sub>0?fmt(d.sub):'—'}</td><td class="num ${d.sub>0?'gold':hk}">${fmt(d.unitCost)}</td>`:''}
+     <td class="num ${hk}">${fmt(d.rsp)}</td>
+     <td class="num pctcell ${bandO(d.outlet)}">${pct(d.outlet)}${dchip(d.outlet,d.outletNorm,1)}</td></tr>`;
+  }
+  h+=`</table><p class="note">단위당 원가 = 납품가 ÷ 잔수(생, ${GLASS}ml·로스 ${(LOSS*100).toFixed(0)}%) 또는 입수(병).</p></div>`;
+  h+=settingsBlock(rkey, s=>carries(s,rkey), `${R.n} DC·지원금 입력 — 이 지점에만 반영`,
+   `${R.n} 전용 설정. 위 표와 서머리 매트릭스의 ${R.n} 열에 즉시 반영됩니다. 밸류체인 탭에는 자동 반영되지 않음 — 최종 믹스는 밸류체인 하단에서 매뉴얼로 확정.`);
+  return h;
+}
+
+/* ---- NKA (별도 꼭지) ---- */
+function renderNKA(){
+  let h=banner();
+  const hk=calcNKA(NKA[0]);
+  h+=`<div class="kpis">
+    <div class="kpi"><div class="v num">${pct(hk.ws)}</div><div class="l">NKA 하이네켄 20L 도매 마진 (WS→Outlet ÷ ${MODE==='real'?'DC':'Standard'} Price)</div></div>
+    <div class="kpi ${MODE==='real'?'gold':''}"><div class="v num">${fmt(hk.unitCost)}원</div><div class="l">하이네켄 잔당 원가 (NKA 잔수 ${hk.glass}잔/통)</div></div>
+    <div class="kpi"><div class="v num">${pct(hk.outlet)}</div><div class="l">하이네켄 아울렛 마진 (RSP ${fmt(hk.rsp)}원)</div></div>
+    <div class="kpi"><div class="v num">${pct(hk.dcPct)}</div><div class="l">하이네켄 NKA DC율 (Standard → DC Price)</div></div>
+  </div>`;
+  h+=`<h2>밸류체인 · NKA <span class="pill">National Key Account — Outlet 밸류체인과 별도 체계</span></h2><div class="card"><table>
+   <tr><th style="min-width:150px">품목</th><th>용량 · 잔수</th><th>Standard Price<br><small>VAT별도</small></th><th>DC Price<br><small>VAT별도</small></th><th>DC율</th><th>도매 매입가<br><small>VAT포함</small></th><th>WS→Outlet 납품가<br><small>VAT포함</small></th><th>WS 마진율</th><th>잔당 원가</th>${MODE==='real'?'<th>지원금(−)<br><small>통당</small></th><th>실질 잔당원가</th>':''}<th>RSP</th><th>아울렛 마진율</th></tr>`;
+  for(const it of NKA){
+    const d=calcNKA(it); const hkc=it.hkr?'hkr':'';
+    h+=`<tr><td class="${hkc}" style="text-align:left">${it.n}</td>
+     <td class="num ${hkc}">${(it.ml/1000)}L · ${d.glass}잔</td>
+     <td class="num ${hkc}">${fmt(d.std)}</td>
+     <td class="num ${MODE==='real'&&Math.abs(d.dcPrice-d.std)>0.5?'gold':hkc}">${fmt(d.dcPrice)}</td>
+     <td class="num pctcell ${hkc}">${d.dcPct>0.001?pct(d.dcPct):'—'}</td>
+     <td class="num ${MODE==='real'&&Math.abs(d.buy-d.normBuy)>0.5?'gold':hkc}">${fmt(d.buy)}</td>
+     <td class="num ${MODE==='real'&&Math.abs(d.inn-d.normIn)>0.5?'gold':hkc}">${fmt(d.inn)}${dchip((d.inn-d.normIn)/d.normIn,0)}</td>
+     <td class="num pctcell ${band(d.ws)}">${pct(d.ws)}</td>
+     <td class="num ${hkc}">${fmt(d.inn/d.glass)}</td>
+     ${MODE==='real'?`<td class="num ${d.sub>0?'gold':hkc}">${d.sub>0?fmt(d.sub):'—'}</td><td class="num ${d.sub>0?'gold':hkc}">${fmt(d.unitCost)}</td>`:''}
+     <td class="num ${hkc}">${fmt(d.rsp)}</td>
+     <td class="num pctcell ${bandO(d.outlet)}">${pct(d.outlet)}${dchip(d.outlet,d.outletNorm,1)}</td></tr>`;
+  }
+  h+=`</table><p class="note">NKA 제시값: Standard/DC Price·WS→Outlet은 VAT별도(표는 ×1.1 VAT포함 환산), 잔수는 NKA 기준(20L=45잔·30L=60잔, 로스 미적용), RSP는 잔당. 정상가 모드 = Standard Price × 동일 도매 마진, 실거래 모드 = DC Price 기준. 일반 아울렛 매트릭스·밸류체인에는 미포함.</p></div>`;
+  /* NKA 하단 입력 */
+  h+=`<div class="settingsBlock"><h3 class="settingsHead">NKA 입력 — 이 꼭지에만 반영</h3><div class="card settings"><table>
+   <tr><th style="min-width:150px">품목</th><th class="gold">DC Price (원, VAT별도)<br><small>비우면 제시값</small></th><th class="gold">도매 마진 %<br><small>수정 가능</small></th><th class="gold">지원금 (원/통)</th><th class="gold">RSP (잔당)<br><small>비우면 제시값</small></th><th class="gold">잔수/통<br><small>비우면 제시값</small></th></tr>`;
+  for(const it of NKA){
+    const st=SET.nka[it.k];
+    h+=`<tr><td class="${it.hkr?'hkr':''}" style="text-align:left">${it.n}</td>
+      <td><input type="number" step="500" value="${st.dcp}" placeholder="${it.dc.toLocaleString('ko-KR')}" onchange="updN('${it.k}','dcp',this.value)"></td>
+      <td><input type="number" step="0.5" value="${(+st.ws).toFixed(2)}" onchange="updN('${it.k}','ws',this.value)"></td>
+      <td><input type="number" step="1000" value="${st.sub}" onchange="updN('${it.k}','sub',this.value)"></td>
+      <td><input type="number" step="500" value="${st.rsp}" placeholder="${it.rsp.toLocaleString('ko-KR')}" onchange="updN('${it.k}','rsp',this.value)"></td>
+      <td><input type="number" step="1" value="${st.glass}" placeholder="${it.glass}" onchange="updN('${it.k}','glass',this.value)"></td></tr>`;
+  }
+  h+=`</table><p class="note">도매 마진 기본값 = 제시된 WS→Outlet ÷ DC Price − 1 (대부분 12%, 파울라너 19%, 버드 20%). 저장 시 함께 보관됩니다.</p></div></div>`;
+  return h;
+}
+function updN(k,f,v){
+  if(f==='ws'||f==='sub') SET.nka[k][f]=parseFloat(v)||0; else SET.nka[k][f]=v;
+  render();
+}
+
+function render(){
+  renderNav();
+  const m=document.getElementById('main');
+  if(TAB==='vc') m.innerHTML=renderVC();
+  else if(TAB==='sum') m.innerHTML=renderSum();
+  else if(TAB==='nka') m.innerHTML=renderNKA();
+  else m.innerHTML=renderRegion(TAB);
+}
+document.getElementById('glassIn').addEventListener('change',e=>{GLASS=parseFloat(e.target.value)||GLASS0; render();});
+document.getElementById('lossIn').addEventListener('change',e=>{LOSS=(parseFloat(e.target.value)||0)/100; render();});
+bootState();
+render();
+</script>
+
+
+</body></html>
