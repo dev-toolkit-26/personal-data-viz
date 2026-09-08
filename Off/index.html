@@ -1090,18 +1090,23 @@ td:first-child, td:nth-child(2) { text-align: left; }
     function mv(m, f){ return (m && m[f] && m[f][ci] != null) ? m[f][ci] : 0; }   // 당월 값
 
     // ── Slide 0: Hero + KPI (기준: 당월 FCST) ──
-    var tAct = mv(T,'act_m'), tFcst = mv(T,'fcst_m'), tRofo = mv(T,'rofo_m'), tLy = mv(T,'ly_m');
-    var fcstRofo = tRofo ? tFcst/tRofo : null;           // FCST vs RoFo (주 지표)
-    var achRofo = (tRofo && tAct) ? tAct/tRofo : null;   // Actual vs RoFo (실적 없으면 —)
-    var yoy = (tLy && tFcst) ? tFcst/tLy - 1 : null;   // 최신 FCST vs 전년(YoY)
+    var tAct = mv(T,'act_m'), tFcst = mv(T,'fcst_m'), tRofo = mv(T,'rofo_m'), tLy = mv(T,'ly_m');   // Off 전체(코어채널, ALSM 포함) — Slide 1·2 공용
+    // Slide 0 헤드라인은 ALSM(독립슈퍼)을 분리 표기: 코어(ex-ALSM)를 크게, ALSM RoFo는 별도 소표기.
+    var _alsmCh = (OFF.channels||[]).find(function(c){ return c.key==='ALSM'; });
+    var aAct  = mv(_alsmCh&&_alsmCh.m,'act_m'),  aFcst = mv(_alsmCh&&_alsmCh.m,'fcst_m'),
+        aRofo = mv(_alsmCh&&_alsmCh.m,'rofo_m'), aLy   = mv(_alsmCh&&_alsmCh.m,'ly_m');
+    var xAct = tAct-aAct, xFcst = tFcst-aFcst, xRofo = tRofo-aRofo, xLy = tLy-aLy;   // ex-ALSM (Off RoFo 헤드라인)
+    var fcstRofo = xRofo ? xFcst/xRofo : null;           // FCST vs RoFo (ex-ALSM, 주 지표)
+    var achRofo = (xRofo && xAct) ? xAct/xRofo : null;   // Actual vs RoFo (ex-ALSM, 실적 없으면 —)
+    var yoy = (xLy && xFcst) ? xFcst/xLy - 1 : null;   // 최신 FCST vs 전년(YoY, ex-ALSM)
     var status = (fcstRofo==null)?'—':fcstRofo>=1?'RoFo 이상':fcstRofo>=0.95?'RoFo 근접':'RoFo 미달';
     var heroEl = document.getElementById('sum-hero-headline');
-    if(heroEl) heroEl.textContent = curMon+' RoFo '+fHL(tRofo)+' HL · FCST '+fHL(tFcst)+' HL ('+status+')';
+    if(heroEl) heroEl.textContent = curMon+' Off RoFo '+fHL(xRofo)+' HL (ex-ALSM) · FCST '+fHL(xFcst)+' HL ('+status+') · ALSM RoFo '+fHL(aRofo)+' HL 별도';
     var kpis = [
-      { label:curMon+' RoFo Target', value:fHL(tRofo)+' HL', sub:'Off Total', v:null, icon:'🎯' },
-      { label:'FCST vs RoFo ('+curMon+')', value:fPct(fcstRofo), sub:'FCST '+fHL(tFcst)+' HL', v:fcstRofo, icon:'📊' },
-      { label:'Actual vs RoFo ('+curMon+')', value:fPct(achRofo), sub:'Act '+fHL(tAct)+' HL', v:achRofo, icon:'📈' },
-      { label:'전년 대비 (최신 FCST, '+curMon+')', value:fDelta(yoy), sub:'FCST '+fHL(tFcst)+' vs LY '+fHL(tLy)+' HL', v:(yoy==null)?null:(yoy>=0?1:0), icon:(yoy==null)?'➖':(yoy>=0?'⬆':'⬇') },
+      { label:'Off RoFo ('+curMon+', ex-ALSM)', value:fHL(xRofo)+' HL', sub:'ALSM RoFo '+fHL(aRofo)+' HL (별도)', v:null, icon:'🎯' },
+      { label:'FCST vs RoFo ('+curMon+')', value:fPct(fcstRofo), sub:'FCST '+fHL(xFcst)+' HL', v:fcstRofo, icon:'📊' },
+      { label:'Actual vs RoFo ('+curMon+')', value:fPct(achRofo), sub:'Act '+fHL(xAct)+' HL', v:achRofo, icon:'📈' },
+      { label:'전년 대비 (최신 FCST, '+curMon+')', value:fDelta(yoy), sub:'FCST '+fHL(xFcst)+' vs LY '+fHL(xLy)+' HL', v:(yoy==null)?null:(yoy>=0?1:0), icon:(yoy==null)?'➖':(yoy>=0?'⬆':'⬇') },
     ];
     var kg = document.getElementById('sum-kpi-grid');
     if(kg) kg.innerHTML = kpis.map(function(k){
@@ -1118,8 +1123,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
     if(cmt){
       var hi=function(v,c){return '<strong style="color:'+c+';">'+v+'</strong>';};
       var fcC=achC(fcstRofo), grC=(yoy!=null&&yoy>=0)?'#4ade80':'#f87171';
-      cmt.innerHTML = '🎯 '+curMon+' RoFo '+hi(fHL(tRofo)+' HL','#fff')+' · FCST '+hi(fHL(tFcst)+' HL',fcC)+' ('+hi(fPct(fcstRofo),fcC)+' vs RoFo). '
-        + 'Actual '+hi(fHL(tAct)+' HL',achC(achRofo))+' ('+hi(fPct(achRofo),achC(achRofo))+' vs RoFo), 최신 FCST 전년 대비 '+hi(fDelta(yoy),grC)+'. '
+      cmt.innerHTML = '🎯 '+curMon+' Off RoFo(ex-ALSM) '+hi(fHL(xRofo)+' HL','#fff')+' · FCST '+hi(fHL(xFcst)+' HL',fcC)+' ('+hi(fPct(fcstRofo),fcC)+' vs RoFo). '
+        + 'Actual '+hi(fHL(xAct)+' HL',achC(achRofo))+' ('+hi(fPct(achRofo),achC(achRofo))+' vs RoFo), 최신 FCST 전년 대비 '+hi(fDelta(yoy),grC)+'. '
+        + 'ALSM RoFo '+hi(fHL(aRofo)+' HL','#fff')+'는 별도 집계(코어에서 분리). '
         + (achRofo==null ? 'ℹ️ '+curMon+' 실적 집계 전 — 예측 기준.' : (fcstRofo!=null&&fcstRofo>=1 ? '✅ FCST가 RoFo 이상.' : '⚠️ FCST가 RoFo 미달.'));
     }
     // (하단 월간 요약 내러티브는 아래 Slide 4 이후에서 렌더 — WD/채널 데이터 계산 후)
@@ -8024,6 +8030,7 @@ const STOCK_SKU_MAP = {
   122536:['HE ORI 8000 Blade',0.08,'ON'],
   124954:['HE SLV 330 Bottle',0.0792,'ON'],
   512701:['PA WHE 20000 Keg',0.2,'ON'],
+  511385:['PA WHE 330 Bottle',0.0792,'ON'],   // 파울라너 바이스비어 24x330 유흥병 — 통관돼 데일리스탁에 잡힘
   512491:['SU ORI 500 Bottle',0.06,'ON'],
   512493:['SU ORI 500 Bottle',0.06,'ON'],
   511621:['TI ORI 330 Bottle',0.0792,'ON'],
@@ -8066,7 +8073,7 @@ const STOCK_IN_EXCL_CODE = new Set([109872, 122718, 109585]);   // 면세 전용
 // 데일리스탁엔 재고가 없어 sku_map에 없지만 입고 예정에는 잡히는 코드
 const STOCK_IN_EXTRA = {
   126137: ['DE ORI 330 Bottle', 0.0792, 'ON'],
-  511385: ['PA WHE 330 Bottle', 0.0792, 'ON'],    // 파울라너 위트 330병 — 대시보드에 없는 신규
+  // 511385(PA WHE 330 Bottle)은 통관돼 데일리스탁에 잡히므로 STOCK_SKU_MAP으로 이동
   512870: ['TI RAD 500 Can',    0.12,   'OFF'],   // 베트남 생산 전환분(EXKR=한국향)
   512854: ['PA OKT 500 Can',    0.12,   'OFF'],   // 옥토버페스트 — 1회성 행사 물량, 신규 SKU
   512860: ['PA OKT 24000 Keg',  0.24,   'ON'],    // 옥토버페스트 케그 — 신규(원본 'KEG OW Case 24L')
