@@ -3006,8 +3006,17 @@ function _upInferBrand(skuName, skuDetail) {
   }
   return null;
 }
+// HL 계수 명시 등록 — 꼬리(규격+용기) 자동추론이 못 잡는 SKU만 여기에 적는다.
+// _upInferHlFactor는 "마지막 두 토큰이 같은 기존 SKU"의 hl_factor를 빌려오는데, 그런 SKU가
+// 하나도 없으면 조용히 0.0792(330병)로 떨어진다. 신규 규격은 이 폴백에 걸려 틀린 값으로
+// 등록되므로(PA OKT 24L을 20L로 넣었던 전례) 반드시 여기 먼저 올릴 것.
+const _UP_SKU_HL = {
+  "PA OKT 500 Can":   0.12,   // 옥토버페스트 500ml×24캔 = 12L. 자동추론도 0.12로 맞지만 행사 SKU라 고정.
+  "PA OKT 24000 Keg": 0.24,   // 옥토버페스트 24L 원웨이 케그. '24000 Keg' 참조 SKU가 없어 자동추론 시 0.0792로 틀림.
+};
 function _upInferHlFactor(skuName, skuDetail) {
   const parts = String(skuName).trim().split(/\s+/);
+  if (_UP_SKU_HL[skuName] != null) return _UP_SKU_HL[skuName];
   if (parts.length < 2) return 0.0792;
   const tail = parts.slice(-2).join(' ');
   for (const tabKey of Object.keys(skuDetail || {})) {
