@@ -191,6 +191,29 @@
     for (const c in src.fcst) if (!(c in target.fcst)) target.fcst[c] = src.fcst[c];
     for (const c in src.dec) target.dec[c] = Object.assign({}, src.dec[c], target.dec[c] || {});
   }
+  // ── 자가복구(self-heal) ──
+  //    구버전(행 전체 upsert) 클라이언트가 남아 있으면 그 사람이 저장할 때마다 서버에서 남의 셀이 지워진다.
+  //    이 세션에서 "저장까지 마친 내 편집"을 _qMine에 누적해 두고, 서버에서 내 셀이 사라진 게 확인되면
+  //    복구 델타를 만들어 화면 복원 + 재저장한다. (남이 값을 '바꾼' 셀은 존중 — '사라진' 셀만 복구)
+  let _qMine = {};
+  function recordMine(qkey, delta) {
+    const m = _qMine[qkey] || (_qMine[qkey] = _newDelta());
+    for (const c in delta.fcst) m.fcst[c] = delta.fcst[c];
+    for (const c in delta.dec) m.dec[c] = Object.assign({}, m.dec[c], delta.dec[c]);
+  }
+  function repairDelta(qkey, data) {
+    const m = _qMine[qkey]; if (!m) return null;
+    const rep = _newDelta(); let n = 0;
+    const f = (data && data.fcst) || {}, d = (data && data.dec) || {};
+    for (const c in m.fcst) { const v = m.fcst[c]; if (v != null && f[c] == null) { rep.fcst[c] = v; n++; } }
+    for (const c in m.dec) {
+      const mv = m.dec[c] || {}, cur = d[c] || {}, r = {};
+      if (mv.r != null && cur.r == null) r.r = mv.r;
+      if (mv.memo && !cur.memo) r.memo = mv.memo;
+      if (Object.keys(r).length) { rep.dec[c] = r; n++; }
+    }
+    return n ? rep : null;
+  }
   function markQDirty(qkey) {
     setSaveChip('저장 대기…', 'var(--text-muted)');
     clearTimeout(_qTimer);
@@ -209,9 +232,15 @@
       if (selErr) throw selErr;
       const curMap = {}; (cur || []).forEach(r => { curMap[r.id.slice(2)] = r.data || {}; });
       const now = new Date().toISOString();
-      const rows = keys.map(k => ({ id: 'q:' + k, data: Object.assign(applyQDelta(curMap[k] || {}, snap[k]), { updated_at: now }), updated_at: now }));
+      const rows = keys.map(k => {
+        let base = curMap[k] || {};
+        const rep = repairDelta(k, base);              // 구버전 클라이언트가 지워버린 내 저장분 복구
+        if (rep) base = applyQDelta(base, rep);
+        return { id: 'q:' + k, data: Object.assign(applyQDelta(base, snap[k]), { updated_at: now }), updated_at: now };
+      });
       const { error } = await _sb.from(TABLE).upsert(rows);
       if (error) throw error;
+      keys.forEach(k => recordMine(k, snap[k]));       // 저장 완료분을 자가복구 저널에 누적
       // 병합 결과로 캐시 교체 — 이때 다른 사용자의 입력도 함께 화면에 들어온다.
       // 저장 중(await 사이) 새로 생긴 내 입력은 다시 얹는다.
       if (_cache) rows.forEach(r => { const k = r.id.slice(2); _cache.quarters[k] = applyQDelta(r.data, _deltaOf(k)); });
@@ -294,6 +323,15 @@
       // 아직 저장 안 된 내 입력(디바운스 대기·저장 실패분)은 최신값 위에 다시 얹어 유지
       for (const k in _qDelta) if (!_deltaEmpty(_qDelta[k]))
         cache.quarters[k] = applyQDelta(cache.quarters[k] || {}, _qDelta[k]);
+      // 서버에서 사라진 내 저장분(구버전 클라이언트의 덮어쓰기 피해) → 화면 복원 + 재저장 예약
+      var _repaired = 0;
+      for (const k in _qMine) {
+        const rep = repairDelta(k, cache.quarters[k]);
+        if (!rep) continue;
+        cache.quarters[k] = applyQDelta(cache.quarters[k] || {}, rep);
+        mergeDeltaInto(_deltaOf(k), rep);
+        _repaired++; markQDirty(k);
+      }
     }
     catch (e) {
       const missing = /relation|schema|does not exist|Could not find/i.test(e.message || '');
@@ -302,6 +340,34 @@
     }
     if (_view == null) _view = defaultView(cache.months);
     draw(root, cache);
+    if (typeof _repaired !== 'undefined' && _repaired) setSaveChip('🛡 사라진 내 입력 복구 — 재저장 중…', 'var(--neutral)');
+    _startPoll();                       // 다른 사용자 입력 자동 반영(45초 주기, 입력 중엔 보류)
+  }
+
+  // ── 주기 새로고침: 분기 입력(q:) 행만 가볍게 재조회해 남의 입력을 실시간에 가깝게 반영 ──
+  let _pollTimer = null;
+  function _startPoll() { clearInterval(_pollTimer); _pollTimer = setInterval(_pollRefresh, 45000); }
+  async function _pollRefresh() {
+    if (!_sb || !_cache || document.hidden) return;
+    const rootEl = document.getElementById('range-root');
+    if (!rootEl || !rootEl.offsetParent) return;           // 탭이 안 보이면 건너뜀
+    const ae = document.activeElement;
+    if (_srEdit || (ae && rootEl.contains(ae) && /INPUT|SELECT|TEXTAREA/.test(ae.tagName))) return;   // 입력 중 보호
+    try {
+      const qkeys = ['Q1', 'Q2', 'Q3', 'Q4'].map(q => YEAR + q).concat([YEAR + 'Y']);
+      const { data, error } = await _sb.from(TABLE).select('id,data').in('id', qkeys.map(k => 'q:' + k));
+      if (error) return;
+      let changed = false;
+      (data || []).forEach(r => {
+        const k = r.id.slice(2);
+        let base = r.data || {};
+        const rep = repairDelta(k, base);                  // 남이(구버전) 지운 내 저장분 재저장 예약
+        if (rep) { base = applyQDelta(base, rep); mergeDeltaInto(_deltaOf(k), rep); markQDirty(k); }
+        const merged = applyQDelta(base, _deltaOf(k));
+        if (JSON.stringify(merged) !== JSON.stringify(_cache.quarters[k] || null)) { _cache.quarters[k] = merged; changed = true; }
+      });
+      if (changed) rerender();
+    } catch (e) { /* 폴링 실패는 무시 — 다음 주기 재시도 */ }
   }
 
   function rerender() {
