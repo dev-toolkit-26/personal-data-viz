@@ -4770,7 +4770,15 @@ async function _stockOffDemand() {
   const hl = {}; for (const k in STOCK_SKU_MAP) hl[STOCK_SKU_MAP[k][0]] = STOCK_SKU_MAP[k][1];
   const i = (_upGetFcstMonth() || 7) - 1;
   const arr = (r, k) => { const v = r[k]; const a = (v && v.value) || v || []; return a; };
-  for (const r of ((data && data.data && data.data.rows) || [])) {
+  const offRows = (data && data.data && data.data.rows) || [];
+  // RoFo 하한은 Off 대시보드와 같은 기준이어야 한다 — 채널 RoFo(P0X)를 SKU 비중으로 분배한 값.
+  // 취합본의 거래처 RoFo를 그대로 쓰면 Off 화면과 어긋난다(2026-09 10월 코어 +1,593 HL).
+  const offRofo = (window.OffIngest && OffIngest.distributeChannelRofo)
+    ? OffIngest.distributeChannelRofo(offRows, (data && data.data && data.data.rofo_channel) || null)
+    : [];
+  for (let ri = 0; ri < offRows.length; ri++) {
+    const r = offRows[ri];
+    const rofoArr = offRofo[ri] || arr(r, 'rofo_m');    // 분배값 우선 — 파일에 없는 채널만 취합본 유지
     if (STOCK_EXCL_CH.has(r.ch)) continue;             // 별도 재고 채널 — 수요만 얹히면 쇼트가 부풀려진다
     const sku = (window.OffIngest ? OffIngest.normalizeOffSku(r.sku, r.acct) : r.sku);
     const f = hl[sku];
@@ -4786,8 +4794,8 @@ async function _stockOffDemand() {
     // 채널이 요구하는 잔여 유통기한으로 수요를 갈라 둔다 — 어느 재고가 어디로 갈 수 있는지 판정에 쓴다
     if ((STOCK_SHELF_OFF_CH[r.ch] || STOCK_SHELF_OFF_LO) >= STOCK_SHELF_OFF_HI) o.fcstHi += v; else o.fcstLo += v;
     o.mtd  += Math.max(arr(r, 'act_q_m')[i] || 0, 0);
-    o.rofo += Math.max(arr(r, 'rofo_m')[i] || 0, 0) / f;      // 당월 RoFo — 주간 FCST와 독립된 하한
-    o.next += Math.max(arr(r, 'rofo_m')[i + 1] || 0, 0) / f;
+    o.rofo += Math.max(rofoArr[i] || 0, 0) / f;               // 당월 RoFo — 주간 FCST와 독립된 하한
+    o.next += Math.max(rofoArr[i + 1] || 0, 0) / f;
   }
   _stockOffCache = out;
   return out;

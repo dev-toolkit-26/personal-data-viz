@@ -93,7 +93,14 @@ function finalizeOff(rows){
     accounts: c.accounts.map(a => ({ name:a, skus:[] }))
   }));
   const chMap={}; channels.forEach(c => chMap[c.key]=c);
-  for(const r of (rows||[])){
+  // RoFo 기준선은 통합 P0X Volume(rofo_channel) — 채널값을 SKU 비중으로 내려 받는다.
+  // 취합본의 거래처별 RoFo는 계정마다 갱신 시점이 달라 절대값으로 쓰지 않고 비중으로만 쓴다.
+  // (비중 규칙·폴백은 off_ingest.js distributeChannelRofo 주석 참고. rows는 변형되지 않는다.)
+  const _rofoDist = (window.OffIngest && OffIngest.distributeChannelRofo)
+    ? OffIngest.distributeChannelRofo(rows || [], window._OFF_ROFO_CH || null)
+    : [];
+  for(let _ri=0; _ri<(rows||[]).length; _ri++){
+    const r = rows[_ri];
     const ch=chMap[r.ch]; if(!ch) continue;
     const acc=ch.accounts.find(a => a.name===r.acct); if(!acc) continue;
     // 시드 row의 모든 필드를 그대로 전달 (ly_hl_m/ly_q_m/act_hl_m/act_q_m 등 신규 필드 포함)
@@ -101,7 +108,7 @@ function finalizeOff(rows){
       ...r,
       ly_m:   r.ly_m   || r.ly_hl_m  || offZero12(),
       ap_m:   r.ap_m   || offZero12(),
-      rofo_m: r.rofo_m || offZero12(),
+      rofo_m: _rofoDist[_ri] || r.rofo_m || offZero12(),   // 분배값 우선 — 파일에 없는 채널만 취합본 유지
       act_m:  r.act_m  || r.act_hl_m || offZero12()
     });
   }
@@ -109,27 +116,9 @@ function finalizeOff(rows){
     for(const acc of ch.accounts) acc.m = offAggMetrics(acc.skus);
     ch.m = offAggMetrics(ch.accounts);
   }
-  const total = offAggMetrics(channels.filter(_offInTtl));   // Off TTL = 코어 채널만(E-com·Military 제외)
-  // 코어 채널 RoFo = 계정별 rofo_m 합(취합본)으로 통일(P07 채널 override 비활성).
-  // 단, E-com·Military는 취합본에 SKU가 없고 RoFo가 P07 채널단위로만 오므로 rofo_channel을 그 두 채널에만 적용.
-  const rofoCh = window._OFF_ROFO_CH || null;
-  if(rofoCh){
-    const am = _OFF_ACT_MONTHS;
-    for(const ch of channels){
-      if(_offInTtl(ch)) continue;                 // 코어 채널·Off TTL은 불변
-      const rm = rofoCh[ch.key]; if(!rm) continue;
-      ch.m.rofo_m = rm.slice();
-      ch.m.rofo_ytd = offYtdSum(rm); ch.m.rofo_mtd = offSumN(rm, am);
-      ch.m.ach_rofo = ch.m.rofo_mtd ? ch.m.act_mtd/ch.m.rofo_mtd : null;
-      ch.m.rofo_vs_ap = ch.m.ap_ytd ? ch.m.rofo_ytd/ch.m.ap_ytd - 1 : null;
-      if(ch.accounts.length === 1 && ch.accounts[0].m){   // 단일 계정(E-com/Military)은 계정 RoFo도 채널값으로
-        const a = ch.accounts[0].m;
-        a.rofo_m = rm.slice(); a.rofo_ytd = offYtdSum(rm); a.rofo_mtd = offSumN(rm, am);
-        a.ach_rofo = a.rofo_mtd ? a.act_mtd/a.rofo_mtd : null;
-        a.rofo_vs_ap = a.ap_ytd ? a.rofo_ytd/a.ap_ytd - 1 : null;
-      }
-    }
-  }
+  const total = offAggMetrics(channels.filter(_offInTtl));   // Off TTL = 코어 채널만(E-com·Military·DF 제외)
+  // ※ 채널 단위 RoFo override는 더 이상 하지 않는다 — SKU 단위 분배(_rofoDist)로 이미 반영돼
+  //   SKU→거래처→채널→Off TTL 합이 모두 P0X 채널 RoFo와 일치한다.
   return {
     meta: (window.OFF_SEED && OFF_SEED.meta) || {},
     channels,
@@ -8152,7 +8141,14 @@ function _stockOffDemand() {
   const hl = {}; for (const k in STOCK_SKU_MAP) hl[STOCK_SKU_MAP[k][0]] = STOCK_SKU_MAP[k][1];
   const i = (_stockFcstMonth() || 7) - 1;
   const arr = (r, k) => { const v = r[k]; return (v && v.value) || v || []; };
-  for (const r of ((window.OFF_SEED && OFF_SEED.rows) || [])) {
+  const offRows = (window.OFF_SEED && OFF_SEED.rows) || [];
+  // RoFo 하한도 화면과 같은 기준(P0X 채널 RoFo의 SKU 비중 분배)을 써야 한다 — finalizeOff와 동일 규칙.
+  const offRofo = (window.OffIngest && OffIngest.distributeChannelRofo)
+    ? OffIngest.distributeChannelRofo(offRows, window._OFF_ROFO_CH || null)
+    : [];
+  for (let ri = 0; ri < offRows.length; ri++) {
+    const r = offRows[ri];
+    const rofoArr = offRofo[ri] || arr(r, 'rofo_m');   // 분배값 우선 — 파일에 없는 채널만 취합본 유지
     if (STOCK_EXCL_CH.has(r.ch)) continue;             // 별도 재고 채널 — 수요만 얹히면 쇼트가 부풀려진다
     const sku = (window.OffIngest ? OffIngest.normalizeOffSku(r.sku, r.acct) : r.sku);
     const f = hl[sku];
@@ -8168,8 +8164,8 @@ function _stockOffDemand() {
     // 채널이 요구하는 잔여 유통기한으로 수요를 갈라 둔다
     if ((STOCK_SHELF_OFF_CH[r.ch] || STOCK_SHELF_OFF_LO) >= STOCK_SHELF_OFF_HI) o.fcstHi += v; else o.fcstLo += v;
     o.mtd  += Math.max(arr(r, 'act_q_m')[i] || 0, 0);
-    o.rofo += Math.max(arr(r, 'rofo_m')[i] || 0, 0) / f;
-    o.next += Math.max(arr(r, 'rofo_m')[i + 1] || 0, 0) / f;
+    o.rofo += Math.max(rofoArr[i] || 0, 0) / f;
+    o.next += Math.max(rofoArr[i + 1] || 0, 0) / f;
   }
   return out;
 }

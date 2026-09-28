@@ -288,6 +288,48 @@
     return { offChannel, onTotal, onSku, onSkuBrand, rfPeriod, unmappedOff: [...unmappedOff], otherTeam: [...otherTeam] };
   }
 
+  // ── 채널 RoFo(P0X Volume) → 거래처·SKU 비중 분배 ────────────────────────
+  // RoFo 기준선은 매월 갱신되는 P0X Volume(= 스냅샷 rofo_channel)이 유일 소스.
+  // 취합본(Account Volume)의 거래처별 RoFo는 계정마다 갱신 시점이 달라 채널 RoFo와 어긋나므로
+  // (2026-09 10월 기준 CVS +1,200 / SM +507 / UNION -104 HL) 절대값으로 쓰지 않고 '비중'으로만 쓴다.
+  // SKU 단위로 스케일하므로 SKU→거래처→채널 합이 자동으로 채널 RoFo와 일치한다.
+  //   가중치(채널·월 단위 동일 규칙): ① 주간 FCST — 그 SKU에 없으면 취합본 RoFo
+  //                                 ② 채널·월에 ①이 전무하면 LY   ③ 그것도 없으면 균등
+  //   · 당월 실적 비중은 쓰지 않는다(순환 — 모든 거래처 진척률이 채널값과 같아져 무의미).
+  //   · rofo_channel에 없는 채널·FY 합이 0인 채널은 건드리지 않는다(null → 취합본 유지).
+  //     파싱 사고로 0이 들어온 채널의 RoFo를 통째로 날리지 않게 하는 안전장치.
+  // rows는 읽기만 한다(순수 함수). 반환: rows와 같은 길이 배열, 각 원소 = 분배된 [12] 또는 null.
+  function distributeChannelRofo(rows, rofoChannel) {
+    const n = (rows || []).length;
+    const out = new Array(n).fill(null);
+    if (!rofoChannel || !n) return out;
+    const _arr = (r, k) => { const v = r && r[k]; const a = (v && v.value) || v; return Array.isArray(a) ? a : null; };
+    const _at  = (a, m) => (a && a[m] > 0) ? a[m] : 0;
+    const byCh = {};
+    for (let i = 0; i < n; i++) { const c = rows[i] && rows[i].ch; if (c) (byCh[c] || (byCh[c] = [])).push(i); }
+    const applied = [];
+    for (const ch in byCh) {
+      const base = rofoChannel[ch];
+      if (!Array.isArray(base) || !base.some(v => (v || 0) > 0.001)) continue;
+      const idx = byCh[ch];
+      const F = idx.map(i => _arr(rows[i], 'fcst_m'));
+      const R = idx.map(i => _arr(rows[i], 'rofo_m'));
+      const L = idx.map(i => _arr(rows[i], 'ly_m') || _arr(rows[i], 'ly_hl_m'));
+      for (const i of idx) out[i] = Array(12).fill(0);
+      for (let m = 0; m < 12; m++) {
+        let w = idx.map((_, k) => _at(F[k], m) || _at(R[k], m));
+        let tw = w.reduce((a, b) => a + b, 0);
+        if (tw <= 0) { w = idx.map((_, k) => _at(L[k], m)); tw = w.reduce((a, b) => a + b, 0); }
+        if (tw <= 0) { w = idx.map(() => 1); tw = idx.length; }
+        const bv = base[m] || 0;
+        for (let k = 0; k < idx.length; k++) out[idx[k]][m] = bv * w[k] / tw;
+      }
+      applied.push(ch);
+    }
+    if (applied.length) console.log('[OffIngest RoFo분배] 채널 RoFo → SKU 비중 분배: ' + applied.join(','));
+    return out;
+  }
+
   // ── Order Pattern 재집계: DSR 라인아이템 → weekly_acct[ch][acct][월][주5], daily_acct[ch][acct][월][일] (HL) ──
   //  Date 컬럼 기준. expectedYear만 집계. 반환 { weekly_acct, daily_acct, months, year }.
   function parseDsrOrderPattern(wb, expectedYear) {
@@ -376,7 +418,7 @@
   }
 
   global.OffIngest = {
-    parseDsrWorkbook, applyDsrToRows, parseVolumeRofo,
+    parseDsrWorkbook, applyDsrToRows, parseVolumeRofo, distributeChannelRofo,
     parseDsrOrderPattern, applyOrderPatternToPattern,
     normalizeOffSku,
     _OFF_TR_CH_MAP, _OFF_TR_AC_MAP, _OFF_GRP_CH, _VOL_CH_MAP, _OFF_SKU_ALIAS, _OFF_SKU_ALIAS_BY_ACCT,
