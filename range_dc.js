@@ -163,27 +163,65 @@
     return _cache;
   }
 
-  // ── 분기 입력(q:) 저장 — 디바운스 ──
-  let _qDirty = {}, _qTimer = null, _sb = null;
+  // ── 분기 입력(q:) 저장 — 디바운스 + 셀 단위 델타 병합 ──
+  //    여러 사람이 동시에 입력해도 서로 덮어쓰지 않도록, "행 전체 upsert"가 아니라
+  //    ① 내가 실제로 고친 셀만 델타(_qDelta)로 기록하고
+  //    ② 저장 직전에 서버의 최신 행을 다시 읽어 그 위에 델타만 병합해 저장한다.
+  //    (예전 방식은 낡은 화면의 캐시 전체를 upsert → 다른 지점이 방금 저장한 입력이 통째로 사라졌음)
+  let _qDelta = {}, _qTimer = null, _sb = null;
+  const _newDelta  = () => ({ fcst: {}, dec: {} });
+  const _deltaOf   = qkey => _qDelta[qkey] || (_qDelta[qkey] = _newDelta());
+  const _deltaEmpty = d => !d || (!Object.keys(d.fcst).length && !Object.keys(d.dec).length);
+  // 델타를 행 데이터에 적용 — fcst[code]=null·dec 필드 null은 삭제 의미(톰스톤)
+  function applyQDelta(data, delta) {
+    const out = data || {};
+    out.fcst = out.fcst || {}; out.dec = out.dec || {};
+    for (const c in delta.fcst) { const v = delta.fcst[c]; if (v == null) delete out.fcst[c]; else out.fcst[c] = v; }
+    for (const c in delta.dec) {
+      const dv = delta.dec[c];
+      const cur = out.dec[c] || {};
+      if ('r' in dv)    { if (dv.r == null) delete cur.r; else cur.r = dv.r; }
+      if ('memo' in dv) { if (!dv.memo) delete cur.memo; else cur.memo = dv.memo; }
+      if (Object.keys(cur).length) out.dec[c] = cur; else delete out.dec[c];
+    }
+    return out;
+  }
+  // 실패 복원용: 옛 스냅샷(src)을 현재 델타(target)에 되병합 — 저장 중 새로 들어온 입력이 우선
+  function mergeDeltaInto(target, src) {
+    for (const c in src.fcst) if (!(c in target.fcst)) target.fcst[c] = src.fcst[c];
+    for (const c in src.dec) target.dec[c] = Object.assign({}, src.dec[c], target.dec[c] || {});
+  }
   function markQDirty(qkey) {
-    _qDirty[qkey] = true;
     setSaveChip('저장 대기…', 'var(--text-muted)');
     clearTimeout(_qTimer);
     _qTimer = setTimeout(flushQ, 900);
   }
   async function flushQ() {
-    if (!_sb || !_cache) return;
-    const keys = Object.keys(_qDirty); _qDirty = {};
+    if (!_sb) return;
+    const keys = Object.keys(_qDelta).filter(k => !_deltaEmpty(_qDelta[k]));
     if (!keys.length) return;
+    const snap = {}; keys.forEach(k => { snap[k] = _qDelta[k]; _qDelta[k] = _newDelta(); });
     try {
       setSaveChip('저장 중…', 'var(--text-muted)');
-      const rows = keys.map(k => ({ id: 'q:' + k, data: Object.assign({}, _cache.quarters[k], { updated_at: new Date().toISOString() }), updated_at: new Date().toISOString() }));
+      // 서버 최신 행을 읽어 내 델타만 병합 → 다른 사용자의 입력 보존
+      const ids = keys.map(k => 'q:' + k);
+      const { data: cur, error: selErr } = await _sb.from(TABLE).select('id,data').in('id', ids);
+      if (selErr) throw selErr;
+      const curMap = {}; (cur || []).forEach(r => { curMap[r.id.slice(2)] = r.data || {}; });
+      const now = new Date().toISOString();
+      const rows = keys.map(k => ({ id: 'q:' + k, data: Object.assign(applyQDelta(curMap[k] || {}, snap[k]), { updated_at: now }), updated_at: now }));
       const { error } = await _sb.from(TABLE).upsert(rows);
       if (error) throw error;
+      // 병합 결과로 캐시 교체 — 이때 다른 사용자의 입력도 함께 화면에 들어온다.
+      // 저장 중(await 사이) 새로 생긴 내 입력은 다시 얹는다.
+      if (_cache) rows.forEach(r => { const k = r.id.slice(2); _cache.quarters[k] = applyQDelta(r.data, _deltaOf(k)); });
       setSaveChip('✓ 저장됨', 'var(--positive)');
+      const ae = document.activeElement, rootEl = document.getElementById('range-root');
+      const typing = ae && rootEl && rootEl.contains(ae) && /INPUT|SELECT|TEXTAREA/.test(ae.tagName);
+      if (!typing) rerender();       // 입력 중이면 포커스 보호 — 다음 조작 때 반영
     } catch (e) {
       console.error('Range 분기 입력 저장 실패:', e);
-      keys.forEach(k => _qDirty[k] = true);          // 실패분 재시도 대상 유지
+      keys.forEach(k => mergeDeltaInto(_deltaOf(k), snap[k]));   // 실패분 복원(새 입력 우선) → 다음 입력 때 재시도
       setSaveChip('⚠ 저장 실패 — 입력 시 재시도', 'var(--negative)');
     }
   }
@@ -250,7 +288,13 @@
     if (!M()) { root.innerHTML = '<div class="chart-card" style="padding:24px;color:var(--negative);font-size:13px;">range_master.js 로드 안 됨</div>'; return; }
     root.innerHTML = '<div class="chart-card" style="padding:24px;color:var(--text-muted);font-size:13px;">Range DC 데이터 로드 중…</div>';
     let cache;
-    try { cache = await loadAll(sb); }
+    try {
+      invalidate();                     // 탭 진입 시 항상 서버 최신값 로드 — 다른 사용자의 입력 반영
+      cache = await loadAll(sb);
+      // 아직 저장 안 된 내 입력(디바운스 대기·저장 실패분)은 최신값 위에 다시 얹어 유지
+      for (const k in _qDelta) if (!_deltaEmpty(_qDelta[k]))
+        cache.quarters[k] = applyQDelta(cache.quarters[k] || {}, _qDelta[k]);
+    }
     catch (e) {
       const missing = /relation|schema|does not exist|Could not find/i.test(e.message || '');
       root.innerHTML = `<div class="chart-card" style="padding:24px;color:var(--negative);font-size:13px;">Range DC 데이터 로드 실패: ${esc(e.message)}${missing ? '<br><span style="color:var(--text-muted)">→ <code>migrations/on_range_dc.sql</code> 을 Supabase SQL Editor에서 1회 실행하세요.</span>' : ''}</div>`;
@@ -677,13 +721,16 @@
   async function _saveSr() {
     if (!_sb || !_cache) return;
     const orig = {}; M().entities.forEach(e => { orig[e[3]] = e[2]; });
-    const map = Object.assign({}, _cache.srmap);
-    for (const code in _srPending) {
-      const v = _srPending[code];
-      if (!v || v === orig[code]) delete map[code]; else map[code] = v;   // 원본과 같거나 비우면 오버라이드 해제
-    }
     try {
       setSaveChip('SR 저장 중…', 'var(--text-muted)');
+      // 동시 편집 보호: 서버의 최신 _srmap을 베이스로 내가 고친 코드만 병합
+      const { data: curRows, error: selErr } = await _sb.from(TABLE).select('id,data').in('id', ['_srmap']);
+      if (selErr) throw selErr;
+      const map = Object.assign({}, (curRows && curRows[0] && curRows[0].data && curRows[0].data.byCode) || {});
+      for (const code in _srPending) {
+        const v = _srPending[code];
+        if (!v || v === orig[code]) delete map[code]; else map[code] = v;   // 원본과 같거나 비우면 오버라이드 해제
+      }
       const { error } = await _sb.from(TABLE).upsert({ id: '_srmap', data: { byCode: map }, updated_at: new Date().toISOString() });
       if (error) throw error;
       _cache.srmap = map; _srPending = {}; _srEdit = false;
@@ -701,15 +748,19 @@
   }
   function _onFcst(qkey, code, val) {
     const q = _qd(qkey);
-    const v = val === '' ? null : Number(val);
-    if (v == null || isNaN(v)) delete q.fcst[code]; else q.fcst[code] = v;
+    const n = val === '' ? null : Number(val);
+    const v = (n == null || isNaN(n)) ? null : n;
+    if (v == null) delete q.fcst[code]; else q.fcst[code] = v;   // 화면 즉시 반영용 캐시
+    _deltaOf(qkey).fcst[code] = v;                               // 저장은 이 셀 델타만 병합
     markQDirty(qkey); rerender();
   }
   function _onDec(qkey, code, val) {
     const q = _qd(qkey);
     const d = q.dec[code] || (q.dec[code] = {});
-    if (val === '') delete d.r; else d.r = Number(val);
+    const rv = val === '' ? null : Number(val);
+    if (rv == null) delete d.r; else d.r = rv;
     if (!Object.keys(d).length) delete q.dec[code];
+    const dd = _deltaOf(qkey).dec; dd[code] = Object.assign({}, dd[code], { r: rv });
     markQDirty(qkey); rerender();
   }
   function _onMemo(qkey, code, val) {
@@ -717,6 +768,7 @@
     const d = q.dec[code] || (q.dec[code] = {});
     if (val) d.memo = val; else delete d.memo;
     if (!Object.keys(d).length) delete q.dec[code];
+    const dd = _deltaOf(qkey).dec; dd[code] = Object.assign({}, dd[code], { memo: val || null });
     markQDirty(qkey);           // 메모는 리렌더 불필요(포커스 유지)
   }
 
@@ -733,8 +785,12 @@
     if (!sb || !_cache || !yms.length) return;
     try {
       setLockChip(locked ? '잠그는 중…' : '해제 중…', 'var(--text-muted)');
+      // 낡은 캐시로 월 실적을 되덮지 않도록, 서버의 최신 월 행에 잠금 플래그만 얹는다
+      const { data: cur, error: selErr } = await sb.from(TABLE).select('id,data').in('id', yms.map(ym => 'm:' + ym));
+      if (selErr) throw selErr;
+      const curMap = {}; (cur || []).forEach(r => { curMap[r.id.slice(2)] = r.data; });
       const rows = yms.map(ym => {
-        const d = Object.assign({}, _cache.months[ym]);
+        const d = Object.assign({}, curMap[ym] || _cache.months[ym]);
         if (locked) d.locked = true; else delete d.locked;
         return { id: 'm:' + ym, data: d, updated_at: new Date().toISOString() };
       });
