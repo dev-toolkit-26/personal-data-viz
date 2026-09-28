@@ -4129,6 +4129,42 @@ function _buildOnRofoBranchSheet(onSku, onSkuBrand, monIdx){
   return out;
 }
 
+// ── [일회성 복구] On TTL·지역 RoFo를 sku_detail RoFo 합으로 재구성 ────────────
+// 2026-09 이전 통합 RoFo 업로드가 _rfStart 가드 없이 12개월을 통째로 덮어, TTL·지역의
+// 1~8월 RoFo에 '실적'이 들어갔다(달성률이 자동 100%가 됨). sku_detail 쪽은 처음부터
+// 가드가 있어 그 달 P0X에서 잠근 타겟이 남아 있으므로 그게 복원 소스다.
+// 잠긴 타겟이 아예 없는 달(1~5월)은 null = 'RoFo 미적용 월' → 화면이 AP로 폴백한다.
+// 사용법: 로그인 상태에서 콘솔에 `_rofoRestorePastMonths()` — 저장까지 수행한다.
+async function _rofoRestorePastMonths() {
+  const CONV = 12.6263;
+  const hl = DASHBOARD_DATA.wk10_summary && DASHBOARD_DATA.wk10_summary.hl;
+  if (!hl) throw new Error('wk10_summary.hl 없음');
+  const ttl = Array(12).fill(0), has = Array(12).fill(false);
+  const reg = {}; _ON_PORTION_REGIONS.forEach(function(k){ reg[k] = Array(12).fill(0); });
+  for (const b of ((DASHBOARD_DATA.sku_detail || {})['On Trade Total'] || [])) {
+    for (const s of (b.skus || [])) {
+      const arr = (s.data && s.data.rofo_monthly) || [];
+      const p = _ON_ROFO_PORTION[s.sku];
+      for (let i = 0; i < 12; i++) {
+        const v = arr[i]; if (!v) continue;
+        has[i] = true; ttl[i] += v / CONV;
+        if (p) for (let ri = 0; ri < _ON_PORTION_REGIONS.length; ri++)
+          reg[_ON_PORTION_REGIONS[ri]][i] += (v / CONV) * (p[ri] || 0);
+      }
+    }
+  }
+  const r2 = v => Math.round(v * 100) / 100;
+  const put = (node, src) => { if (node) node.rofo_monthly = src.map((v, i) => has[i] ? r2(v) : null); };
+  console.table(ttl.map((v, i) => ({ month: i + 1,
+    before: (hl.TTL && hl.TTL.rofo_monthly && hl.TTL.rofo_monthly[i]) ?? null,
+    after: has[i] ? r2(v) : null })));
+  put(hl.TTL, ttl);
+  _ON_PORTION_REGIONS.forEach(function(rk){ put(hl[rk], reg[rk]); });
+  _upReRenderAll();
+  await _upDeployToSupabase({ textContent: '' });
+  console.log('[RoFo 복구] 완료 — On TTL·지역 RoFo = sku_detail RoFo 합(잠긴 타겟)');
+}
+
 // ── 통합 RoFo(P0X Volume): 2026RF07 → On TTL RoFo + Off 채널별 RoFo 동시 반영 ──
 async function handleCombinedRofoUpload(input) {
   const statusEl = document.getElementById('combined-rofo-status');
@@ -4143,21 +4179,31 @@ async function handleCombinedRofoUpload(input) {
     const buf = await f.arrayBuffer();
     const wb  = XLSX.read(buf, { type: 'array', cellDates: true });
     const { offChannel, onTotal, onSku, onSkuBrand, rfPeriod, unmappedOff, otherTeam } = OffIngest.parseVolumeRofo(wb);
+    // P0X 시작월(=RF번호)부터 12월까지만 갱신 — On·Off 모든 RoFo 저장 경로 공통 규칙.
+    // 과거월은 이미 실적이 확정돼(P0X 파일에도 그 달 칸은 Actual) 덮으면 타겟=실적→달성률 100%가
+    // 되고 그 달 코멘트가 무의미해진다. 시작월 이전 달은 이전 P0X에서 잠근 타겟을 그대로 둔다.
+    // (예: P09 업로드 → 9~12월만 갱신, 8월 이하는 P08 타겟 유지.)
+    const _rfStart = (rfPeriod && rfPeriod >= 7 && rfPeriod <= 12) ? rfPeriod : 7;   // 미검출 시 7 폴백(종전 동작)
+    // 기존 배열의 시작월 이후만 새 값으로 교체. 기존값이 없으면(최초 적용) 12개월 전체 반영.
+    const _rfMerge = (prev, next) => {
+      if (!Array.isArray(next)) return prev;
+      if (!Array.isArray(prev) || prev.length !== 12) return next.slice();
+      const out = prev.slice();
+      for (let i = _rfStart - 1; i < 12; i++) out[i] = next[i];
+      return out;
+    };
     // On: TTL RoFo(HL) + SKU별 포션으로 지역 배분
     DASHBOARD_DATA.wk10_summary = DASHBOARD_DATA.wk10_summary || {};
     DASHBOARD_DATA.wk10_summary.hl = DASHBOARD_DATA.wk10_summary.hl || {};
     DASHBOARD_DATA.wk10_summary.hl.TTL = DASHBOARD_DATA.wk10_summary.hl.TTL || {};
-    DASHBOARD_DATA.wk10_summary.hl.TTL.rofo_monthly = onTotal;
+    const _onTtlRofo = _rfMerge(DASHBOARD_DATA.wk10_summary.hl.TTL.rofo_monthly, onTotal);
+    DASHBOARD_DATA.wk10_summary.hl.TTL.rofo_monthly = _onTtlRofo;
     const dist = _distributeOnRofo(onSku);
     _ON_PORTION_REGIONS.forEach(function(rk){
       DASHBOARD_DATA.wk10_summary.hl[rk] = DASHBOARD_DATA.wk10_summary.hl[rk] || {};
-      DASHBOARD_DATA.wk10_summary.hl[rk].rofo_monthly = dist.reg[rk];
+      DASHBOARD_DATA.wk10_summary.hl[rk].rofo_monthly = _rfMerge(DASHBOARD_DATA.wk10_summary.hl[rk].rofo_monthly, dist.reg[rk]);
     });
-    // Rofo 시트(지점 분배) — P0X 시작월(=RF번호)부터 12월까지만 갱신.
-    // 과거월은 이미 실적이 확정돼(P0X 파일에도 그 달은 Actual) 덮으면 타겟=실적→달성률 100%가
-    // 되고 그 달 코멘트가 무의미해진다. 시작월 이전 달은 이전 P0X에서 잠근 타겟을 그대로 둔다.
-    // (예: P08 업로드 → 8~12월만 갱신, 7월 이하는 P07 타겟 유지.)
-    const _rfStart = (rfPeriod && rfPeriod >= 7 && rfPeriod <= 12) ? rfPeriod : 7;   // 미검출 시 7 폴백(종전 동작)
+    // Rofo 시트(지점 분배) — 같은 _rfStart 규칙.
     DASHBOARD_DATA.rofo_branch_by_month = DASHBOARD_DATA.rofo_branch_by_month || {};
     for (let m = _rfStart; m <= 12; m++) {
       const sheet = _buildOnRofoBranchSheet(onSku, onSkuBrand, m - 1);
@@ -4197,13 +4243,18 @@ async function handleCombinedRofoUpload(input) {
     const { data: offRow, error: offErr } = await _supabase.from('off_dashboard_snapshots').select('data').eq('id', 1).single();
     if (offErr) throw new Error('Off 스냅샷 읽기 실패: ' + offErr.message);
     const offData = (offRow && offRow.data) || {};
-    offData.rofo_channel = offChannel;
+    // Off도 같은 _rfStart 규칙 — 과거월은 이전 P0X에서 잠근 채널 타겟 유지.
+    // (파일에 없는 채널은 기존 값 그대로 둔다.)
+    const _prevCh = (offData.rofo_channel && typeof offData.rofo_channel === 'object') ? offData.rofo_channel : {};
+    const _mergedCh = Object.assign({}, _prevCh);
+    Object.keys(offChannel).forEach(k => { _mergedCh[k] = _rfMerge(_prevCh[k], offChannel[k]); });
+    offData.rofo_channel = _mergedCh;
     const { error: upErr } = await _supabase.from('off_dashboard_snapshots').upsert({ id: 1, data: offData, updated_at: new Date().toISOString() });
     if (upErr) throw new Error('Off 스냅샷 저장 실패: ' + upErr.message);
-    const chSum = Object.keys(offChannel).map(k => k + ':' + Math.round(offChannel[k].reduce((a, b) => a + (b || 0), 0)).toLocaleString('ko-KR')).join(' / ');
+    const chSum = Object.keys(_mergedCh).map(k => k + ':' + Math.round(_mergedCh[k].reduce((a, b) => a + (b || 0), 0)).toLocaleString('ko-KR')).join(' / ');
     const _rofoDiag = ((unmappedOff && unmappedOff.length) ? ` · 미매핑OFF채널[${unmappedOff.join(', ')}]` : '')
                     + ((otherTeam && otherTeam.length) ? ` · 기타team[${otherTeam.join(', ')}]` : '');
-    statusEl.textContent = `✓ RoFo 적용 — On TTL FY ${Math.round(onTotal.reduce((a, b) => a + (b || 0), 0)).toLocaleString('ko-KR')} HL · Off [${chSum}]${_rofoDiag}`;
+    statusEl.textContent = `✓ RoFo 적용(${_rfStart}~12월) — On TTL FY ${Math.round(_onTtlRofo.reduce((a, b) => a + (b || 0), 0)).toLocaleString('ko-KR')} HL · Off [${chSum}]${_rofoDiag}`;
     statusEl.style.color = 'var(--positive)';
   } catch (err) {
     console.error('Combined RoFo error:', err);
