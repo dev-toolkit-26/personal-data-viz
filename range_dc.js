@@ -299,6 +299,7 @@
   // ═══════════════════════════════════════════════════════════════
   let _view = null;                        // 0-3 = 분기, 'Y' = 연간
   let _changesTsv = '';                    // 변경 대상 리스트(기안용) 복사 버퍼 — draw()가 갱신
+  let _showExcluded = false;               // 4Q 뷰: 제외 결정 도매장 표시 여부(기본 숨김)
   let _teamFilter = '전체';
   let _srFilter = '전체';                  // 담당(SR) 필터
   let _srEdit = false, _srPending = {};    // SR 이름 편집 모드 · 저장 전 변경분(code→name)
@@ -545,8 +546,17 @@
       </div>` : '';
 
     // ── 표 ──
+    // 4Q 뷰: 3Q 마감에서 '제외'로 결정된 도매장(+3Q부터 제외 상태로 미결정인 곳)은 기본 숨김.
+    //        재진입 검토 등 필요할 때만 토글로 표시. KPI·매트릭스·기안 리스트에는 계속 집계됨.
+    const exclOf = r => {
+      const a = r.member ? (r.parentRow ? r.parentRow.applied : null) : r.applied;
+      const t = r.member ? (r.parentRow ? r.parentRow.tobe : null) : r.tobe;
+      return a === 0 || (a == null && t === 0);
+    };
+    const exclCount = (!isYear && qi === 3) ? evals.filter(exclOf).length : 0;
     const filt = evals.filter(r => (_teamFilter === '전체' || r.team === _teamFilter)
-                                && (_srFilter === '전체' || srDisp(r.code, r.sr) === _srFilter));
+                                && (_srFilter === '전체' || srDisp(r.code, r.sr) === _srFilter)
+                                && !(!isYear && qi === 3 && !_showExcluded && exclOf(r)));
     const srCell = r => _srEdit
       ? `<td><input type="text" value="${esc(srDisp(r.code, r.sr))}" style="width:58px;padding:2px 4px;border:1px solid var(--neutral);border-radius:5px;font-size:11px;text-align:center;" onchange="RangeDC._onSrEdit('${r.code}',this.value)"></td>`
       : `<td>${esc(srDisp(r.code, r.sr))}</td>`;
@@ -772,7 +782,8 @@
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
         <span style="font-size:11px;color:var(--text-muted);">SR</span>${srBtns}
-        <span style="margin-left:8px;display:inline-flex;gap:6px;">${srEditBtns}</span>
+        <span style="margin-left:8px;display:inline-flex;gap:6px;">${srEditBtns}${exclCount
+          ? `<button class="subtab-btn" style="padding:3px 10px;font-size:11px;${_showExcluded ? 'background:var(--negative);border-color:var(--negative);color:#fff;' : 'border-color:var(--negative);color:var(--negative);'}" title="3Q 마감에서 제외로 결정됐거나 3Q부터 제외 상태인 도매장 — 재진입 검토 시 표시" onclick="RangeDC._toggleShowExcluded()">${_showExcluded ? '✕ 제외 도매장 숨기기' : `제외 ${exclCount}곳 표시`}</button>` : ''}</span>
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">${metaTxt}
         · 단위: 환산 케이스(cs) · 기준/실적은 파생코드 합산 · 자격판정: ${isYear ? '연간 임계값' : '마감 FCST → guideline ' + (qi+1) + 'Q 컬럼'} (마스터 ${esc(M().version)})${
@@ -836,6 +847,7 @@
   function _setView(v) { _view = v; rerender(); }
   function _setTeam(t) { _teamFilter = t; rerender(); }
   function _setSr(s) { _srFilter = s; rerender(); }
+  function _toggleShowExcluded() { _showExcluded = !_showExcluded; rerender(); }
   async function _copyChanges() {
     try {
       await navigator.clipboard.writeText(_changesTsv);
@@ -948,6 +960,6 @@
   }
 
   global.RangeDC = { parseWorkbook, ingestWorkbook, saveMonths, render, invalidate,
-                     _setView, _setTeam, _setSr, _copyChanges, _toggleSub, _toggleSrEdit, _onSrEdit, _saveSr,
+                     _setView, _setTeam, _setSr, _copyChanges, _toggleShowExcluded, _toggleSub, _toggleSrEdit, _onSrEdit, _saveSr,
                      _onFcst, _onDec, _onMemo, _toggleLock, _lockThrough, _unlockAll };
 })(window);
