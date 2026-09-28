@@ -298,6 +298,7 @@
   //  렌더
   // ═══════════════════════════════════════════════════════════════
   let _view = null;                        // 0-3 = 분기, 'Y' = 연간
+  let _changesTsv = '';                    // 변경 대상 리스트(기안용) 복사 버퍼 — draw()가 갱신
   let _teamFilter = '전체';
   let _srFilter = '전체';                  // 담당(SR) 필터
   let _srEdit = false, _srPending = {};    // SR 이름 편집 모드 · 저장 전 변경분(code→name)
@@ -693,6 +694,59 @@
            <div style="font-size:11px;color:var(--text-muted);text-align:center;">${qPlaceholder[i]}</div>
          </div>`).join('');
 
+    // ── 변경 대상 리스트 (기안용) — 차기 결정이 현재 적용 Range와 달라지는 도매장만 ──
+    //    필터와 무관하게 전 지점 대상(기안은 전체 기준). 연동 파생 행(하치장 등)은 부모 아래 표기.
+    const curOf = r => r.applied != null ? r.applied : r.tobe;
+    const changeSet = new Set();
+    evals.forEach(r => {
+      if (r.member || r.next == null) return;
+      const cur = curOf(r);
+      if (cur != null && r.next !== cur) changeSet.add(r.code);
+    });
+    const chgKind = (cur, nx) => nx === 0 ? ['제외', 'var(--negative)']
+      : cur === 0 ? ['신규', 'var(--positive)']
+      : nx > cur ? [`상향 +${nx - cur}`, 'var(--positive)'] : [`하향 -${cur - nx}`, 'var(--neutral)'];
+    const chgRows = [], chgTsv = [['지점', 'SR', '코드', '도매장', '구분', '현재 Range', '변경 Range', '마감 FCST(cs)', 'FCST 자격', '사유'].join('\t')];
+    let chgN = 0;
+    evals.forEach(r => {
+      const isChg = !r.member && changeSet.has(r.code);
+      const isLink = r.member && changeSet.has(r.member);
+      if (!isChg && !isLink) return;
+      const p = isLink ? r.parentRow : r;
+      const cur = isLink ? r.applied : curOf(r);
+      const nx = p ? p.next : null;
+      const [kind, kColor] = isLink ? ['연동', 'var(--text-muted)'] : chgKind(cur, nx);
+      const curTxt = cur == null ? '-' : cur === 0 ? '제외' : `R${cur} (${cur}%)`;
+      const nxTxt = nx == null ? '-' : nx === 0 ? '제외' : `R${nx} (${nx}%)`;
+      const reason = isLink ? `${r.member} ${p ? p.name : ''} 결정 연동` : (r.memo || '');
+      if (isChg) chgN++;
+      chgRows.push(`<tr${isLink ? ' style="color:var(--text-muted);background:rgba(0,0,0,.015);"' : ''}>
+        <td>${esc(r.team)}</td><td>${esc(srDisp(r.code, r.sr))}</td><td>${r.code}</td>
+        <td style="text-align:left;">${esc(r.name)}${isLink ? '' : ''}</td>
+        <td style="font-weight:700;color:${kColor};">${kind}</td>
+        <td>${curTxt}</td><td style="font-weight:700;">${nxTxt}</td>
+        <td>${isLink ? '' : fmt(p && p.fcst)}</td>
+        <td>${isLink || p == null || p.qual == null ? '' : (p.qual === 0 ? '제외' : 'R' + p.qual)}</td>
+        <td style="text-align:left;font-size:11px;">${esc(reason)}</td></tr>`);
+      chgTsv.push([r.team, srDisp(r.code, r.sr), r.code, r.name, kind, curTxt, nxTxt,
+        isLink ? '' : (p && p.fcst != null ? Math.round(p.fcst) : ''), isLink || p == null || p.qual == null ? '' : (p.qual === 0 ? '제외' : 'R' + p.qual), reason].join('\t'));
+    });
+    _changesTsv = chgTsv.join('\n');
+    const chgTitle = `${nextQ || '차기'} Range 변경 대상 (기안용)`;
+    const changesHtml = chgN
+      ? `<div class="table-wrap" style="margin-bottom:14px;border:1.5px solid var(--primary);">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px 2px;">
+            <span style="font-weight:700;font-size:12px;color:var(--primary);">📋 ${chgTitle} — ${chgN}건${chgRows.length - chgN ? ` (+연동 ${chgRows.length - chgN})` : ''}</span>
+            <button class="subtab-btn" style="padding:2px 10px;font-size:11px;margin-left:auto;" onclick="RangeDC._copyChanges()">📄 표 복사 (기안 붙여넣기)</button>
+          </div>
+          <table style="width:100%;font-size:12px;text-align:center;">
+            <thead><tr><th>지점</th><th>SR</th><th>코드</th><th style="text-align:left;">도매장</th><th>구분</th><th>현재</th><th>변경</th><th>${fcstLabel}</th><th>자격</th><th style="text-align:left;">사유</th></tr></thead>
+            <tbody>${chgRows.join('')}</tbody>
+          </table>
+          <div style="font-size:11px;color:var(--text-muted);padding:4px 10px 8px;">아래 표에서 ${nextLabel}을 입력·수정하면 이 리스트가 자동으로 채워집니다. 변경 없는 도매장(유지)은 표시하지 않습니다.</div>
+        </div>`
+      : `<div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">📋 ${chgTitle}: 아직 없음 — ${fcstLabel}·${nextLabel} 입력 시 변경(상향/하향/제외/신규) 도매장만 여기에 자동으로 채워집니다.</div>`;
+
     // ── 가이드라인 카드 ──
     const glTrs = M().guideline.map(g =>
       `<tr><td style="font-weight:700;">R${g.r}</td><td>${g.dc}%</td><td>${fmt(g.mon)}</td><td>${fmt(g.yr)}</td>${g.q.map((v, i) => `<td${!isYear && i === qi ? ' style="background:rgba(32,85,39,.10);font-weight:700;"' : ''}>${fmt(v)}</td>`).join('')}</tr>`).join('');
@@ -746,6 +800,8 @@
         ${stripBlocks}
       </div>
 
+      ${changesHtml}
+
       <details style="margin-bottom:14px;">
         <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--primary);">📐 Range Guideline (레벨·DC%·볼륨 기준 / MOQ)</summary>
         <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;">
@@ -780,6 +836,12 @@
   function _setView(v) { _view = v; rerender(); }
   function _setTeam(t) { _teamFilter = t; rerender(); }
   function _setSr(s) { _srFilter = s; rerender(); }
+  async function _copyChanges() {
+    try {
+      await navigator.clipboard.writeText(_changesTsv);
+      setSaveChip('✓ 변경 리스트 복사됨 — 기안 문서에 붙여넣으세요 (엑셀 표로 들어감)', 'var(--positive)');
+    } catch (e) { setSaveChip('⚠ 복사 실패: ' + e.message, 'var(--negative)'); }
+  }
   function _toggleSub(code) { if (_expanded.has(code)) _expanded.delete(code); else _expanded.add(code); rerender(); }
   // ── SR 이름 편집: 입력은 _srPending에 스테이징, 💾 저장 시 '_srmap' 행으로 일괄 upsert ──
   function _toggleSrEdit() { _srEdit = !_srEdit; if (!_srEdit) _srPending = {}; rerender(); }
@@ -886,6 +948,6 @@
   }
 
   global.RangeDC = { parseWorkbook, ingestWorkbook, saveMonths, render, invalidate,
-                     _setView, _setTeam, _setSr, _toggleSub, _toggleSrEdit, _onSrEdit, _saveSr,
+                     _setView, _setTeam, _setSr, _copyChanges, _toggleSub, _toggleSrEdit, _onSrEdit, _saveSr,
                      _onFcst, _onDec, _onMemo, _toggleLock, _lockThrough, _unlockAll };
 })(window);
