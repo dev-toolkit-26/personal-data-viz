@@ -784,7 +784,7 @@
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
         <span style="font-size:11px;color:var(--text-muted);">SR</span>${srBtns}
-        <span style="margin-left:8px;display:inline-flex;gap:6px;">${srEditBtns}${exclCount
+        <span style="margin-left:8px;display:inline-flex;gap:6px;">${srEditBtns}<button class="subtab-btn" style="padding:3px 10px;font-size:11px;" title="히스토리(on_range_dc_history)에서 지점 단위로 이전 입력을 되돌립니다" onclick="RangeDC._openRestore('${qkey}')">🕘 이전 입력 복원</button>${exclCount
           ? `<button class="subtab-btn" style="padding:3px 10px;font-size:11px;${_showExcluded ? 'background:var(--negative);border-color:var(--negative);color:#fff;' : 'border-color:var(--negative);color:var(--negative);'}" title="이 분기 적용 Range가 '제외'인 도매장 — 재진입 검토(FCST 입력) 시 표시" onclick="RangeDC._toggleShowExcluded()">${_showExcluded ? '✕ 제외 도매장 숨기기' : `제외 ${exclCount}곳 표시`}</button>` : ''}</span>
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">${metaTxt}
@@ -961,7 +961,147 @@
     if (t.length) _setLocked(t, false);
   }
 
+  // ── 지점별 이전 입력 복원 ──
+  //    on_range_dc_history(트리거가 q: 행 변경 직전 값을 보관 — migrations/on_range_dc_history.sql)에서
+  //    시점을 골라 "선택한 지점 도매장 칸만" 그때 값으로 되돌린다. 다른 지점 입력은 건드리지 않음.
+  //    되돌리기는 일반 입력과 같은 델타 저장(flushQ)을 타므로 서버 최신 행 위에 병합되고, 복원 자체도 이력에 남는다.
+  let _rs = null;   // { qkey, team, entries:[{id, at, data}], cur, sel }
+  const _teamCodes = team => M().entities.filter(e => e[1] === team).map(e => String(e[3]));
+  function _slice(data, codes) {             // 지점 칸만 추출 → { fcst:{code:v}, dec:{code:{r,memo}} }
+    const f = (data && data.fcst) || {}, d = (data && data.dec) || {}, out = { fcst: {}, dec: {} };
+    codes.forEach(c => {
+      if (f[c] != null) out.fcst[c] = f[c];
+      const dv = d[c] || {}, o = {};
+      if (dv.r != null) o.r = dv.r;
+      if (dv.memo) o.memo = dv.memo;
+      if (Object.keys(o).length) out.dec[c] = o;
+    });
+    return out;
+  }
+  // 현재(cur) → 목표(tgt) 지점 슬라이스 차이를 델타로 (null = 삭제)
+  function _diffDelta(cur, tgt, codes) {
+    const dl = _newDelta(); let n = 0;
+    codes.forEach(c => {
+      const a = cur.fcst[c] != null ? cur.fcst[c] : null, b = tgt.fcst[c] != null ? tgt.fcst[c] : null;
+      if (a !== b) { dl.fcst[c] = b; n++; }
+      const da = cur.dec[c] || {}, db = tgt.dec[c] || {}, o = {};
+      if ((da.r != null ? da.r : null) !== (db.r != null ? db.r : null)) o.r = db.r != null ? db.r : null;
+      if ((da.memo || '') !== (db.memo || '')) o.memo = db.memo || null;
+      if (Object.keys(o).length) { dl.dec[c] = o; n += Object.keys(o).length; }
+    });
+    return { delta: dl, n };
+  }
+  const _cnt = s => ({ f: Object.keys(s.fcst).length,
+                       r: Object.values(s.dec).filter(v => v.r != null).length,
+                       m: Object.values(s.dec).filter(v => v.memo).length });
+  const _fmtAt = iso => { const d = new Date(iso); const p = n => String(n).padStart(2, '0');
+    return `${d.getMonth() + 1}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+
+  async function _openRestore(qkey) {
+    const teams = [...new Set(M().entities.map(e => e[1]))];
+    _rs = { qkey, team: teams.includes(_teamFilter) ? _teamFilter : teams[0], entries: null, cur: null, sel: null, err: null };
+    _drawRestore();
+    try {
+      const [hist, cur] = await Promise.all([
+        _sb.from('on_range_dc_history').select('hist_id,changed_at,old_data')
+           .eq('row_id', 'q:' + qkey).order('changed_at', { ascending: false }).limit(300),
+        _sb.from(TABLE).select('data').eq('id', 'q:' + qkey).maybeSingle(),
+      ]);
+      if (hist.error) throw hist.error;
+      if (cur.error) throw cur.error;
+      _rs.entries = (hist.data || []).map(h => ({ id: h.hist_id, at: h.changed_at, data: h.old_data || {} }));
+      _rs.cur = (cur.data && cur.data.data) || {};
+      // 아직 저장 안 된 내 입력도 '현재'에 포함
+      if (!_deltaEmpty(_deltaOf(qkey))) _rs.cur = applyQDelta(JSON.parse(JSON.stringify(_rs.cur)), _deltaOf(qkey));
+    } catch (e) {
+      const missing = /relation|schema|does not exist|Could not find/i.test(e.message || '');
+      _rs.err = missing ? '히스토리 테이블이 없습니다 → migrations/on_range_dc_history.sql 을 Supabase SQL Editor에서 1회 실행하세요.'
+                        : '이력 로드 실패: ' + (e.message || e);
+    }
+    _drawRestore();
+  }
+  function _closeRestore() { _rs = null; const el = document.getElementById('rdc-restore'); if (el) el.remove(); }
+  function _rsSetTeam(t) { _rs.team = t; _rs.sel = null; _drawRestore(); }
+  function _rsSelect(id) { _rs.sel = id; _drawRestore(); }
+
+  function _drawRestore() {
+    let el = document.getElementById('rdc-restore');
+    if (!_rs) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div'); el.id = 'rdc-restore';
+      el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      el.addEventListener('click', ev => { if (ev.target === el) _closeRestore(); });
+      document.body.appendChild(el);
+    }
+    const teams = [...new Set(M().entities.map(e => e[1]))];
+    const qLabel = _rs.qkey.endsWith('Y') ? '연간' : _rs.qkey.slice(-1) + 'Q';
+    const teamBtns = teams.map(t => `<button class="subtab-btn${t === _rs.team ? ' active' : ''}" style="padding:3px 10px;font-size:11px;" onclick="RangeDC._rsSetTeam('${esc(t)}')">${esc(t)}</button>`).join('');
+    let body;
+    if (_rs.err) body = `<div style="color:var(--negative);font-size:12px;padding:12px 0;">${esc(_rs.err)}</div>`;
+    else if (!_rs.entries) body = `<div style="color:var(--text-muted);font-size:12px;padding:12px 0;">이력 불러오는 중…</div>`;
+    else {
+      const codes = _teamCodes(_rs.team);
+      const curS = _slice(_rs.cur, codes), cc = _cnt(curS);
+      // 이 지점 칸이 실제로 달랐던 시점만 (연속 동일 상태는 가장 최근 것 하나만)
+      const rows = []; let prevKey = JSON.stringify(curS);
+      _rs.entries.forEach(h => {
+        const s = _slice(h.data, codes), k = JSON.stringify(s);
+        if (k === prevKey) return;
+        prevKey = k;
+        rows.push({ h, s, c: _cnt(s), n: _diffDelta(curS, s, codes).n });
+      });
+      const td = 'padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px;';
+      const tr = (sel, cells, onclick, bg) => `<tr style="cursor:${onclick ? 'pointer' : 'default'};${bg ? 'background:' + bg + ';' : ''}" ${onclick ? `onclick="${onclick}"` : ''}>${cells.map((c, i) => `<td style="${td}${i ? 'text-align:right;' : ''}">${c}</td>`).join('')}</tr>`;
+      const list = rows.map(r => tr(_rs.sel === r.h.id,
+        [`<input type="radio" ${_rs.sel === r.h.id ? 'checked' : ''} style="margin-right:6px;">${_fmtAt(r.h.at)} <span style="color:var(--text-muted);">변경 직전</span>`,
+         r.c.f, r.c.r, r.c.m, `<b>${r.n}</b>`],
+        `RangeDC._rsSelect(${r.h.id})`, _rs.sel === r.h.id ? 'rgba(32,85,39,.08)' : '')).join('');
+      const selRow = rows.find(r => r.h.id === _rs.sel);
+      body = `
+        <table style="width:100%;border-collapse:collapse;margin-top:8px;">
+          <thead><tr>${['시점', 'FCST', 'Range', '메모', '바뀔 칸'].map((h, i) => `<th style="${td}font-size:11px;color:var(--text-muted);font-weight:600;${i ? 'text-align:right;' : 'text-align:left;'}">${h}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${tr(false, ['<b>현재</b>', cc.f, cc.r, cc.m, '-'], '', 'var(--bg)')}
+            ${list || `<tr><td colspan="5" style="${td}color:var(--text-muted);">이 지점은 기록된 변경 이력이 없습니다.</td></tr>`}
+          </tbody>
+        </table>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+          <button class="subtab-btn" onclick="RangeDC._closeRestore()">닫기</button>
+          <button class="subtab-btn" ${selRow && selRow.n ? '' : 'disabled'} style="${selRow && selRow.n ? 'background:var(--primary);border-color:var(--primary);color:#fff;' : 'opacity:.5;'}" onclick="RangeDC._rsApply()">${esc(_rs.team)} ${selRow ? selRow.n + '칸 ' : ''}복원</button>
+        </div>`;
+    }
+    el.innerHTML = `
+      <div style="background:var(--card-bg);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);width:min(560px,calc(100vw - 32px));max-height:calc(100vh - 64px);overflow:auto;padding:18px 20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <b style="font-size:15px;">🕘 이전 입력 복원 · ${qLabel}</b>
+          <button class="subtab-btn" style="margin-left:auto;padding:2px 8px;font-size:11px;" onclick="RangeDC._closeRestore()">✕</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">시점을 고르면 <b>선택한 지점 도매장 칸만</b> 그때 값으로 되돌립니다(다른 지점 입력은 유지). 복원도 이력에 남아 다시 되돌릴 수 있습니다.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">${teamBtns}</div>
+        ${body}
+      </div>`;
+  }
+
+  function _rsApply() {
+    if (!_rs || !_rs.entries) return;
+    const h = _rs.entries.find(e => e.id === _rs.sel); if (!h) return;
+    const codes = _teamCodes(_rs.team);
+    const { delta, n } = _diffDelta(_slice(_rs.cur, codes), _slice(h.data, codes), codes);
+    if (!n) return;
+    if (!confirm(`${_rs.team} 도매장 ${n}칸을 ${_fmtAt(h.at)} 변경 직전 값으로 되돌립니다.\n다른 지점 입력은 그대로 유지됩니다. 진행할까요?`)) return;
+    const qkey = _rs.qkey;
+    const dl = _deltaOf(qkey);                                                          // 복원값이 미저장 입력보다 우선
+    for (const c in delta.fcst) dl.fcst[c] = delta.fcst[c];
+    for (const c in delta.dec)  dl.dec[c] = Object.assign({}, dl.dec[c], delta.dec[c]);
+    if (_cache) _cache.quarters[qkey] = applyQDelta(_cache.quarters[qkey] || {}, delta);
+    _closeRestore();
+    setSaveChip(`🕘 복원 ${n}칸 저장 중…`, 'var(--neutral)');
+    markQDirty(qkey);
+    rerender();
+  }
+
   global.RangeDC = { parseWorkbook, ingestWorkbook, saveMonths, render, invalidate,
                      _setView, _setTeam, _setSr, _copyChanges, _toggleShowExcluded, _toggleSub, _toggleSrEdit, _onSrEdit, _saveSr,
-                     _onFcst, _onDec, _onMemo, _toggleLock, _lockThrough, _unlockAll };
+                     _onFcst, _onDec, _onMemo, _toggleLock, _lockThrough, _unlockAll,
+                     _openRestore, _closeRestore, _rsSetTeam, _rsSelect, _rsApply };
 })(window);
