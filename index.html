@@ -168,7 +168,7 @@ body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(
 .min-actions-empty { padding:16px; font-size:12px; color:#d1d5db; text-align:center; }
 /* 회의록 카테고리 필터 — 3열 × 2행 */
 .min-cat-bar { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; padding:6px 10px 8px; }
-.min-cat-btn { display:flex; align-items:center; justify-content:center; text-align:center; padding:6px 8px; border:1px solid rgba(0,0,0,.08); border-radius:6px; background:#fff; color:#6b7280; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+.min-cat-btn { display:flex; align-items:center; justify-content:center; text-align:center; padding:6px 4px; border:1px solid rgba(0,0,0,.08); border-radius:6px; background:#fff; color:#6b7280; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:background .12s, color .12s, border-color .12s; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
 .min-cat-btn:hover { background:#f3f4f6; color:#1f2937; }
 .min-cat-btn.active { background:#205527; color:#fff; border-color:#205527; }
 /* 회의록 에디터 — Month 드롭다운(제목 역할) */
@@ -2484,11 +2484,12 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <div id="minutes-list-panel" style="width:240px;flex-shrink:0;border-right:1px solid rgba(0,0,0,.08);overflow-y:auto;padding:0;background:#f7f7f5;">
         <div id="min-cat-bar" class="min-cat-bar" style="padding-top:14px;">
           <button class="min-cat-btn active" data-cat="all"      onclick="minutesFilterByCategory('all')">전체</button>
-          <button class="min-cat-btn"        data-cat="on_trade" onclick="minutesFilterByCategory('on_trade')">On Trade</button>
+          <button class="min-cat-btn"        data-cat="seoul"    onclick="minutesFilterByCategory('seoul')">Seoul</button>
+          <button class="min-cat-btn"        data-cat="busan"    onclick="minutesFilterByCategory('busan')">Busan</button>
+          <button class="min-cat-btn"        data-cat="daegu"    onclick="minutesFilterByCategory('daegu')">Daegu&amp;Jeju</button>
+          <button class="min-cat-btn"        data-cat="daejeon"  onclick="minutesFilterByCategory('daejeon')">Daejeon</button>
+          <button class="min-cat-btn"        data-cat="gwangju"  onclick="minutesFilterByCategory('gwangju')">Gwangju</button>
           <button class="min-cat-btn"        data-cat="tm"       onclick="minutesFilterByCategory('tm')">TM</button>
-          <button class="min-cat-btn"        data-cat="bottle"   onclick="minutesFilterByCategory('bottle')">Bottle</button>
-          <button class="min-cat-btn"        data-cat="draught"  onclick="minutesFilterByCategory('draught')">Draught</button>
-          <button class="min-cat-btn"        data-cat="can"      onclick="minutesFilterByCategory('can')">Can</button>
           <button class="min-cat-btn"        data-cat="alsm"     onclick="minutesFilterByCategory('alsm')">ALSM</button>
         </div>
         <button onclick="minutesNew()" class="min-new-btn">
@@ -2527,7 +2528,15 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
               <option value="Nov">Nov</option>
               <option value="Dec">Dec</option>
             </select>
-            <input type="date" id="min-date"
+            <select id="min-week-sel" class="min-month-select" title="주차 선택 (비우면 월 전체)" style="min-width:90px;">
+              <option value="">주차…</option>
+              <option value="W1">W1</option>
+              <option value="W2">W2</option>
+              <option value="W3">W3</option>
+              <option value="W4">W4</option>
+              <option value="W5">W5</option>
+            </select>
+            <input type="date" id="min-date" onchange="minutesSyncMonthWeekFromDate()"
               style="border:none;background:transparent;color:#9ca3af;font-size:13px;font-family:inherit;cursor:pointer;outline:none;padding:0;">
           </div>
 
@@ -9196,29 +9205,47 @@ let _minutesCurrentId = null;
 let _minutesActions = []; // [{id, text, assignee, due, done}]
 let _minActiveEditor = null; // 현재 포커스된 카드 body element
 const MINUTES_CATEGORIES = [
-  { key: 'on_trade', label: 'On Trade' },
-  { key: 'tm',       label: 'TM' },
-  { key: 'bottle',   label: 'Bottle' },
-  { key: 'draught',  label: 'Draught' },
-  { key: 'can',      label: 'Can' },
-  { key: 'alsm',     label: 'ALSM' },
+  { key: 'seoul',   label: 'Seoul' },
+  { key: 'busan',   label: 'Busan' },
+  { key: 'daegu',   label: 'Daegu&Jeju' },
+  { key: 'daejeon', label: 'Daejeon' },
+  { key: 'gwangju', label: 'Gwangju' },
+  { key: 'tm',      label: 'TM' },
+  { key: 'alsm',    label: 'ALSM' },
 ];
-const MINUTES_CAT_LABEL = Object.fromEntries(MINUTES_CATEGORIES.map(c => [c.key, c.label]));
+// 구 카테고리(지점 개편 전) — 선택지엔 없지만 기존 카드의 값은 보존·표시
+const MINUTES_LEGACY_CATEGORIES = [
+  { key: 'on_trade', label: 'On Trade (구)' },
+  { key: 'bottle',   label: 'Bottle (구)' },
+  { key: 'draught',  label: 'Draught (구)' },
+  { key: 'can',      label: 'Can (구)' },
+];
+const MINUTES_CAT_LABEL = Object.fromEntries([...MINUTES_CATEGORIES, ...MINUTES_LEGACY_CATEGORIES].map(c => [c.key, c.label]));
 const MINUTES_CAT_COLOR = {
-  on_trade: '#c2410c',
+  seoul:    '#c2410c',
+  busan:    '#0e7490',
+  daegu:    '#a16207',
+  daejeon:  '#b91c1c',
+  gwangju:  '#1d4ed8',
   tm:       '#6d28d9',
-  bottle:   '#0e7490',
-  draught:  '#a16207',
-  can:      '#b91c1c',
   alsm:     '#4d7c0f',
+  on_trade: '#6b7280',
+  bottle:   '#6b7280',
+  draught:  '#6b7280',
+  can:      '#6b7280',
 };
 const MINUTES_CAT_BG = {
-  on_trade: '#fff7ed',
+  seoul:    '#fff7ed',
+  busan:    '#ecfeff',
+  daegu:    '#fefce8',
+  daejeon:  '#fef2f2',
+  gwangju:  '#eff6ff',
   tm:       '#f5f3ff',
-  bottle:   '#ecfeff',
-  draught:  '#fefce8',
-  can:      '#fef2f2',
   alsm:     '#f7fee7',
+  on_trade: '#f3f4f6',
+  bottle:   '#f3f4f6',
+  draught:  '#f3f4f6',
+  can:      '#f3f4f6',
 };
 let _minutesCurrentCategory = 'all'; // 'all' | category key
 
@@ -9329,6 +9356,9 @@ function _minCreateCardEl({ id, subtitle, category, content }) {
   catSel.innerHTML =
     '<option value="">카테고리 선택…</option>' +
     MINUTES_CATEGORIES.map(c => `<option value="${c.key}" style="color:${MINUTES_CAT_COLOR[c.key]};font-weight:600;">${c.label}</option>`).join('');
+  // 구 카테고리 카드는 해당 옵션을 붙여 값 유실(저장 시 '') 방지
+  const _legacy = MINUTES_LEGACY_CATEGORIES.find(c => c.key === category);
+  if (_legacy) catSel.insertAdjacentHTML('beforeend', `<option value="${_legacy.key}" style="color:${MINUTES_CAT_COLOR[_legacy.key]};">${_legacy.label}</option>`);
   catSel.value = category || '';
   const _syncCatColor = () => {
     catSel.style.color = MINUTES_CAT_COLOR[catSel.value] || '#c4c9d4';
@@ -9860,6 +9890,25 @@ function minInsertSymbol(sym) {
   document.execCommand('insertText', false, sym);
 }
 
+const _MIN_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _minutesParseLabel(label) {
+  const [m, w] = String(label || '').trim().split(/\s+/);
+  return {
+    month: _MIN_MONTHS.includes(m) ? m : '',
+    week:  /^W[1-5]$/.test(w || '') ? w : '',
+  };
+}
+// 날짜 → 월 + 월내 주차(월요일 시작, 1일이 속한 주 = W1)
+function minutesSyncMonthWeekFromDate() {
+  const v = document.getElementById('min-date').value;
+  if (!v) return;
+  const [y, mo, d] = v.split('-').map(Number);
+  const firstDow = (new Date(y, mo - 1, 1).getDay() + 6) % 7; // 월=0 … 일=6
+  const wk = Math.min(5, Math.floor((d - 1 + firstDow) / 7) + 1);
+  document.getElementById('min-month').value = _MIN_MONTHS[mo - 1];
+  document.getElementById('min-week-sel').value = `W${wk}`;
+}
+
 async function minutesLoad() {
   _minImgEnsureBound();
   const listEl = document.getElementById('minutes-list');
@@ -9912,9 +9961,10 @@ async function minutesSelect(id) {
 
   _minutesCurrentId = id;
   document.getElementById('min-date').value = data.meeting_date || '';
-  // week_label이 Jan~Dec면 드롭다운에 매칭, 아니면 빈 값
-  const _monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  document.getElementById('min-month').value = _monthOpts.includes(data.week_label) ? data.week_label : '';
+  // week_label: "Oct" 또는 "Oct W2" → 월/주차 드롭다운에 매칭
+  const { month: _m, week: _w } = _minutesParseLabel(data.week_label);
+  document.getElementById('min-month').value = _m;
+  document.getElementById('min-week-sel').value = _w;
   // agenda → 카드 배열로 파싱 (구버전 HTML이면 단일 카드로 감싸기)
   let _cards = [];
   if (data.agenda) {
@@ -9945,9 +9995,8 @@ function minutesNew() {
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
-  const _monthOpts = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   document.getElementById('min-date').value = `${yyyy}-${mm}-${dd}`;
-  document.getElementById('min-month').value = _monthOpts[today.getMonth()];
+  minutesSyncMonthWeekFromDate();
   minutesRenderCards([]);
   _minutesActions = [];
   minutesRenderActions();
@@ -9964,13 +10013,14 @@ async function minutesSave() {
   if (!meeting_date) { statusEl.textContent = '날짜를 입력하세요.'; statusEl.style.color = '#e53e3e'; return; }
   const month = document.getElementById('min-month').value;
   if (!month) { statusEl.textContent = '월을 선택하세요.'; statusEl.style.color = '#e53e3e'; return; }
+  const week = document.getElementById('min-week-sel').value;
   statusEl.textContent = '저장 중...'; statusEl.style.color = 'var(--text-muted)';
   const payload = {
     token:        sessionStorage.getItem('auth_token'),
     id:           _minutesCurrentId || undefined,
     meeting_date,
     category:     null,           // entry-level category 미사용 (카드별로 이동)
-    week_label:   month,          // 월(Jan~Dec)이 제목 역할
+    week_label:   week ? `${month} ${week}` : month,   // "Oct W1" (주차 비우면 "Oct")가 제목 역할
     attendees:    '',
     agenda:       JSON.stringify(_minutesCollectCards()),
     action_items: JSON.stringify(_minutesActions),
