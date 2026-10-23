@@ -2466,6 +2466,12 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     <div id="freight-root"><div class="chart-card" style="padding:24px;color:var(--text-muted);font-size:13px;">운송비 데이터 로드 중…</div></div>
   </div>
 
+  <!-- Tab: 공케그·CO2 (SAP RAW 주간 업로드 — keg_co2.html 임베드, 저장=Supabase on_keg_co2) -->
+  <div id="tab-keg" class="tab-content">
+    <iframe id="keg-frame" title="공케그 & CO2 현황"
+      style="width:100%;height:calc(100vh - 165px);min-height:600px;border:1px solid rgba(0,0,0,.08);border-radius:8px;display:block;background:#f4f6f4;"></iframe>
+  </div>
+
   <!-- Tab: Range DC (WS Range 할인 — 분기 자격판정·차기 Range 결정) -->
   <div id="tab-range" class="tab-content">
     <div id="range-root"><div class="chart-card" style="padding:24px;color:var(--text-muted);font-size:13px;">Range DC 데이터 로드 중…</div></div>
@@ -2663,6 +2669,21 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
           <button class="upload-apply-btn" id="cdsr-apply-btn" onclick="handleCombinedDsrUpload(document.getElementById('cdsr-file-input'))">통합 적용 (On+Off)</button>
           <span id="combined-dsr-status" style="font-size:12px;"></span>
+        </div>
+      </div>
+
+      <!-- 공케그·CO2 SAP RAW (Cost › 공케그·CO2 탭) -->
+      <div style="margin-bottom:28px;padding:14px;border:2px solid #2d7a3a;border-radius:8px;background:rgba(45,122,58,0.03);">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;">🛢 공케그 · CO2 SAP RAW (Cost › 공케그·CO2 탭)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">SAP RAW(<code>Sales Document</code> 열) 업로드 → Material로 공케그/CO2 자동 분류, <b>같은 Sales Document+Material은 새 파일 값으로 교체(병합)</b>, 기존 다른 기간은 보존. Sheet2(SR·SAP Code)가 있으면 도매장→SR 매핑도 갱신. 여러 파일 동시 선택 가능. 예: <code>1001 - 1014_201937512719_RAW_DATA.XLSX</code></div>
+        <label class="upload-file-btn" id="keg-btn-label" style="display:inline-flex;" title="공케그·CO2 SAP RAW (다중 선택 가능)">
+          Select File(s)
+          <input type="file" id="keg-file-input" accept=".xlsx,.xls,.xlsm,.csv" multiple style="display:none" onchange="document.getElementById('keg-filename').textContent=Array.from(this.files).map(f=>f.name).join(' + ')">
+        </label>
+        <span id="keg-filename" style="font-size:12px;color:var(--text-muted);margin-left:10px;"></span>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
+          <button class="upload-apply-btn" id="keg-apply-btn" onclick="handleKegUpload(document.getElementById('keg-file-input'))">공케그·CO2 적용</button>
+          <span id="keg-upload-status" style="font-size:12px;"></span>
         </div>
       </div>
 
@@ -4454,6 +4475,43 @@ async function handleFreightBackfill(input) {
     console.error('Freight backfill error:', err);
     statusEl.style.color = 'var(--negative)';
     statusEl.textContent = `Error: ${err.message}`;
+  } finally { if (btn) btn.disabled = false; }
+}
+
+// ── 공케그·CO2: 파싱·병합·저장은 keg_co2.html(iframe)의 KegCo2.ingest가 담당 — 탭과 같은 코드 경로 ──
+function _kegFrameLoad() {
+  const f = document.getElementById('keg-frame');
+  if (!f.src) f.src = 'keg_co2.html?v=' + Math.floor(Date.now() / 60000);
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    (function wait() {
+      try { if (f.contentWindow && f.contentWindow.KegCo2) return resolve(f.contentWindow.KegCo2); } catch (e) { return reject(e); }
+      if (Date.now() - t0 > 20000) return reject(new Error('공케그·CO2 화면 로드 시간 초과'));
+      setTimeout(wait, 150);
+    })();
+  });
+}
+async function handleKegUpload(input) {
+  const statusEl = document.getElementById('keg-upload-status');
+  const files = input && input.files ? Array.from(input.files) : [];
+  if (!files.length) { statusEl.textContent = '파일을 선택하세요.'; statusEl.style.color = 'var(--negative)'; return; }
+  const btn = document.getElementById('keg-apply-btn'); if (btn) btn.disabled = true;
+  statusEl.style.color = 'var(--text-muted)';
+  try {
+    statusEl.textContent = '공케그·CO2 화면 준비 중…';
+    const K = await _kegFrameLoad();
+    const msgs = [];
+    for (let i = 0; i < files.length; i++) {
+      statusEl.textContent = `[${i + 1}/${files.length}] ${files[i].name} 처리 중…`;
+      msgs.push(`${files[i].name}: ${await K.ingest(files[i], 'merge')}`);
+    }
+    statusEl.style.color = 'var(--positive)';
+    statusEl.textContent = '✓ ' + msgs.join(' / ');
+  } catch (err) {
+    console.error('Keg/CO2 upload error:', err);
+    statusEl.style.color = 'var(--negative)';
+    const m = (err && err.message) || String(err);
+    statusEl.textContent = 'Error: ' + (/on_keg_co2|schema cache|PGRST205|42P01/i.test(m) ? 'on_keg_co2 테이블 없음 — migrations/on_keg_co2.sql 을 Supabase SQL Editor에서 1회 실행하세요.' : m);
   } finally { if (btn) btn.disabled = false; }
 }
 
@@ -9141,7 +9199,7 @@ const TAB_GROUPS = [
   { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['rofo-sheet','Rofo'], ['order','Order Pattern']] },
   { key: 'perf',   label: 'Performance', tabs: [['ytd','YTD'], ['branch','Branch Analysis'], ['revenue','Revenue']] },
   { key: 'sku',    label: 'SKU',         tabs: [['sku','SKU Detail'], ['sku-hist','SKU History']] },
-  { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['range','Range DC'], ['vc','Value Chain']] },
+  { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['keg','공케그·CO2'], ['range','Range DC'], ['vc','Value Chain']] },
   { key: 'work',   label: 'Workspace',   tabs: [['minutes','Minutes'], ['calendar','Calendar & To-Do']] },
 ];
 const _tabGroupOf = tabId => TAB_GROUPS.find(g => g.tabs.some(t => t[0] === tabId)) || null;
@@ -9183,6 +9241,7 @@ function switchTab(tabId) {
     if (tabId === 'order')    { renderOrderPattern(); }
     if (tabId === 'freight')  { if (window.Freight) Freight.render(_supabase); }
     if (tabId === 'range')    { if (window.RangeDC) RangeDC.render(_supabase); }
+    if (tabId === 'keg')      { _kegFrameLoad(); }
     if (tabId === 'vc')       { const f = document.getElementById('vc-frame'); if (f && !f.src) f.src = 'value_chain.html?v=' + Math.floor(Date.now() / 60000); }
     if (tabId === 'minutes')  { minutesLoad(); }
     if (tabId === 'calendar') { calendarInit(); todoInit(); }
