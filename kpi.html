@@ -41,6 +41,26 @@ async function sIns(t,d){
     if(!r.ok)throw new Error(await r.text());
   }
 }
+// 안전 교체: 새 행을 먼저 넣고, 성공한 뒤에만 기존 행(insert 전 최대 id 이하)을 지운다.
+// insert가 실패하면 이번에 들어간 행만 되돌리고 기존 데이터는 그대로 둔다 (delete→insert 순서로 데이터 유실된 사고 방지).
+// jobs = [[table, filter, rows], ...] — 여러 테이블을 함께 교체할 때는 전부 insert 성공한 뒤에만 기존 행을 지운다.
+async function sReplaceMany(jobs){
+  const maxIds=[];
+  for(const [t] of jobs){
+    const r=await fetch(SUPA_URL+'/rest/v1/'+t+'?select=id&order=id.desc&limit=1',{headers:SH});
+    if(!r.ok)throw new Error(await r.text());
+    const j=await r.json(); maxIds.push(j.length?j[0].id:0);
+  }
+  let done=0;
+  try{ for(;done<jobs.length;done++) await sIns(jobs[done][0],jobs[done][2]); }
+  catch(e){
+    for(let i=0;i<=done&&i<jobs.length;i++){ try{ await sDel(jobs[i][0],jobs[i][1]+'&id=gt.'+maxIds[i]); }catch(_){} }
+    throw new Error(e.message+'\n\n(기존 데이터는 삭제되지 않았습니다)');
+  }
+  for(let i=0;i<jobs.length;i++) await sDel(jobs[i][0],jobs[i][1]+'&id=lte.'+maxIds[i]);
+}
+const sReplace = (t,filter,rows) => sReplaceMany([[t,filter,rows]]);
+const sTeamIn = teams => 'team=in.('+teams.map(t=>encodeURIComponent('"'+t+'"')).join(',')+')';
 async function sUpsert(t,d,onConflict){
   if(!d||!d.length)return;
   const CHUNK=500;
@@ -773,6 +793,7 @@ td.sr-cell{white-space:nowrap}
           <button class="cancel-btn" onclick="cancelPaulaner()">취소</button>
         </div>
       </div>
+      <div id="plMergeNote" style="display:none;font-size:12px;line-height:1.55;color:var(--text);background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 10px;margin-bottom:8px"></div>
       <div class="ow" style="max-height:300px">
         <table class="utable">
           <thead><tr><th>지역</th><th>WS</th><th>거래처명</th><th>시스템</th><th class="r">3월</th><th class="r">4월</th><th class="r">5월</th><th class="r">6월</th><th class="r">7월</th><th class="r">8월</th><th class="r">9월</th><th class="r">10월</th><th class="r">11월</th><th class="r">12월</th></tr></thead>
@@ -1935,6 +1956,7 @@ async function loadAllData(){
   const ovRows = await sGet('paulaner_pa_overrides').catch(()=>[]);
   PA_OVERRIDES = Object.fromEntries(ovRows.map(o=>[o.outlet,o.region]));
   applyPaOverrides();
+  plCleanLoaded();   // keg 표 중복(같은 업장 여러 행) + PA 설치 업장 중복 정리
   // map Supabase column names → JS property names for RSP
   RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));
   // normalize teams
@@ -2776,10 +2798,11 @@ function siReadRsp(input) {
 async function siConfirmRsp(){if(!siParsedRsp.length){alert('파일을 먼저 업로드하세요');return;}
   const teams=[...new Set(siParsedRsp.map(r=>normalizeTeam(r.team||'')))].filter(Boolean);
   try{
-  await sDel('snow_incentive_rsp','team=in.('+teams.join(',')+')');
   const _rspAt=new Date().toISOString();
-  const rows=siParsedRsp.map((r,i)=>({no:i+1,sap:r.sap||null,ws:r.ws||'',sr:r.sr||'',team:normalizeTeam(r.team||''),outlet:r.outlet||'',area1:r.area1||'',area2:r.area2||'',area3:r.area3||'',spt:r.spt||1,before_price:String(r.before||'신규'),after_price:Number(r.after)||6000,uploaded_at:_rspAt}));
-  await sIns('snow_incentive_rsp',rows);RSP_DATA_BASE=await sGet('snow_incentive_rsp','order=no');RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));RSP_DATA_BASE.forEach(r=>{r.team=normalizeTeam(r.team);});alert('✅ RSP '+rows.length+'개 저장됨 (팀: '+teams.join(', ')+')');siCancelRsp();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
+  const rows=siParsedRsp.map((r,i)=>({no:i+1,sap:r.sap||null,ws:r.ws||'',sr:r.sr||'',team:normalizeTeam(r.team||''),outlet:r.outlet||'',area1:r.area1||'',area2:r.area2||'',area3:r.area3||'',spt:Number(r.spt)||1,before_price:String(r.before||'신규'),after_price:Math.round(Number(r.after))||6000,uploaded_at:_rspAt}));
+  // 한국어 팀명 변형도 함께 교체 (CC와 동일)
+  const allVariants=[...new Set([...teams,...Object.entries(TEAM_REMAP).filter(([,v])=>teams.includes(v)).map(([k])=>k)])];
+  await sReplace('snow_incentive_rsp',sTeamIn(allVariants),rows);RSP_DATA_BASE=await sGet('snow_incentive_rsp','order=no');RSP_DATA_BASE=RSP_DATA_BASE.map(r=>({...r,before:r.before_price,after:r.after_price}));RSP_DATA_BASE.forEach(r=>{r.team=normalizeTeam(r.team);});alert('✅ RSP '+rows.length+'개 저장됨 (팀: '+teams.join(', ')+')');siCancelRsp();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
 function siCancelRsp(){siParsedRsp=[];document.getElementById('pvSIRsp').style.display='none';document.getElementById('fnSIRsp').textContent='';document.getElementById('fSIRsp').value='';}
 function siDeleteRsp(){if(!confirm('RSP 기본값 복원?'))return;const d=getSIData();delete d.rsp;setSIData(d);renderSIUploadStatus();initSnowIncentive();}
 let siParsedCc=[];
@@ -2814,10 +2837,9 @@ async function siConfirmCc(){if(!siParsedCc.length){alert('파일을 먼저 업�
   const allVariants=[...new Set([...normTeams,...Object.entries(TEAM_REMAP).filter(([,v])=>normTeams.includes(v)).map(([k])=>k)])];
   const teams=normTeams;
   try{
-  await sDel('snow_incentive_cc','team=in.('+allVariants.join(',')+')');
   const _ccAt=new Date().toISOString();
   const rows=siParsedCc.map((r,i)=>({no:i+1,sap:r.sap||null,ws:r.ws||'',sr:r.sr||'',team:normalizeTeam(r.team||''),outlet:r.outlet||'',area1:r.area1||'',area2:r.area2||'',vol:Number(r.vol)||0,cost:Number(r.cost)||0,theme:r.theme||'Discount',uploaded_at:_ccAt}));
-  await sIns('snow_incentive_cc',rows);CC_DATA_BASE=await sGet('snow_incentive_cc','order=no');CC_DATA_BASE.forEach(r=>{r.team=normalizeTeam(r.team);});alert('✅ CC '+rows.length+'개 저장됨 (팀: '+teams.join(', ')+')');siCancelCc();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
+  await sReplace('snow_incentive_cc',sTeamIn(allVariants),rows);CC_DATA_BASE=await sGet('snow_incentive_cc','order=no');CC_DATA_BASE.forEach(r=>{r.team=normalizeTeam(r.team);});alert('✅ CC '+rows.length+'개 저장됨 (팀: '+teams.join(', ')+')');siCancelCc();renderSIUploadStatus();initSnowIncentive();}catch(e){alert('오류: '+e.message);}}
 function siCancelCc(){siParsedCc=[];document.getElementById('pvSICc').style.display='none';document.getElementById('fnSICc').textContent='';document.getElementById('fSICc').value='';}
 function siDeleteCc(){if(!confirm('CC 기본값 복원?'))return;const d=getSIData();delete d.cc;setSIData(d);renderSIUploadStatus();initSnowIncentive();}
 let siParsedWs=[];
@@ -2895,7 +2917,6 @@ function siReadWs(input) {
 async function siConfirmWs(){if(!siParsedWs.length){alert('파일을 먼저 업로드하세요');return;}try{
   const normTeams=[...new Set(siParsedWs.map(r=>normalizeTeam(r.team||'')))].filter(Boolean);
   const allVariants=[...new Set([...normTeams,...Object.entries(TEAM_REMAP).filter(([,v])=>normTeams.includes(v)).map(([k])=>k)])];
-  await sDel('snow_incentive_ws','team=in.('+allVariants.join(',')+')');
   const _wsAt=new Date().toISOString();
   const rows=siParsedWs.map(r=>({
     team:normalizeTeam(r.team||''),
@@ -2904,7 +2925,7 @@ async function siConfirmWs(){if(!siParsedWs.length){alert('파일을 먼저 업�
     cost3:Math.round(Number(r.cost3)||0),cost4:Math.round(Number(r.cost4)||0),cost5:Math.round(Number(r.cost5)||0),
     uploaded_at:_wsAt,
   }));
-  await sIns('snow_incentive_ws',rows);
+  await sReplace('snow_incentive_ws',sTeamIn(allVariants),rows);
   WS_DATA_BASE=await sGet('snow_incentive_ws','order=team');
   WS_DATA_BASE.forEach(r=>{if(r.team)r.team=normalizeTeam(r.team);});
   alert('✅ WS 저장됨 (팀: '+normTeams.join(', ')+')');
@@ -3045,7 +3066,6 @@ async function confirmBottleWide() {
   if(ov)ov.style.display='flex';
   try {
     // 파일에 포함된 지점만 삭제 후 재삽입 (다른 지점 데이터 유지)
-    await sDel('bottle_outlets','team=in.('+teams.map(encodeURIComponent).join(',')+')');
     const _bottleAt=new Date().toISOString();
     const rows = parsedBottleWide.map(r=>({
       team:r.team, sr:r.sr, outlet:r.outlet,
@@ -3053,7 +3073,7 @@ async function confirmBottleWide() {
       m7:r.m7, m8:r.m8, m9:r.m9, m10:r.m10, m11:r.m11, m12:r.m12,
       uploaded_at:_bottleAt,
     }));
-    await sIns('bottle_outlets', rows);
+    await sReplace('bottle_outlets', sTeamIn(teams), rows);
     BOTTLE_OUTLETS = await sGet('bottle_outlets','order=team');
     alert('✅ Bottle '+rows.length+'개 저장됨 (지점: '+teams.join(', ')+')');
     cancelBottleWide(); renderUploadStatus(); initBottleView();
@@ -3124,10 +3144,9 @@ async function confirmBottleInc(){
   const ov=document.getElementById('loadingOverlay');
   if(ov)ov.style.display='flex';
   try{
-    await sDel('bottle_incentive','team=in.('+teams.map(encodeURIComponent).join(',')+')');
     const _at=new Date().toISOString();
     const rows=parsedBottleInc.map(r=>({...r,updated_at:_at}));
-    await sIns('bottle_incentive',rows);
+    await sReplace('bottle_incentive', sTeamIn(teams), rows);
     BOTTLE_INCENTIVE=await sGet('bottle_incentive','order=team');
     const spent=rows.reduce((s,d)=>s+(+d.budget||0),0);
     alert('✅ Bottle Incentive '+rows.length+'건 저장됨\n지점: '+teams.join(', ')+'\n집행 합계: '+biWon(spent));
@@ -3144,6 +3163,7 @@ function cancelBottleInc(){
 
 // ===== 파울라너 20L 업데이트 =====
 let parsedPaulaner = [];
+let plUploadInfo = {merged:0,dupChanges:[],moved:[],sysChg:[]};   // 업로드 미리보기 점검 결과
 const PL_REGION_NORM={Seoul:'Seoul',seoul:'Seoul',Busan:'Busan',busan:'Busan',Daejeon:'Daejeon',daejeon:'Daejeon',Daegu:'Daegu',daegu:'Daegu',Daeug:'Daegu',daeug:'Daegu',Gwangju:'Gwangju',gwangju:'Gwangju',Jeju:'Jeju',jeju:'Jeju',NKA:'NKA',nka:'NKA'};
 const PL_SYS_ORDER=['하이트시스템','자체시스템','타사 시스템'];   // 하이네켄 노멀/콜륨은 PA Normal/Column(Draught raw)로 이관
 const PL_SYS_SKIP=['하이네켄 노멀','하이네켄 콜륨'];              // keg 업로드 시 제외 (PA는 Draught에서)
@@ -3155,6 +3175,56 @@ const PA_SYS_COLORS={'PA Normal':'#0ea5e9','PA Column':'#9333ea'};
 const PA_NI_REGIONS=['Seoul','Busan','Daejeon','Daegu','Gwangju','Jeju','NKA'];
 let paNiSys='전체';
 const paFilter={region:'전체',system:'전체'};
+
+// ===== 파울라너 20L 중복 정리 (같은 업장 = 1행) =====
+// 같은 업장 판정 키: 거래처명에서 공백·괄호기호 제거 후 소문자.
+//  괄호 '안의 글자'는 살린다 → '그루브(여서)'≠'그루브(웅천)', '한산마리나 리조트 통영'='한산마리나리조트(통영)'
+const plVenueKey = s => String(s||'').toLowerCase().replace(/[\s()（）\[\]]/g,'');
+// 시스템 표기 흔들림 정규화 (자제시스템 오타 / 타사시스템 붙여쓰기 / 오비시스템 = 타사)
+const PL_SYS_NORM = {'자제시스템':'자체시스템','타사시스템':'타사 시스템','오비시스템':'타사 시스템','하이트 시스템':'하이트시스템','자체 시스템':'자체시스템'};
+const plNormSys = v => { const t=String(v||'').trim(); return PL_SYS_NORM[t] || PL_SYS_NORM[t.replace(/\s+/g,'')] || t; };
+const plFirstMon = d => { for(let m=3;m<=12;m++) if(d['m'+m]!=null) return m; return 99; };
+// 같은 업장 여러 행 → 1행 병합.
+//  · 시스템/WS: 설치월이 늦은(동률이면 나중에 온) 행이 이긴다 = 시스템 변경분이 최종값
+//  · 설치월: 최초 설치월 1개만 유지 (시스템 교체는 신규설치가 아니므로 이중 계상 방지)
+function plMergeVenues(rows){
+  const map=new Map(); const changes=[];
+  (rows||[]).forEach((r,i)=>{
+    r.system=plNormSys(r.system);
+    const k=plVenueKey(r.outlet); if(!k) return;
+    const prev=map.get(k);
+    if(!prev){ map.set(k,{...r,_i:i}); return; }
+    const newer=(plFirstMon(r)>plFirstMon(prev))||(plFirstMon(r)===plFirstMon(prev)&&i>prev._i);
+    const win=newer?r:prev, lose=newer?prev:r;
+    const merged={...prev};
+    merged.region=win.region||prev.region;
+    merged.ws=win.ws||lose.ws||'';
+    merged.system=win.system||lose.system||'';
+    for(let m=3;m<=12;m++){ const a=prev['m'+m], b=r['m'+m]; merged['m'+m]=(a==null&&b==null)?null:Math.max(a||0,b||0); }
+    const f=plFirstMon(merged);                       // 최초 설치월만 남기고 나머지 월 제거
+    for(let m=f+1;m<=12;m++) merged['m'+m]=null;
+    merged._i=Math.max(prev._i,i);
+    map.set(k,merged);
+    if(lose.system&&win.system&&lose.system!==win.system) changes.push({outlet:merged.outlet,from:lose.system,to:win.system});
+  });
+  const out=[...map.values()].map(r=>{const o={...r}; delete o._i; return o;});
+  return {rows:out, merged:(rows||[]).length-out.length, changes};
+}
+// PA Normal/Column 설치 업장은 keg 표에서 제외 — 같은 업장이 keg 표 + PA 섹션에 두 번 나오는 것 방지.
+//  (PA 설치 = 하이네켄 시스템으로 교체된 것이므로 keg 쪽 하이트/자체 시스템 표기는 과거값)
+function plSplitPaVenues(rows){
+  const pa=new Set((PA_INSTALL_DATA||[]).map(d=>plVenueKey(d.outlet)));
+  if(!pa.size) return {rows:rows||[], moved:[]};
+  const moved=(rows||[]).filter(r=>pa.has(plVenueKey(r.outlet)));
+  return {rows:(rows||[]).filter(r=>!pa.has(plVenueKey(r.outlet))), moved};
+}
+// 저장된 PAULANER_DATA 정리 (로드 직후 호출) — DB 재업로드 전에도 화면상 중복 제거
+function plCleanLoaded(){
+  const m=plMergeVenues(PAULANER_DATA||[]);
+  const sp=plSplitPaVenues(m.rows);
+  PAULANER_DATA=sp.rows;
+  return {merged:m.merged, moved:sp.moved};
+}
 
 function readPaulaner(input) {
   const file = input.files[0]; if (!file) return;
@@ -3207,9 +3277,28 @@ function readPaulaner(input) {
         accumulated.push(...sheetRows);
       }
       if (!accumulated.length) { alert('⚠ 파울라너 파일 형식 오류\n각 시트는 다음 헤더가 필요합니다:\nGroup, WS, 거래처명, System, 설치월'); input.value=''; return; }
-      parsedPaulaner = accumulated;
+      // 같은 업장 중복 병합 → PA 설치 업장 제외 → 기존 저장값과 시스템 변경 대조
+      const mg = plMergeVenues(accumulated);
+      const sp = plSplitPaVenues(mg.rows);
+      parsedPaulaner = sp.rows;
+      const curMap = new Map((PAULANER_DATA||[]).map(d=>[plVenueKey(d.outlet),d]));
+      const sysChg = parsedPaulaner.map(r=>{
+        const c=curMap.get(plVenueKey(r.outlet));
+        return (c && c.system && r.system && c.system!==r.system) ? {outlet:r.outlet,from:c.system,to:r.system} : null;
+      }).filter(Boolean);
+      plUploadInfo = {merged:mg.merged, dupChanges:mg.changes, moved:sp.moved, sysChg};
       const mList=[...monthSet].sort((a,b)=>a-b);
-      document.getElementById('pcPaulaner').textContent = parsedPaulaner.length+'건';
+      document.getElementById('pcPaulaner').textContent = parsedPaulaner.length+'건'+(mg.merged?' (중복 '+mg.merged+'건 병합)':'');
+      const note=document.getElementById('plMergeNote');
+      if(note){
+        const lines=[];
+        if(mg.merged) lines.push('<b style="color:#b45309">중복 '+mg.merged+'건 병합</b> — 같은 업장이 여러 행(시스템/WS 변경)으로 들어와 1행으로 합쳤습니다'
+          + (mg.changes.length?': '+mg.changes.slice(0,6).map(c=>c.outlet+' <b>'+c.from+'→'+c.to+'</b>').join(', ')+(mg.changes.length>6?' 외':''):''));
+        if(sysChg.length) lines.push('<b style="color:#0ea5e9">시스템 변경 '+sysChg.length+'곳</b> (기존 저장값 대비): '+sysChg.slice(0,8).map(c=>c.outlet+' <b>'+c.from+'→'+c.to+'</b>').join(', ')+(sysChg.length>8?' 외':''));
+        if(sp.moved.length) lines.push('<b style="color:#9333ea">PA 설치 업장 '+sp.moved.length+'곳 제외</b> — 하이네켄 PA Normal/Column으로 교체된 업장이라 PA 섹션에만 표시됩니다: '+sp.moved.slice(0,8).map(r=>r.outlet).join(', ')+(sp.moved.length>8?' 외':''));
+        note.innerHTML = lines.length?lines.map(t=>'<div style="margin-top:4px">'+t+'</div>').join(''):'';
+        note.style.display = lines.length?'block':'none';
+      }
       document.getElementById('pbPaulaner').innerHTML = parsedPaulaner.slice(0,50).map(r=>
         `<tr><td style="${r.region==='NKA'?'color:#9333ea;font-weight:700':''}">${r.region}</td><td style="font-size:11px">${r.ws}</td><td>${r.outlet}</td><td>${r.system}</td>${mList.map(m=>`<td class="r">${r['m'+m]??'–'}</td>`).join('')}</tr>`
       ).join('');
@@ -3228,32 +3317,38 @@ async function confirmPaulaner() {
   if(ov)ov.style.display='flex';
   try {
     const _at=new Date().toISOString();
-    // 유니크 키(region,ws,outlet,system)로 dedup — 뒤에 오는 행이 이긴다
-    const dedupMap=new Map();
-    for(const r of filtered){
-      const key=[r.region,r.ws,r.outlet,r.system].join('');
-      dedupMap.set(key,r);
-    }
-    const rows=[...dedupMap.values()].map(r=>({
+    // 업장(거래처명) 단위 dedup — 같은 업장은 1행, 시스템/WS는 최신값이 이긴다
+    const rows=plMergeVenues(filtered).rows.map(r=>({
       region:r.region,ws:r.ws,outlet:r.outlet,system:r.system,channel:'Outlet',
       m3:r.m3??null,m4:r.m4??null,m5:r.m5??null,m6:r.m6??null,
       m7:r.m7??null,m8:r.m8??null,m9:r.m9??null,m10:r.m10??null,
       m11:r.m11??null,m12:r.m12??null,updated_at:_at
     }));
-    // 선택된 지역의 모든 기존 데이터를 삭제 → 파일에 없는 outlet까지 완전 교체
-    for(const reg of regions){
-      await sDel('paulaner_outlets_v2','region=eq.'+encodeURIComponent(reg));
-    }
+    // upsert 먼저(실패하면 기존 데이터 그대로) → 성공 후 선택 지역에서 이번 파일에 없던 행(updated_at≠이번 업로드)만 삭제 = 완전 교체
     await sUpsert('paulaner_outlets_v2', rows, 'region,ws,outlet,system');
+    await sDel('paulaner_outlets_v2', 'region=in.('+regions.map(r=>encodeURIComponent('"'+r+'"')).join(',')+')&or=(updated_at.is.null,updated_at.neq.'+encodeURIComponent(_at)+')');
+    // 같은 업장이 다른 지역(예: Outlet→NKA 재분류)에 남아 있으면 제거 → 지역 이동도 중복 대신 갱신
+    const upNames=new Set(rows.map(r=>plVenueKey(r.outlet)));
+    const stale=(PAULANER_DATA||[]).filter(d=>d.id&&!regions.includes(d.region)&&upNames.has(plVenueKey(d.outlet))).map(d=>d.id);
+    if(stale.length) await sDel('paulaner_outlets_v2','id=in.('+stale.join(',')+')');
     PAULANER_DATA = await sGet('paulaner_outlets_v2','order=region');
+    plCleanLoaded();
     const mActive=[3,4,5,6,7,8,9,10,11,12].filter(m=>rows.some(r=>r['m'+m]!=null));
-    alert('✅ 파울라너 '+rows.length+'개 저장됨\n지역: '+regions.join(', ')+'\n입력된 월: '+mActive.map(m=>m+'월').join(', '));
+    const chkMsg=[
+      plUploadInfo.merged?'· 중복 병합: '+plUploadInfo.merged+'건':'',
+      plUploadInfo.sysChg.length?'· 시스템 변경 반영: '+plUploadInfo.sysChg.length+'곳':'',
+      plUploadInfo.moved.length?'· PA 설치 업장 제외: '+plUploadInfo.moved.length+'곳':'',
+      stale.length?'· 타지역 잔존행 정리: '+stale.length+'건':''
+    ].filter(Boolean).join('\n');
+    alert('✅ 파울라너 '+rows.length+'개 저장됨\n지역: '+regions.join(', ')+'\n입력된 월: '+mActive.map(m=>m+'월').join(', ')+(chkMsg?'\n\n[중복/변경 점검]\n'+chkMsg:''));
     cancelPaulaner(); renderUploadStatus(); initPaulanerView();
   } catch(e) { alert('오류: '+e.message); }
   finally { if(ov)ov.style.display='none'; }
 }
 function cancelPaulaner() {
   parsedPaulaner=[];
+  plUploadInfo={merged:0,dupChanges:[],moved:[],sysChg:[]};
+  const _n=document.getElementById('plMergeNote'); if(_n){_n.innerHTML='';_n.style.display='none';}
   document.getElementById('pvPaulaner').style.display='none';
   document.getElementById('fnPaulaner').textContent='';
   document.getElementById('fPaulaner').value='';
@@ -3508,12 +3603,7 @@ async function confirmDraught(){
     const mv=movement.map(r=>({...r,updated_at:_at}));
     const st=stock.map(r=>({...r,updated_at:_at}));
     const bl=blade.map(r=>({...r,updated_at:_at}));
-    await sDel('draught_movement','id=gt.0');
-    await sDel('draught_stock','id=gt.0');
-    await sDel('draught_blade','id=gt.0');
-    await sIns('draught_movement',mv);
-    await sIns('draught_stock',st);
-    await sIns('draught_blade',bl);
+    await sReplaceMany([['draught_movement','id=gt.0',mv],['draught_stock','id=gt.0',st],['draught_blade','id=gt.0',bl]]);
     [DRAUGHT_MOVEMENT,DRAUGHT_STOCK,DRAUGHT_BLADE]=await Promise.all([
       sGet('draught_movement','order=id'),sGet('draught_stock','order=id'),sGet('draught_blade','order=id')]);
     // BLADE 철수 진척 — 테이블 미생성 시에도 나머지 반영은 유지
@@ -3521,8 +3611,7 @@ async function confirmDraught(){
     if((bladeWd||[]).length){
       try{
         const bw=bladeWd.map(r=>({...r,updated_at:_at}));
-        await sDel('draught_blade_withdraw','id=gt.0');
-        await sIns('draught_blade_withdraw',bw);
+        await sReplace('draught_blade_withdraw','id=gt.0',bw);
         DRAUGHT_BLADE_WD=await sGet('draught_blade_withdraw','order=week_num');
         bwMsg='\nBLADE 철수 '+bw.length+'건 (지점×주차)';
       }catch(be){ bwMsg='\n⚠ BLADE 철수 저장 실패: '+be.message+'\n(migrations/draught_blade_withdraw.sql 실행 필요)'; }
@@ -3532,8 +3621,7 @@ async function confirmDraught(){
     if((paInstall||[]).length){
       try{
         const pa=paInstall.map(r=>({...r,updated_at:_at}));
-        await sDel('paulaner_pa_installs','id=gt.0');
-        await sIns('paulaner_pa_installs', pa);
+        await sReplace('paulaner_pa_installs','id=gt.0',pa);
         PA_INSTALL_DATA = await sGet('paulaner_pa_installs','order=region');
         applyPaOverrides();   // 재업로드로 재생성된 데이터에 수동 재분류 재적용
         paMsg='\nPA 설치 '+pa.length+'건 (파울라너 20L 탭 반영)';
@@ -3803,6 +3891,9 @@ function renderPaulanerPATable(){
   const totUnits=data.reduce((s,d)=>s+qtyOf(d),0);
   document.getElementById('paCount').textContent=`${data.length}개 업장 · ${totUnits}대`;
   _paRows=data;   // 인라인 지역 수정(paSetRegion)에서 인덱스로 참조
+  // 같은 업장이 PA Normal + PA Column 둘 다 보유한 경우 → 중복 입력이 아니라 2시스템임을 표시
+  const paSysCnt={};
+  data.forEach(d=>{const k=plVenueKey(d.outlet);(paSysCnt[k]=paSysCnt[k]||new Set()).add(d.system);});
   document.getElementById('paBody').innerHTML=data.map((r,i)=>{
     const selStyle=r.region==='NKA'?'color:#9333ea;font-weight:700':'';
     const opts=PA_NI_REGIONS.map(rg=>`<option value="${rg}"${rg===r.region?' selected':''}>${rg}</option>`).join('');
@@ -3810,7 +3901,9 @@ function renderPaulanerPATable(){
     const q=qtyOf(r);
     const monLabel=monsOf(r).map(m=>m+'월').join('·')||'–';
     const qtyCell=q>1?`<b style="color:#0ea5e9">${q}대</b>`:`${q}대`;
-    return `<tr><td>${regCell}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}</td><td style="font-size:11px">${r.addr||'–'}</td><td class="r">${qtyCell}</td><td class="r">${monLabel}</td></tr>`;
+    const multiSys=(paSysCnt[plVenueKey(r.outlet)]||{size:1}).size>1
+      ?' <span style="font-size:10px;color:#9333ea;font-weight:700" title="같은 업장에 PA Normal·PA Column 두 시스템이 설치됨 (중복 입력 아님)">2시스템</span>':'';
+    return `<tr><td>${regCell}</td><td style="font-size:12px">${r.system||'–'}</td><td style="font-size:11px">${r.ws||'–'}</td><td>${r.outlet||'–'}${multiSys}</td><td style="font-size:11px">${r.addr||'–'}</td><td class="r">${qtyCell}</td><td class="r">${monLabel}</td></tr>`;
   }).join('')||`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">데이터 없음</td></tr>`;
 }
 
@@ -3903,10 +3996,10 @@ async function confirmSnowWide() {
     // 선택한 지역만 삭제 후 재삽입 (다른 지역 데이터 유지)
     const regionFilter='region=eq.'+encodeURIComponent(selectedRegion);
     const uploadedAt=new Date().toISOString();
-    await sDel('snow_all',regionFilter);
-    await sIns('snow_all', parsedSnowAllRows.map(r=>({...r,uploaded_at:uploadedAt})));
-    await sDel('snow_new_outlets',regionFilter);
-    if(parsedSnowWide.length) await sIns('snow_new_outlets', parsedSnowWide.map(r=>({...r,uploaded_at:uploadedAt})));
+    await sReplaceMany([
+      ['snow_all',regionFilter,parsedSnowAllRows.map(r=>({...r,uploaded_at:uploadedAt}))],
+      ['snow_new_outlets',regionFilter,parsedSnowWide.map(r=>({...r,uploaded_at:uploadedAt}))],
+    ]);
     // 리로드
     [SNOW_ALL, SNOW_NEW_OUTLETS] = await Promise.all([
       sGet('snow_all','order=region'),
@@ -4325,20 +4418,14 @@ async function confirmOnTrade(){
   }
   try{
     const ov=document.getElementById('loadingOverlay');if(ov)ov.style.display='flex';
-    if(selectedRegion==='전체'){
-      // 전체 업로드: 모든 지역 데이터 삭제 후 재삽입
-      await sDel('on_trade_bottle','id=gte.0');
-      await sDel('on_trade_draught','id=gte.0');
-      await sDel('on_trade_ws','id=gte.0');
-    } else {
-      await sDel('on_trade_bottle','region=eq.'+encodeURIComponent(selectedRegion));
-      await sDel('on_trade_draught','region=eq.'+encodeURIComponent(selectedRegion));
-      await sDel('on_trade_ws','region=eq.'+encodeURIComponent(selectedRegion));
-    }
+    // 전체 업로드 = 모든 지역 교체, 지역 선택 = 그 지역만 교체 (새 행 insert 성공 후에만 기존 행 삭제)
+    const otFilter=selectedRegion==='전체'?'id=gte.0':'region=eq.'+encodeURIComponent(selectedRegion);
     const _otAt=new Date().toISOString();
-    if(parsedOtBottle.length)await sIns('on_trade_bottle',parsedOtBottle.map(r=>({...r,uploaded_at:_otAt})));
-    if(parsedOtDraught.length)await sIns('on_trade_draught',parsedOtDraught.map(r=>({...r,uploaded_at:_otAt})));
-    if(parsedOtWs.length)await sIns('on_trade_ws',parsedOtWs.map(r=>({...r,uploaded_at:_otAt})));
+    await sReplaceMany([
+      ['on_trade_bottle',otFilter,parsedOtBottle.map(r=>({...r,uploaded_at:_otAt}))],
+      ['on_trade_draught',otFilter,parsedOtDraught.map(r=>({...r,uploaded_at:_otAt}))],
+      ['on_trade_ws',otFilter,parsedOtWs.map(r=>({...r,uploaded_at:_otAt}))],
+    ]);
     // 글로벌 갱신
     [OT_BOTTLE,OT_DRAUGHT,OT_WS]=await Promise.all([
       sGet('on_trade_bottle','order=region'),
