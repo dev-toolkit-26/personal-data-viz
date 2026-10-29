@@ -673,6 +673,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
 .cal-day.sat .cal-day-num { color:#2563eb; }
 .cal-day-evt { font-size:10px; padding:1px 4px; border-radius:3px; background:rgba(32,85,39,.15); color:var(--primary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.4; }
 .cal-day-evt .cal-day-evt-time { font-weight:700; opacity:.85; margin-right:2px; }
+.cal-day-evt.multi-cont { border-top-left-radius:0; border-bottom-left-radius:0; margin-left:-6px; padding-left:10px; }
+.cal-day-evt.multi-open { border-top-right-radius:0; border-bottom-right-radius:0; margin-right:-6px; }
 .cal-day-evt.recurring { background:rgba(217,119,6,.18); color:#b45309; }
 .cal-day-more { font-size:10px; color:var(--text-muted); line-height:1.2; }
 
@@ -2057,9 +2059,12 @@ td:first-child, td:nth-child(2) { text-align: left; }
    <div class="cal-modal">
     <div class="cal-modal-title" id="cal-event-modal-title">새 일정</div>
     <label>제목<input type="text" id="cal-evt-title" placeholder="예) 매주 월요일 DSR 취합"></label>
-    <label>날짜<input type="date" id="cal-evt-date"></label>
     <div style="display:flex;gap:8px;">
+     <label style="flex:1;">시작일<input type="date" id="cal-evt-date" onchange="calendarOnStartDateChange()"></label>
      <label style="flex:1;">시작 시간 (선택)<input type="time" id="cal-evt-start-time"></label>
+    </div>
+    <div style="display:flex;gap:8px;">
+     <label style="flex:1;" id="cal-evt-end-date-label">종료일 (여러 날 일정)<input type="date" id="cal-evt-end-date"></label>
      <label style="flex:1;">종료 시간 (선택)<input type="time" id="cal-evt-end-time"></label>
     </div>
     <label>메모 (선택)<textarea id="cal-evt-note" rows="2" placeholder="설명/메모"></textarea></label>
@@ -7145,6 +7150,26 @@ function _fmtEvtTimeRange(s, e) {
   if (s) return _fmtEvtTime(s);
   return `~${_fmtEvtTime(e)}`;
 }
+// 여러 날 일정: 반복 없음 + end_date > event_date 일 때만.
+function _calIsMultiDay(ev) {
+  return (ev.recurrence_type || 'none') === 'none' && !!ev.end_date && ev.end_date > ev.event_date;
+}
+function _calMD(dateStr) {
+  const [, m, d] = dateStr.split('-');
+  return `${Number(m)}/${Number(d)}`;
+}
+// 'M/D HH:MM – M/D HH:MM' (시간 없으면 날짜만)
+function _fmtEvtDateRange(ev) {
+  const s = _calMD(ev.event_date) + (ev.start_time ? ' ' + _fmtEvtTime(ev.start_time) : '');
+  const e = _calMD(ev.end_date)   + (ev.end_time   ? ' ' + _fmtEvtTime(ev.end_time)   : '');
+  return `${s} – ${e}`;
+}
+function _calDayIndex(ev, dateStr) {
+  const ms = 86400000;
+  const n = Math.round((_calParseDate(ev.end_date) - _calParseDate(ev.event_date)) / ms) + 1;
+  const i = Math.round((_calParseDate(dateStr) - _calParseDate(ev.event_date)) / ms) + 1;
+  return { i, n };
+}
 
 function calendarGetEventsForDate(dateStr) {
   const d = _calParseDate(dateStr);
@@ -7161,7 +7186,7 @@ function calendarGetEventsForDate(dateStr) {
     }
     const type = ev.recurrence_type || 'none';
     if (type === 'none') {
-      if (ev.event_date === dateStr) result.push(ev);
+      if (_calIsMultiDay(ev) ? (dateStr <= ev.end_date) : (ev.event_date === dateStr)) result.push(ev);
     } else if (type === 'weekly') {
       if (ev.recurrence_by_day === weekday) result.push(ev);
     } else if (type === 'monthly') {
@@ -7223,9 +7248,20 @@ function calendarRender() {
       const recurCls = (e.recurrence_type && e.recurrence_type !== 'none') ? ' recurring' : '';
       const bcCls = e.is_broadcast ? ' broadcast' : '';
       const bcPrefix = e.is_broadcast ? '📢 ' : '';
-      const timePrefix = e.start_time ? `<span class="cal-day-evt-time">${_fmtEvtTime(e.start_time)}</span> ` : '';
-      const tipTime = e.start_time ? `${_fmtEvtTimeRange(e.start_time, e.end_time)}  ` : '';
-      chips.push(`<div class="cal-day-evt${recurCls}${bcCls}" title="${_esc(tipTime + e.title)}">${bcPrefix}${timePrefix}${_esc(e.title)}</div>`);
+      let timePrefix = e.start_time ? `<span class="cal-day-evt-time">${_fmtEvtTime(e.start_time)}</span> ` : '';
+      let tipTime = e.start_time ? `${_fmtEvtTimeRange(e.start_time, e.end_time)}  ` : '';
+      let multiCls = '';
+      if (_calIsMultiDay(e)) {
+        const isFirst = dateStr === e.event_date, isLast = dateStr === e.end_date;
+        // 주 경계(일요일)에서는 이어지는 칩도 왼쪽 모서리를 살림
+        if (!isFirst && dow !== 0) multiCls += ' multi-cont';
+        if (!isLast && dow !== 6)  multiCls += ' multi-open';
+        timePrefix = isFirst ? timePrefix
+                   : (isLast && e.end_time) ? `<span class="cal-day-evt-time">~${_fmtEvtTime(e.end_time)}</span> `
+                   : '';
+        tipTime = `${_fmtEvtDateRange(e)}  `;
+      }
+      chips.push(`<div class="cal-day-evt${recurCls}${bcCls}${multiCls}" title="${_esc(tipTime + e.title)}">${bcPrefix}${timePrefix}${_esc(e.title)}</div>`);
     }
     if (evts.length > maxShow) {
       chips.push(`<div class="cal-day-more">+${evts.length - maxShow}개</div>`);
@@ -7270,7 +7306,11 @@ function calendarRenderDayEvents() {
                     : e.recurrence_type === 'monthly' ? ' · 매월'
                     : '';
     const bcLabel = e.is_broadcast ? ' 📢' : '';
-    const timeRange = _fmtEvtTimeRange(e.start_time, e.end_time);
+    let timeRange = _fmtEvtTimeRange(e.start_time, e.end_time);
+    if (_calIsMultiDay(e)) {
+      const { i, n } = _calDayIndex(e, dateStr);
+      timeRange = `${_fmtEvtDateRange(e)} (${i}/${n}일차)`;
+    }
     const timeHtml = timeRange ? `<span class="evt-time">${timeRange}</span>` : '';
     const note = e.note ? `<span class="evt-note">${_esc(e.note)}</span>` : '';
     // Only owner (or admin) may edit; others see read-only.
@@ -7675,6 +7715,7 @@ function calendarOpenEventModal(eventId) {
 
   document.getElementById('cal-evt-title').value = ev ? (ev.title || '') : '';
   document.getElementById('cal-evt-date').value  = ev ? (ev.event_date || '') : (_calState.selectedDate || _calFmtDate(new Date()));
+  document.getElementById('cal-evt-end-date').value = ev ? (ev.end_date || '') : '';
   document.getElementById('cal-evt-start-time').value = ev ? (ev.start_time ? ev.start_time.slice(0,5) : '') : '';
   document.getElementById('cal-evt-end-time').value   = ev ? (ev.end_time   ? ev.end_time.slice(0,5)   : '') : '';
   document.getElementById('cal-evt-note').value  = ev ? (ev.note || '') : '';
@@ -7699,8 +7740,19 @@ function calendarCloseEventModal() {
   _calState.editingEventId = null;
 }
 
+// 시작일을 종료일 뒤로 옮기면 종료일을 비움(단일 일정으로)
+function calendarOnStartDateChange() {
+  const s = document.getElementById('cal-evt-date').value;
+  const endEl = document.getElementById('cal-evt-end-date');
+  if (endEl.value && s && endEl.value < s) endEl.value = '';
+  endEl.min = s || '';
+}
+
 function calendarOnRecurChange() {
   const t = document.getElementById('cal-evt-recur').value;
+  // 반복 일정은 하루 단위 — 종료일(여러 날)은 반복 없음일 때만
+  document.getElementById('cal-evt-end-date-label').style.visibility = (t === 'none') ? '' : 'hidden';
+  document.getElementById('cal-evt-end-date').min = document.getElementById('cal-evt-date').value || '';
   document.getElementById('cal-evt-recur-weekly').style.display  = (t === 'weekly')  ? '' : 'none';
   document.getElementById('cal-evt-recur-monthly').style.display = (t === 'monthly') ? '' : 'none';
   document.getElementById('cal-evt-until-label').style.display   = (t !== 'none')    ? '' : 'none';
@@ -7709,6 +7761,7 @@ function calendarOnRecurChange() {
 async function calendarSaveEvent() {
   const title = (document.getElementById('cal-evt-title').value || '').trim();
   const date  = document.getElementById('cal-evt-date').value;
+  const endDateRaw = document.getElementById('cal-evt-end-date').value;
   const startTime = document.getElementById('cal-evt-start-time').value || null;
   const endTime   = document.getElementById('cal-evt-end-time').value   || null;
   const note  = (document.getElementById('cal-evt-note').value || '').trim();
@@ -7718,8 +7771,13 @@ async function calendarSaveEvent() {
   const until = document.getElementById('cal-evt-until').value;
 
   if (!title) { alert('제목을 입력하세요'); return; }
-  if (!date)  { alert('날짜를 선택하세요'); return; }
-  if (startTime && endTime && endTime < startTime) {
+  if (!date)  { alert('시작일을 선택하세요'); return; }
+  if (recur === 'none' && endDateRaw && endDateRaw < date) {
+    alert('종료일이 시작일보다 빠를 수 없습니다.'); return;
+  }
+  // 종료일 = 시작일이거나 반복 일정이면 단일 날짜 일정(end_date null)
+  const endDate = (recur === 'none' && endDateRaw && endDateRaw > date) ? endDateRaw : null;
+  if (!endDate && startTime && endTime && endTime < startTime) {
     alert('종료 시간이 시작 시간보다 빠를 수 없습니다.'); return;
   }
 
@@ -7740,6 +7798,10 @@ async function calendarSaveEvent() {
     is_broadcast: broadcast,
     updated_at: new Date().toISOString(),
   };
+  // end_date 컬럼(마이그레이션 calendar_event_end_date.sql) 적용 전에도 단일 일정 저장은 되도록:
+  // 여러 날이거나 기존 행에 end_date 키가 있을 때만 payload에 포함.
+  const prevEv = _calState.editingEventId ? _calState.events.find(x => x.id === _calState.editingEventId) : null;
+  if (endDate || (prevEv && 'end_date' in prevEv)) payload.end_date = endDate;
 
   try {
     if (_calState.editingEventId) {
