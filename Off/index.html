@@ -2185,6 +2185,9 @@ function _upGetFcstMonth() { return DASHBOARD_DATA?.wk_meta?.month || _UP_FCST_M
 // FCST Excel SKU명 → 대시보드 SKU명 변환 (소스마다 이름이 다를 때 사용)
 const _UP_SKU_ALIAS = {
   "PA ORI 20000 Keg": "PA WHE 20000 Keg",
+  // 타이거 병 규격 변경(2026-11~): 330→325, 640→633. 혼용 출고 기간엔 구규격 FCST도 신규격 행으로 합산.
+  "TI ORI 330 Bottle": "TI ORI 325 Bottle",
+  "TI ORI 640 Bottle": "TI ORI 633 Bottle",
 };
 
 function _upSafeDiv(n, d) { return (d && isFinite(d) && d !== 0) ? Math.round(n / d * 10000) / 10000 : null; }
@@ -2216,6 +2219,8 @@ function _upInferBrand(skuName, skuDetail) {
 const _UP_SKU_HL = {
   "PA OKT 500 Can":   0.12,   // 옥토버페스트 500ml×24캔 = 12L (Off 채널 행사물량)
   "PA OKT 24000 Keg": 0.24,   // 옥토버페스트 24L 원웨이 케그
+  "TI ORI 325 Bottle": 0.078,   // 타이거 325ml×24병 = 7.8L
+  "TI ORI 633 Bottle": 0.07596, // 타이거 633ml×12병 = 7.596L
 };
 function _upInferHlFactor(skuName, skuDetail) {
   const parts = String(skuName).trim().split(/\s+/);
@@ -2513,7 +2518,7 @@ async function parseFcstExcel(file) {
         currentBrand = dStr; skuBrandFcst[currentTab][dStr] = _upToFloat(nVal); continue;
       }
       if (currentBrand && (cStr.startsWith('Qt') || (cVal === null && dStr && _UP_REGION_TAB[dStr] === undefined))) {
-        if (dStr) { const mapped = _UP_SKU_ALIAS[dStr] || dStr; skuItemFcst[currentTab][mapped] = _upToFloat(nVal); }
+        if (dStr) { const mapped = _UP_SKU_ALIAS[dStr] || dStr; skuItemFcst[currentTab][mapped] = (skuItemFcst[currentTab][mapped] || 0) + _upToFloat(nVal); }   // 별칭 합산
       }
     }
     return { hlFcst, casesFcst, skuBrandFcst, skuItemFcst, meta };
@@ -2538,7 +2543,7 @@ async function parseFcstExcel(file) {
     // 지역명이 다시 나오면(예외) 이미 위에서 처리됨 — 그 외 B는 SKU
     if (_UP_REGION_TAB[Bstr] !== undefined) continue;
     const mapped = _UP_SKU_ALIAS[Bstr] || Bstr;
-    skuItemFcst[currentTab][mapped] = _upToFloat(C);
+    skuItemFcst[currentTab][mapped] = (skuItemFcst[currentTab][mapped] || 0) + _upToFloat(C);   // 별칭 합산(타이거 330+325 혼용 등)
   }
   return { hlFcst: {}, casesFcst: {}, skuBrandFcst, skuItemFcst, meta };
 }
@@ -8964,7 +8969,9 @@ function _offNormalizeBrandName(s){
 const _OFF_SKU_NAME_MAP = {
   'PA ORI 500 Can': 'PA WHE 500 Can',
   'PA XXX 500 Can': 'PA HEL 500 Can',
-  'PA ORI 20000 Keg': 'PA WHE 20000 Keg'
+  'PA ORI 20000 Keg': 'PA WHE 20000 Keg',
+  'TI ORI 330 Bottle': 'TI ORI 325 Bottle',   // 타이거 병 규격 변경(2026-11~) — 저장본의 구규격 행을 신규격으로 합쳐 표시
+  'TI ORI 640 Bottle': 'TI ORI 633 Bottle'
 };
 function _offNormalizeSku(s){
   const raw = (s.sku || '').trim();
@@ -10317,7 +10324,7 @@ function _offNormSku(v, acct){
 }
 
 function parseFcstWeeklyWorkbook(wb, fileName){
-  const updates = [], skipped = [];
+  const updates = [], skipped = [], warnings = [];
   for(const sn of wb.SheetNames){
     const ws = wb.Sheets[sn]; if(!ws) continue;
     const a1 = String(ws['A1']?.v||'').trim().toLowerCase();
@@ -10330,7 +10337,7 @@ function parseFcstWeeklyWorkbook(wb, fileName){
     const monthIdx = _parseMonthName(ws['B1']?.v);
     if(monthIdx < 0){ skipped.push({sheet:sn, reason:'월인식실패'}); continue; }
     const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
-    let curBrand = null; const skus = [];
+    let curBrand = null; const skus = []; const bad = [];
     for(let R = 4; R <= range.e.r; R++){                        // 헤더 R4(idx3), 데이터 R5+(idx4+)
       const bc = ws[XLSX.utils.encode_cell({r:R,c:0})];         // A = brand
       const sc = ws[XLSX.utils.encode_cell({r:R,c:1})];         // B = sku
@@ -10339,9 +10346,19 @@ function parseFcstWeeklyWorkbook(wb, fileName){
       const sku = _offNormSku(sc.v, resolved.acct); if(!sku) continue;
       const weeks = []; let any = false;
       for(let C = 2; C <= 6; C++){                              // C~G = 1W~5W (HL 직접 입력)
-        const n = Number(ws[XLSX.utils.encode_cell({r:R,c:C})]?.v);
-        const hl = isFinite(n) ? n : 0;                        // 셀 값 = HL (계수 변환 없음)
-        weeks.push(hl); if(hl) any = true;
+        const addr = XLSX.utils.encode_cell({r:R,c:C});
+        const cell = ws[addr];
+        let n = 0;
+        if(cell && cell.t === 'e'){ bad.push(`${addr}(${cell.w||'수식오류'})`); }
+        else if(cell && cell.f && cell.v == null){ bad.push(`${addr}(수식 계산값 없음)`); }
+        else if(cell && cell.v != null && cell.v !== ''){
+          // 텍스트로 입력된 숫자('2,000', ' 2000 ', 전각숫자) 허용 — 못 읽으면 0으로 조용히 넘기지 않고 경고
+          const s = typeof cell.v === 'number' ? cell.v
+            : String(cell.v).replace(/[０-９．]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0)).replace(/[,\s]/g, '');
+          n = Number(s);
+          if(!isFinite(n)){ n = 0; if(String(cell.v).trim() && String(cell.v).trim() !== '-') bad.push(`${addr}('${cell.v}')`); }
+        }
+        weeks.push(n); if(n) any = true;                       // 셀 값 = HL (계수 변환 없음)
       }
       if(!any) continue;
       skus.push({ brand: curBrand, sku, weeks });
@@ -10352,10 +10369,11 @@ function parseFcstWeeklyWorkbook(wb, fileName){
     let lastWk = -1;
     for(let w=0; w<5; w++){ if(skus.some(s => s.weeks[w])) lastWk = w; }
     for(const s of skus){ s.monthly = lastWk >= 0 ? (s.weeks[lastWk] || 0) : 0; }
-    if(skus.length) updates.push({ ch:resolved.ch, acct:resolved.acct, monthIdx, sheetName:sn, skus });
+    if(bad.length) warnings.push({ sheet:sn, cells:bad });
+    if(skus.length) updates.push({ ch:resolved.ch, acct:resolved.acct, monthIdx, sheetName:sn, skus, lastWk });
     else skipped.push({sheet:sn, reason:'데이터없음'});
   }
-  return { fileName, updates, skipped };
+  return { fileName, updates, skipped, warnings };
 }
 
 // 통합본 적용 (전체 baseline 교체) — 이전 단일파일 로직
@@ -10511,7 +10529,7 @@ async function offHandleFcstWeeklyUpload(input){
   if(!confirm('⚠ [FCST 업로드 확인]\n\n본인 담당 계정 시트만 남기고\n나머지 시트는 모두 삭제했습니까?\n\n다른 담당자의 시트가 섞여 있으면\n해당 계정의 예측이 함께 덮어써집니다.\n\n계속하시겠습니까?')){ input.value=''; return; }
   const el = document.getElementById('off-fcst-status');
   el.textContent = `파일 ${files.length}개 읽는 중…`;
-  const allUpdates = []; const allSkipped = []; const errors = [];
+  const allUpdates = []; const allSkipped = []; const allWarnings = []; const errors = [];
   for(const f of files){
     try {
       const buf = await f.arrayBuffer();
@@ -10523,6 +10541,7 @@ async function offHandleFcstWeeklyUpload(input){
       const p = parseFcstWeeklyWorkbook(wb, f.name);          // 모든 시트 파싱
       allUpdates.push(...p.updates);
       allSkipped.push(...p.skipped);
+      allWarnings.push(...p.warnings);
     } catch(e){
       errors.push(f.name + ': ' + (e.message || e));
     }
@@ -10533,7 +10552,11 @@ async function offHandleFcstWeeklyUpload(input){
     el.textContent = `${allUpdates.length}개 계정 서버 병합·저장 중…`;
     try {
       const r = await _offMergeWeeklyToServer(allUpdates);
-      const detail = allUpdates.map(u => `${u.acct}(${u.skus.length})`).join(', ');
+      // 계정별로 실제 읽힌 W1~W5 합계(HL)를 보여줌 — "파일엔 있는데 반영 안 됨"을 업로드 즉시 확인
+      const detail = allUpdates.map(u => {
+        const wk = [0,1,2,3,4].map(w => u.skus.reduce((a,s) => a + (s.weeks[w]||0), 0));
+        return `${u.acct}(${u.skus.length}) W1~W5: ${wk.map(v => v ? Math.round(v*10)/10 : '–').join(' / ')}`;
+      }).join('<br>');
       parts.push(`<b>✓ ${allUpdates.length}개 계정 병합·저장</b> · ${r.updated} SKU` + (r.added?` (+${r.added} 신규)`:''));
       parts.push(`<span style="color:var(--text-muted)">${detail}</span>`);
       const monthsInBatch = [...new Set(allUpdates.map(u => u.monthIdx))].sort((a,b)=>a-b);
@@ -10543,6 +10566,7 @@ async function offHandleFcstWeeklyUpload(input){
       parts.push(`<span style="color:#dc2626">저장 실패: ${e.message || e}</span>`);
     }
   }
+  if(allWarnings.length){ parts.push(`<span style="color:#d97706">⚠ 숫자로 못 읽은 칸(0 처리): ${allWarnings.map(w => `${w.sheet} ${w.cells.slice(0,5).join(', ')}${w.cells.length>5?` 외 ${w.cells.length-5}`:''}`).join(' / ')}</span>`); }
   if(allSkipped.length){ parts.push(`<span style="color:var(--text-muted)">skip ${allSkipped.length}: ${allSkipped.slice(0,6).map(s=>`${s.sheet}(${s.reason})`).join(', ')}${allSkipped.length>6?' …':''}</span>`); }
   if(errors.length){ parts.push(`<span style="color:#dc2626">오류 ${errors.length}: ${errors.slice(0,3).join(' / ')}</span>`); }
   el.innerHTML = parts.length ? parts.join('<br>') : '⚠ 처리된 파일 없음';

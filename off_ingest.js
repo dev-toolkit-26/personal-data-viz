@@ -65,7 +65,11 @@
     'PA XXX 500 CAN': 'PA HEL 500 Can',      // 파울라너 헬 뮌헨 라거
     'PA ORI 20000 KEG': 'PA WHE 20000 Keg',  // 파울라너 바이스비어 20L 케그
     // 설화 6x1L 캔. FCST 템플릿에 1L 줄이 없어 현업이 'Keg' 줄에 적어 왔다(설화 케그 제품은 없음).
-    'SU ORI 1000 KEG': 'SU ORI 1000 Can'
+    'SU ORI 1000 KEG': 'SU ORI 1000 Can',
+    // 타이거 병 규격 변경(2026-11~): 330→325, 640→633. 혼용 출고 기간엔 구규격 발주·FCST·RoFo도 신규격으로 합산.
+    //   On(index.html)의 _UP_SKU_ALIAS와 같은 내용을 유지할 것.
+    'TI ORI 330 BOTTLE': 'TI ORI 325 Bottle',
+    'TI ORI 640 BOTTLE': 'TI ORI 633 Bottle'
   };
   // 계정을 봐야만 판정되는 오적재 — 같은 코드가 다른 계정에선 정상이라 무조건 치환하면 안 된다.
   // GS25의 'SU ORI 500 Bottle'은 설화 12x618ml GS25 Edition. 템플릿에 618ml 줄이 없어 빈 병 줄에 적힌 것.

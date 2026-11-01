@@ -3017,7 +3017,12 @@ function _upGetFcstMonth() { return DASHBOARD_DATA?.wk_meta?.month || _UP_FCST_M
 const _UP_SKU_ALIAS = {
   "PA ORI 20000 Keg": "PA WHE 20000 Keg",
   "PA ORI 330 Bottle": "PA WHE 330 Bottle",  // 신규(9월~) 파울라너 밀맥주 병 — FCST가 ORI로 적어도 대시보드 표준명으로 정규화
+  // 타이거 병 규격 변경(2026-11~): 330→325, 640→633. 당분간 구·신 혼용 출고라 구규격 발주(DSR)·FCST도
+  // 신규격 행으로 합산한다(규격차 HL 디퍼는 소량이라 감안 — 현업 합의). 저장본의 구규격 행은 _upMigrateSkuRenames가 이관.
+  "TI ORI 330 Bottle": "TI ORI 325 Bottle",
+  "TI ORI 640 Bottle": "TI ORI 633 Bottle",
 };
+const _upSkuAlias = s => _UP_SKU_ALIAS[s] || s;
 
 function _upSafeDiv(n, d) { return (d && isFinite(d) && d !== 0) ? Math.round(n / d * 10000) / 10000 : null; }
 function _upRound4(v)     { return Math.round(v * 10000) / 10000; }
@@ -3049,6 +3054,8 @@ function _upInferBrand(skuName, skuDetail) {
 const _UP_SKU_HL = {
   "PA OKT 500 Can":   0.12,   // 옥토버페스트 500ml×24캔 = 12L. 자동추론도 0.12로 맞지만 행사 SKU라 고정.
   "PA OKT 24000 Keg": 0.24,   // 옥토버페스트 24L 원웨이 케그. '24000 Keg' 참조 SKU가 없어 자동추론 시 0.0792로 틀림.
+  "TI ORI 325 Bottle": 0.078,   // 타이거 325ml×24병 = 7.8L (구 330병 0.0792 대체)
+  "TI ORI 633 Bottle": 0.07596, // 타이거 633ml×12병 = 7.596L (구 640병 0.0768 대체)
 };
 function _upInferHlFactor(skuName, skuDetail) {
   const parts = String(skuName).trim().split(/\s+/);
@@ -3083,6 +3090,90 @@ function _upMakeDefaultSkuData(hlFactor) {
     nsv_2025_monthly: new Array(12).fill(null)
   };
 }
+// ── 저장본 SKU 이름 이관(_UP_SKU_ALIAS의 구명 → 현행명) ──────────────────────────
+// 별칭은 '앞으로 들어오는' 업로드만 바꾸므로, 스냅샷에 이미 구명으로 쌓인 행(이력·AP·LY·RoFo)은
+// 여기서 현행명 행으로 옮긴다. 같은 브랜드에 현행명 행이 이미 있으면(신규격이 먼저 등록된 경우) 합산.
+// 멱등 — 구명 행이 없으면 아무것도 안 한다. 로드 직후·Order Pattern 재조회 시 호출.
+const _UP_SKU_MIG_SUM = ['ap','mtd','ly_month','this_week_fcst','last_week_fcst','differ_vs_last'];
+function _upSumArr(a, b) {
+  if (!Array.isArray(a)) return Array.isArray(b) ? b.slice() : a;
+  if (!Array.isArray(b)) return a;
+  const n = Math.max(a.length, b.length), out = [];
+  for (let i = 0; i < n; i++) out.push(a[i] == null && b[i] == null ? null : (a[i] || 0) + (b[i] || 0));
+  return out;
+}
+function _upMergeSkuData(tgt, src) {
+  for (const k of Object.keys(src)) {
+    const a = tgt[k], b = src[k];
+    if (Array.isArray(b) || Array.isArray(a)) tgt[k] = _upSumArr(a, b);
+    else if (_UP_SKU_MIG_SUM.includes(k)) tgt[k] = (a == null && b == null) ? null : _upRound4((a || 0) + (b || 0));
+    else if (a == null) tgt[k] = b;
+  }
+  tgt.ap_mtd_ach      = _upSafeDiv(tgt.mtd, tgt.ap);
+  tgt.ap_fcst_ach     = _upSafeDiv(tgt.this_week_fcst, tgt.ap);
+  tgt.fcst_mtd_ach    = _upSafeDiv(tgt.mtd, tgt.this_week_fcst);
+  tgt.fcst_growth_lym = (tgt.this_week_fcst && tgt.ly_month) ? _upRound4(tgt.this_week_fcst / tgt.ly_month - 1) : null;
+}
+function _upMigrateOrderPatternSkus(op) {
+  if (!op) return op;
+  for (const key of ['daily_hl','daily_qty','weekly_hl','weekly_qty']) {
+    for (const g of Object.keys(op[key] || {})) {
+      const bySku = op[key][g];
+      for (const [oldN, newN] of Object.entries(_UP_SKU_ALIAS)) {
+        if (!(oldN in bySku)) continue;
+        bySku[newN] = _upSumArr(bySku[newN], bySku[oldN]);
+        delete bySku[oldN];
+      }
+    }
+  }
+  if (Array.isArray(op.skus)) op.skus = Array.from(new Set(op.skus.map(_upSkuAlias))).sort();
+  return op;
+}
+function _upMigrateSkuRenames(D) {
+  let moved = 0;
+  for (const tab of Object.keys(D.sku_detail || {})) {
+    for (const brandObj of D.sku_detail[tab] || []) {
+      const skus = brandObj.skus || [];
+      for (let i = skus.length - 1; i >= 0; i--) {
+        const newN = _UP_SKU_ALIAS[skus[i].sku];
+        if (!newN) continue;
+        // 구명 행 자리(표시 순서)를 유지한 채 이름만 바꾸고, 현행명 행이 따로 있으면 그 값을 합친 뒤 제거
+        const row = skus[i], ti = skus.findIndex(x => x.sku === newN);
+        row.data = row.data || {};
+        if (ti >= 0) { _upMergeSkuData(row.data, skus[ti].data || {}); skus.splice(ti, 1); if (ti < i) i--; }
+        row.sku = newN;
+        if (_UP_SKU_HL[newN] != null) row.data.hl_factor = _UP_SKU_HL[newN];
+        moved++;
+      }
+    }
+  }
+  for (const m of Object.keys(D.rofo_branch_by_month || {})) {
+    const sheet = D.rofo_branch_by_month[m];
+    for (const [oldN, newN] of Object.entries(_UP_SKU_ALIAS)) {
+      if (!sheet || !sheet[oldN]) continue;
+      const src = sheet[oldN], tgt = sheet[newN];
+      if (tgt) { for (const k of Object.keys(src)) if (typeof src[k] === 'number') tgt[k] = (tgt[k] || 0) + src[k]; }
+      else sheet[newN] = src;
+      delete sheet[oldN];
+      moved++;
+    }
+    try { if (typeof ROFO_BRANCH_BY_MONTH !== 'undefined') ROFO_BRANCH_BY_MONTH[m] = sheet; } catch (e) {}
+  }
+  // Rofo 시트 코멘트('월|지점|SKU') — 위에서 이름을 바꾼 달만 따라간다(6월은 정적 ROFO_JUN_BRANCH가 구명이라 그대로).
+  const rc = D.rofo_comments || {};
+  for (const key of Object.keys(rc)) {
+    const [m, br, sku] = key.split('|'), newN = _UP_SKU_ALIAS[sku];
+    if (!newN || !(D.rofo_branch_by_month || {})[m]) continue;
+    const nk = m + '|' + br + '|' + newN;
+    if (rc[nk] == null) rc[nk] = rc[key];
+    delete rc[key];
+  }
+  _upMigrateOrderPatternSkus(D.order_pattern);
+  for (const r of (D.inbound && D.inbound.rows) || []) if (r && r.sku) r.sku = _upSkuAlias(r.sku);
+  if (moved) console.info('[SKU 이관] 구명 → 현행명', moved, '건');
+  return moved;
+}
+
 function _upEnsureSkusExist(skuItemFcst, skuDetail) {
   const created = [];
   const _addToTab = (tab, sku) => {
@@ -3362,7 +3453,8 @@ async function parseFcstExcel(file) {
         currentBrand = dStr; skuBrandFcst[currentTab][dStr] = _upToFloat(nVal); continue;
       }
       if (currentBrand && (cStr.startsWith('Qt') || (cVal === null && dStr && _UP_REGION_TAB[dStr] === undefined))) {
-        if (dStr) { const mapped = _UP_SKU_ALIAS[dStr] || dStr; skuItemFcst[currentTab][mapped] = _upToFloat(nVal); }
+        // 별칭으로 같은 행에 모이는 SKU(타이거 330+325 혼용 등)는 합산 — 덮어쓰면 한쪽이 사라진다.
+        if (dStr) { const mapped = _upSkuAlias(dStr); skuItemFcst[currentTab][mapped] = (skuItemFcst[currentTab][mapped] || 0) + _upToFloat(nVal); }
       }
     }
     return { hlFcst, casesFcst, skuBrandFcst, skuItemFcst, meta };
@@ -3386,8 +3478,8 @@ async function parseFcstExcel(file) {
     if (!currentTab) continue;
     // 지역명이 다시 나오면(예외) 이미 위에서 처리됨 — 그 외 B는 SKU
     if (_UP_REGION_TAB[Bstr] !== undefined) continue;
-    const mapped = _UP_SKU_ALIAS[Bstr] || Bstr;
-    skuItemFcst[currentTab][mapped] = _upToFloat(C);
+    const mapped = _upSkuAlias(Bstr);
+    skuItemFcst[currentTab][mapped] = (skuItemFcst[currentTab][mapped] || 0) + _upToFloat(C);   // 별칭 합산(위와 동일)
   }
   return { hlFcst: {}, casesFcst: {}, skuBrandFcst, skuItemFcst, meta };
 }
@@ -3469,7 +3561,7 @@ function _parseDsrRows(rows, fcstMonth = null) {
     if (!m || isNaN(m)) continue;
 
     const cg      = row[idxCg]  != null ? String(row[idxCg]).trim()  : '';
-    const skuName = row[idxSku] != null ? String(row[idxSku]).trim() : '';
+    const skuName = row[idxSku] != null ? _upSkuAlias(String(row[idxSku]).trim()) : '';   // 구규격(타이거 330/640 등)은 신규격 행으로
     const volCase = _upToFloat(row[idxVolCase]);
     const volHl   = _upToFloat(row[idxVolHl]);
     const qty     = _upToFloat(row[idxQty]);
@@ -4116,8 +4208,8 @@ const _ON_ROFO_PORTION = {
   'DE ORI 330 Bottle':[0.6719,0.0216,0.0988,0.0799,0.1278],
   'ED WHE 500 Can':[0.7929,0.1149,0.0348,0.0097,0.0477],
   'ED WHE 8000 Blade':[0.5725,0.1263,0.0559,0.1401,0.1052],
-  'TI ORI 330 Bottle':[0.6383,0.0597,0.1033,0.0785,0.1202],
-  'TI ORI 640 Bottle':[0.5544,0.0718,0.0857,0.152,0.1361],
+  'TI ORI 325 Bottle':[0.6383,0.0597,0.1033,0.0785,0.1202],   // 구 330병 포션 승계(P0X SKU명은 off_ingest에서 신규격으로 정규화)
+  'TI ORI 633 Bottle':[0.5544,0.0718,0.0857,0.152,0.1361],   // 구 640병 포션 승계
   'TI ORI 330 Can':[0.4289,0.2619,0.0682,0.0474,0.1936],
   'TI ORI 500 Can':[0.6097,0.2128,0.052,0.0739,0.0516],
   'TI RAD 330 Can':[0.2873,0.083,0.0375,0.1891,0.4031],
@@ -4356,7 +4448,7 @@ async function handleNsvBackfill(input) {
       const d = _dsrNormDate(r[iDate]); if (!d) continue;
       const year = d.getUTCFullYear();
       if (year !== 2025 && year !== 2026) continue;
-      const sku = r[iSku] != null ? String(r[iSku]).trim() : '';
+      const sku = r[iSku] != null ? _upSkuAlias(String(r[iSku]).trim()) : '';
       if (!sku) continue;
       const mi = d.getUTCMonth();
       const nsvM = (Number(r[iNsv]) || 0) / 1e6;               // 원 → MKRW
@@ -4595,6 +4687,7 @@ async function handleCombinedDsrUpload(input) {
       const { data: onSnap } = await _supabase.from('dashboard_snapshots').select('data').eq('id', 1).single();
       const persistedOP = onSnap && onSnap.data && onSnap.data.order_pattern;
       if (persistedOP && Array.isArray(persistedOP.weekly_labels) && persistedOP.weekly_labels.length) {
+        _upMigrateOrderPatternSkus(persistedOP);   // 저장본의 구명 SKU(타이거 330/640 등)도 현행명으로 모아 병합
         DASHBOARD_DATA.order_pattern = _upMergeOrderPatternMonths(DASHBOARD_DATA.order_pattern, persistedOP);
       }
     } catch (e) { console.warn('order_pattern persisted-reload for merge failed:', e); }
@@ -4803,10 +4896,11 @@ const STOCK_SKU_MAP = {
   511752:['HE SLV 330 Bottle',0.0792,'ON'],    // 하이네켄 실버 330 24병 가정용 — ON
   512491:['SU ORI 500 Bottle',0.06,'ON'],
   512493:['SU ORI 500 Bottle',0.06,'ON'],
-  511621:['TI ORI 330 Bottle',0.0792,'ON'],
-  511815:['TI ORI 330 Bottle',0.0792,'ON'],
-  152577:['TI ORI 640 Bottle',0.0768,'ON'],
-  152643:['TI ORI 640 Bottle',0.0768,'ON'],
+  // 타이거 구규격 병(330/640)은 신규격(325/633) 행으로 풀링 — 혼용 출고 기간(2026-11~). HL 계수는 실물 규격 그대로.
+  511621:['TI ORI 325 Bottle',0.0792,'ON'],
+  511815:['TI ORI 325 Bottle',0.0792,'ON'],
+  152577:['TI ORI 633 Bottle',0.0768,'ON'],
+  152643:['TI ORI 633 Bottle',0.0768,'ON'],
 };
 // 출고 가능 최소 잔여 유통기한.
 // OFF는 거래처 채널마다 요구 기간이 달라 재고를 두 등급으로 나눈다.
@@ -10961,7 +11055,10 @@ async function loadFromSupabase() {
       banner.style.display = 'block';
     }
   }
-  finally { document.getElementById('supabase-loading')?.remove(); }
+  finally {
+    try { _upMigrateSkuRenames(DASHBOARD_DATA); } catch (e) { console.warn('SKU 이관 실패:', e); }   // 구명 SKU 행 → 현행명(타이거 330/640 → 325/633)
+    document.getElementById('supabase-loading')?.remove();
+  }
 }
 
 // ═══════════════════════════════════════════════
