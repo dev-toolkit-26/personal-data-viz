@@ -1969,6 +1969,7 @@ td:first-child, td:nth-child(2) { text-align: left; }
           ⚠ 본인 담당 계정 시트만 남기고, <b>나머지 시트는 모두 삭제한 후</b> 업로드하세요.<br>
           <span style="font-weight:400;">다른 담당자의 시트가 섞여 있으면 그 계정의 예측이 함께 덮어써집니다. (Keep only your own account sheets; delete the rest before uploading.)</span>
         </div>
+        <div id="off-fcst-temp-note" style="display:none;margin-bottom:10px;padding:9px 12px;border:1px solid #d97706;border-radius:6px;background:rgba(217,119,6,.08);color:#b45309;font-size:12px;line-height:1.6;"></div>
         <input type="file" id="off-fcst-input" accept=".xlsx" multiple style="font-size:12px;" onchange="offHandleFcstWeeklyUpload(this)">
         <div id="off-fcst-status" style="margin-top:10px;font-size:12px;color:var(--primary);min-height:1.4em;line-height:1.6"></div>
         <!-- 올리는 어카운트 확인 -->
@@ -9930,7 +9931,16 @@ const _OFF_FCST_OWNERS = {
   DF:         { DF:'송병기' },
   Military:   { Military:'김한준' },
 };
-function _offOwnerOf(chKey, acctKey){ return (_OFF_FCST_OWNERS[chKey] && _OFF_FCST_OWNERS[chKey][acctKey]) || ''; }
+// 기간 한정 대행 담당. until(포함)이 지나면 자동으로 위 _OFF_FCST_OWNERS 담당으로 복귀.
+const _OFF_FCST_OWNER_TEMP = [
+  { ch:'HYPER', acct:'Megamart', owner:'김한주', until:'2027-04-30' },
+];
+function _offActiveTempOwners(){ return _OFF_FCST_OWNER_TEMP.filter(t => new Date() <= new Date(t.until+'T23:59:59')); }
+function _offOwnerOf(chKey, acctKey){
+  const t = _offActiveTempOwners().find(x => x.ch===chKey && x.acct===acctKey);
+  if(t) return t.owner;
+  return (_OFF_FCST_OWNERS[chKey] && _OFF_FCST_OWNERS[chKey][acctKey]) || '';
+}
 // 시리즈별 컬럼: G..R = 25Y, U..AF = 26 AP, AI..AT = 26 RoFo
 const _OFF_LY_COLS   = ['G','H','I','J','K','L','M','N','O','P','Q','R'];
 const _OFF_AP_COLS   = ['U','V','W','X','Y','Z','AA','AB','AC','AD','AE','AF'];
@@ -10546,6 +10556,22 @@ async function offHandleFcstWeeklyUpload(input){
       errors.push(f.name + ': ' + (e.message || e));
     }
   }
+  // 대행 계정 시트가 다른 계정과 섞여 있으면(기존 담당 파일에 시트가 남은 경우) 반영 여부를 확인 — 대행 담당 값 덮어쓰기 방지
+  if(allUpdates.length > 1){
+    _offActiveTempOwners().forEach(t => {
+      const i = allUpdates.findIndex(u => u.ch===t.ch && u.acct===t.acct);
+      if(i < 0 || allUpdates.length < 2) return;
+      if(!confirm(`⚠ ${t.acct} 시트가 다른 계정과 함께 들어 있습니다.
+
+${t.acct}는 ${t.until}까지 ${t.owner} 담당입니다.
+
+확인 = ${t.acct}도 함께 반영
+취소 = ${t.acct}만 빼고 나머지 계정 반영`)){
+        const [u] = allUpdates.splice(i, 1);
+        allSkipped.push({ sheet:u.sheetName, reason:`${t.owner} 담당` });
+      }
+    });
+  }
   const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const parts = [];
   if(allUpdates.length){
@@ -10595,6 +10621,12 @@ function _offFcstMonthIdx(){
 // "이번주 갱신" = 예측월 값 있고, 마지막 업로드가 이번 ISO 주차에 이뤄짐(= 담당 SR이 이번 주에 올림).
 function _offRenderFcstAccountCheck(){
   const el = document.getElementById('off-fcst-accounts'); if(!el) return;
+  const tempNote = document.getElementById('off-fcst-temp-note');
+  if(tempNote){
+    const temps = _offActiveTempOwners();
+    tempNote.style.display = temps.length ? '' : 'none';
+    tempNote.innerHTML = temps.map(t => `📌 <b>${t.acct}</b> 담당 변경: <b>${t.owner}</b> (${t.until}까지) — ${t.acct} 시트는 ${t.owner}만 업로드하고, 기존 담당자는 파일에서 ${t.acct} 시트를 삭제 후 올려주세요.`).join('<br>');
+  }
   const monNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const mi = _offFcstMonthIdx();
   const fmeta = (window.OFF_SEED && OFF_SEED.pattern && OFF_SEED.pattern.fcst_meta) || {};
