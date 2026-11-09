@@ -170,6 +170,9 @@ td.sr-cell{white-space:nowrap}
 .utable th.r{text-align:right}
 .utable td{padding:6px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
 .utable tr:hover td{background:var(--surface2)}
+#drBwTable .bwfix{position:sticky;left:0;z-index:2;background:var(--surface);box-shadow:inset -1px 0 0 var(--border)}
+#drBwTable th.bwfix{z-index:3;background:var(--surface2)}
+#drBwTable tr.bwtot td.bwfix,#drBwTable tr:hover td.bwfix{background:var(--surface2)}
 .dl-btn{padding:5px 14px;border-radius:20px;border:1px solid var(--accent);background:#fff;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
 .dl-btn:hover{background:var(--accent);color:#fff}
 .status-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
@@ -2000,7 +2003,15 @@ function initDraughtView(){
 // ── C. BLADE 철수 진척 (지점×주차 운영대수 → 철수/진척률) ─────────────
 let drBwTblMode='withdraw';
 function bwLabel(reg){ const x=DR_OFFICE_LIST.find(o=>o.full===reg); return x?x.label:reg.replace(/^On /,''); }
-function bwMonthOf(num){ if(num<15)return null; return ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Math.floor((num-15)/4)]||('~'+num+'W'); }
+// ISO 주차 → 실제 달력 월 (그 주 목요일이 속한 달 = ISO 규칙). 원본 엑셀은 15W부터 4주씩 잘라 7월 이후 어긋났음.
+const BW_YEAR=2026;
+function bwMonthOf(num){
+  if(num<15)return null;
+  const jan4=new Date(Date.UTC(BW_YEAR,0,4));
+  const wk1Mon=jan4.getTime()-((jan4.getUTCDay()+6)%7)*86400000;   // ISO 1주차 월요일
+  const thu=new Date(wk1Mon+((num-1)*7+3)*86400000);
+  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][thu.getUTCMonth()];
+}
 function bwPrep(){
   const byReg={};
   DRAUGHT_BLADE_WD.forEach(r=>{ (byReg[r.region]=byReg[r.region]||[]).push({num:+r.week_num,week:r.week,inst:+r.installation}); });
@@ -2061,14 +2072,14 @@ function bwTableHTML(P){
   wks.forEach(w=>{const m=(inst&&w.num<15)?'기준':(bwMonthOf(w.num)||('~'+w.num+'W')); if(!cg||cg.m!==m){cg={m,weeks:[]};groups.push(cg);} cg.weeks.push(w);});
   const latestNum=P.weeks[P.weeks.length-1].num;
   // 헤더
-  let h='<thead><tr><th rowspan="2" style="text-align:left">지점</th>';
+  let h='<thead><tr><th rowspan="2" class="bwfix" style="text-align:left">지점</th>';
   groups.forEach(g=>{ h+=`<th colspan="${g.weeks.length+(showSub?1:0)}" style="text-align:center;border-left:2px solid var(--border)">${g.m}</th>`; });
   h+=`<th rowspan="2" class="r">${inst?'남은대수':'누적철수'}</th><th rowspan="2" class="r">진척률</th></tr><tr>`;
   groups.forEach(g=>{ g.weeks.forEach(w=>{ h+=`<th class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${w.week}</th>`; }); if(showSub) h+='<th class="r" style="border-left:2px solid var(--border);color:var(--muted)">소계</th>'; });
   h+='</tr></thead><tbody>';
   const rowFor=(label,series,isTot)=>{
     const st=bwStat(series); if(!st)return '';
-    let r=`<tr${isTot?' style="font-weight:700;background:var(--surface2)"':''}><td style="text-align:left">${label}</td>`;
+    let r=`<tr${isTot?' class="bwtot" style="font-weight:700;background:var(--surface2)"':''}><td class="bwfix" style="text-align:left">${label}</td>`;
     if(inst){
       groups.forEach(g=>{ g.weeks.forEach(w=>{ const s=series.find(x=>x.num===w.num); const v=s?s.inst:null; r+=`<td class="r"${w.num===latestNum?' style="background:#fff3cd"':''}>${v!=null?drFmt(v):'–'}</td>`; }); });
       r+=`<td class="r" style="font-weight:700">${drFmt(st.latest)}</td><td class="r" style="font-weight:700;color:#e30613">${bwRate(st.rate)}</td></tr>`;
