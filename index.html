@@ -2232,6 +2232,29 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     <div id="lm-ly-issue" class="issue-grid"></div>
   </div>
 
+  <!-- Tab: Stock & Cover (통합 FCST 양식의 월초 재고 × 당월 FCST → 재고율·소진 예상일 / 주차별 FCST 제출 이력) -->
+  <div id="tab-branch-stock" class="tab-content">
+    <div class="filter-bar" style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+      <span><label>Month</label> <select id="bs-month" onchange="renderBranchStock()"></select></span>
+      <span><label>Branch</label>
+        <select id="bs-branch" onchange="renderBranchStock()">
+          <option value="On Trade Total">On Trade Total</option>
+          <option value="Seoul">Seoul</option>
+          <option value="BuSan">BuSan</option>
+          <option value="DaeGu&amp;JeJu">DaeGu&amp;JeJu</option>
+          <option value="DaeJeon">DaeJeon</option>
+          <option value="GwangJu">GwangJu</option>
+        </select>
+      </span>
+      <span id="bs-meta" style="font-size:11px;color:var(--text-muted);"></span>
+    </div>
+    <div id="bs-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
+    <div class="section-title">월초 재고 × 당월 FCST — 재고율 · 소진 예상 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(QTY · 수요 = max(FCST 페이스, MTD 페이스) · 영업일 기준 · 월중 보충 입고 미반영)</span></div>
+    <div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="bs-table"></table></div>
+    <div class="section-title" style="margin-top:22px;">주차별 FCST 제출 이력 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(당월 FCST QTY · 괄호 = 직전 주 대비 · Total은 미제출 지점 직전 제출값 이월)</span></div>
+    <div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="bs-trail"></table></div>
+  </div>
+
   <!-- Tab: Rofo Sheet (6월 지점별 SKU 진행률 vs P06_V1) -->
   <div id="tab-rofo-sheet" class="tab-content">
     <div class="section-title">Rofo — Branch / SKU Progress (HL) · 상단 월 버튼으로 월 선택</div>
@@ -2692,7 +2715,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <div style="font-weight:800;font-size:12px;color:var(--text-muted);letter-spacing:.06em;margin:32px 0 10px;padding-top:20px;border-top:1px solid var(--border);">② 개별 파일 — 선택한 것만 아래 Apply 한 번으로 일괄 반영</div>
       <div style="margin-bottom:28px;">
         <div style="font-weight:700;font-size:14px;margin-bottom:6px;">FCST Excel</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">File format: 26Y_On-T_Weekly_FCST_W##_MMDD.xlsx</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;"><b>통합 양식</b> <code>26Y_On-T_Weekly_FCST_통합.xlsx</code> 권장 — '입력' 시트의 가장 최근 제출 주차를 자동 인식, 지점별 전주 대비는 엑셀 Differ와 동일(직전 제출 주차 기준), 월초 재고는 Weekly › Stock &amp; Cover 탭에 반영. (구 양식 26Y_On-T_Weekly_FCST_W##_MMDD.xlsx도 계속 지원)</div>
         <label class="upload-file-btn" id="fcst-btn-label" style="display:inline-flex;" title="26Y_On-T_Weekly_FCST_*.xlsx">
           Select File
           <input type="file" id="fcst-file-input" accept=".xlsx" style="display:none" onchange="_upOnFileSelect(this,'fcst-btn-label','FCST')">
@@ -3056,6 +3079,7 @@ const _UP_SKU_HL = {
   "PA OKT 24000 Keg": 0.24,   // 옥토버페스트 24L 원웨이 케그. '24000 Keg' 참조 SKU가 없어 자동추론 시 0.0792로 틀림.
   "TI ORI 325 Bottle": 0.078,   // 타이거 325ml×24병 = 7.8L (구 330병 0.0792 대체)
   "TI ORI 633 Bottle": 0.07596, // 타이거 633ml×12병 = 7.596L (구 640병 0.0768 대체)
+  "PA OKT 30000 Keg": 0.30,     // 옥토버페스트 30L 케그(통합 FCST 양식에 행 존재). '30000 Keg' 참조 SKU 없음 → 폴백 0.0792 방지.
 };
 function _upInferHlFactor(skuName, skuDetail) {
   const parts = String(skuName).trim().split(/\s+/);
@@ -3401,10 +3425,163 @@ function applyRevenueData(result) {
   rev.actual_months = n;
 }
 
+// ── 통합 FCST 양식(26Y_On-T_Weekly_FCST_통합.xlsx) 파서 ─────────────────────────
+//  '입력' 시트 한 장이 원천: 행 = 월 × 지점 × SKU, 열 = 월초 재고 · W1~W5.
+//  Wn 칸 = 그 달 n번째 주(ISO 주차, 목요일이 속한 달로 월 배정)에 지점이 제출한 '당월 FCST(QTY)'.
+//  → 지점별 최신 제출 주차 값 = 현재 FCST, 그 직전 제출 주차 값 = 전주 FCST(엑셀 Differ와 동일 기준).
+//  한 번 올리면 12개월 전체가 들어있으므로 월별 이력·월초 재고는 on_fcst_book에 월 단위로 보관한다.
+const _UP_BOOK_REGIONS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
+const _upIsoDate = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+// 연도의 ISO 주차 → {wk, monday, month(목요일 기준), seq(월내 순번)} — 엑셀 '주차설정' 시트와 같은 규칙
+function _upIsoWeeksOfYear(year) {
+  const jan4 = new Date(year, 0, 4);
+  const w1Mon = new Date(year, 0, 4 - ((jan4.getDay() + 6) % 7));
+  const out = [], seq = {};
+  for (let wk = 1; wk <= 53; wk++) {
+    const mon = new Date(w1Mon); mon.setDate(w1Mon.getDate() + (wk - 1) * 7);
+    const thu = new Date(mon); thu.setDate(mon.getDate() + 3);
+    if (thu.getFullYear() !== year) continue;
+    const m = thu.getMonth() + 1;
+    seq[m] = (seq[m] || 0) + 1;
+    out.push({ wk, monday: mon, month: m, seq: seq[m] });
+  }
+  return out;
+}
+// 주차 메타: _upBuildWkMeta와 같지만 월을 '목요일 기준 월'로 고정(11/30 월요일 주 = 12월 1주차 같은 경계 대응)
+function _upBuildWkMetaForMonth(wkNum, monday, month, year) {
+  const mm = String(monday.getMonth()+1).padStart(2,'0'), dd = String(monday.getDate()).padStart(2,'0');
+  const wkMeta = { num: String(wkNum), date: `${mm}/${dd}`, label: `WK${wkNum} (${mm}/${dd})`, month };
+  const lastFriday = new Date(monday); lastFriday.setDate(monday.getDate() - 3);
+  const monthStart = new Date(year, month-1, 1), monthEnd = new Date(year, month, 0);
+  const elapsed = lastFriday >= monthStart ? _upCountWorkdays(monthStart, lastFriday > monthEnd ? monthEnd : lastFriday) : 0;
+  const total   = _upCountWorkdays(monthStart, monthEnd);
+  return { wkMeta, wdProgress: { elapsed, total, pct: total ? _upRound4(elapsed/total) : 0 } };
+}
+function _upFindBookSheet(wb) {
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: null, blankrows: true });
+    for (let i = 0; i < Math.min(rows.length, 12); i++) {
+      const h = (rows[i] || []).map(v => v == null ? '' : String(v).replace(/\s+/g, ''));
+      const ci = k => h.indexOf(k);
+      if (ci('월') >= 0 && ci('지점') >= 0 && ci('SKU') >= 0 && ci('W1') >= 0) {
+        return { name, rows, hdr: i, col: { mon: ci('월'), reg: ci('지점'), sku: ci('SKU'), stock: ci('월초재고'),
+                 w: [ci('W1'), ci('W2'), ci('W3'), ci('W4'), ci('W5')] } };
+      }
+    }
+  }
+  return null;
+}
+function _upParseFcstBook(wb, file) {
+  const found = _upFindBookSheet(wb);
+  if (!found) return null;
+  const { rows, hdr, col } = found;
+  // 연도: '주차설정' B2 → 파일명 26Y → 올해
+  let year = null;
+  const ws2 = wb.Sheets['주차설정'];
+  if (ws2 && ws2.B2 && typeof ws2.B2.v === 'number') year = Math.floor(ws2.B2.v);
+  if (!year) { const ym = String(file?.name || '').match(/(\d{2})Y_/); if (ym) year = 2000 + parseInt(ym[1]); }
+  if (!year) year = new Date().getFullYear();
+
+  const num = v => {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    const s = String(v).replace(/,/g, '').trim();
+    if (s === '' || s === '-') return null;
+    const f = Number(s); return isFinite(f) ? f : NaN;
+  };
+  const warnings = [];
+  const data = {};   // data[m][region][sku] = { w:[5], stock }
+  for (let i = hdr + 1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    const m = parseInt(r[col.mon]); if (!(m >= 1 && m <= 12)) continue;
+    const reg = r[col.reg] != null ? String(r[col.reg]).trim() : '';
+    if (!_UP_BOOK_REGIONS.includes(reg)) { if (reg) warnings.push(`알 수 없는 지점 '${reg}' (${i+1}행)`); continue; }
+    const rawSku = r[col.sku] != null ? String(r[col.sku]).trim().replace(/\s+/g, ' ') : '';
+    if (!rawSku) continue;
+    const sku = _upSkuAlias(rawSku);
+    const w = col.w.map(ci => ci >= 0 ? num(r[ci]) : null);
+    const st = col.stock >= 0 ? num(r[col.stock]) : null;
+    [...w, st].forEach((v, k) => { if (Number.isNaN(v)) warnings.push(`${m}월 ${reg} ${rawSku} ${k < 5 ? 'W' + (k+1) : '월초 재고'} 숫자 아님`); });
+    const clean = v => Number.isNaN(v) ? null : v;
+    const tgt = ((data[m] = data[m] || {})[reg] = data[m][reg] || {});
+    const prev = tgt[sku];
+    if (!prev) tgt[sku] = { w: w.map(clean), stock: clean(st) };
+    else {   // 별칭 충돌(구·신규격) → 합산
+      prev.w = prev.w.map((a, k) => { const b = clean(w[k]); return a == null && b == null ? null : (a || 0) + (b || 0); });
+      const b = clean(st); prev.stock = prev.stock == null && b == null ? null : (prev.stock || 0) + (b || 0);
+    }
+  }
+
+  const isoWeeks = _upIsoWeeksOfYear(year);
+  const months = {};
+  let curM = null;
+  for (const m of Object.keys(data).map(Number).sort((a, b) => a - b)) {
+    const weeks = isoWeeks.filter(x => x.month === m).map(x => ({ col: x.seq, wk: x.wk, monday: _upIsoDate(x.monday) }));
+    const submitted = {}, rowsOut = {};
+    let anyFcst = false, anyStock = false;
+    for (const reg of _UP_BOOK_REGIONS) {
+      const skus = data[m][reg] || {};
+      submitted[reg] = [0,1,2,3,4].map(k => Object.values(skus).some(x => x.w[k] != null));
+      if (submitted[reg].some(Boolean)) anyFcst = true;
+      const keep = {};
+      for (const [sku, x] of Object.entries(skus)) {
+        if (x.w.some(v => v != null && v !== 0) || x.stock != null) keep[sku] = x;
+        if (x.stock != null) anyStock = true;
+      }
+      rowsOut[reg] = keep;
+    }
+    if (!anyFcst && !anyStock) continue;
+    let curCol = 0;
+    for (const reg of _UP_BOOK_REGIONS) submitted[reg].forEach((s, k) => { if (s) curCol = Math.max(curCol, k + 1); });
+    months[`${year}-${String(m).padStart(2,'0')}`] = { year, month: m, weeks, cur_col: curCol || null, submitted, rows: rowsOut, has_stock: anyStock };
+    if (anyFcst) curM = m;
+  }
+  const book = { file: file?.name || '', year, uploaded_at: new Date().toISOString(), months };
+  if (!curM) return { bookOnly: true, book, warnings };
+
+  // ── 현재 월·주차의 지점별 FCST(최신 제출) / 전주 FCST(그 주 이전 마지막 제출) ──
+  const mk = `${year}-${String(curM).padStart(2,'0')}`, M = months[mk], cc = M.cur_col;
+  const wkInfo = M.weeks.find(x => x.col === cc);
+  const skuItemFcst = {}, prevItemFcst = {}, skuBrandFcst = {};
+  const regionStatus = {};
+  for (const tab of Object.values(_UP_REGION_TAB)) { skuItemFcst[tab] = {}; skuBrandFcst[tab] = {}; }
+  for (const reg of _UP_BOOK_REGIONS) {
+    const sub = M.submitted[reg];
+    let lastCol = 0, prevCol = 0;
+    for (let k = 1; k <= cc; k++) if (sub[k-1]) lastCol = k;          // 현재 주차까지 마지막 제출
+    for (let k = 1; k < cc; k++)  if (sub[k-1]) prevCol = k;          // 현재 주차 '이전' 마지막 제출
+    regionStatus[reg] = { lastCol, prevCol, thisWeek: !!sub[cc-1] };
+    const skus = data[curM][reg] || {};
+    for (const [sku, x] of Object.entries(skus)) {
+      const cur = lastCol ? (x.w[lastCol-1] || 0) : 0;
+      if (cur !== 0 || (prevCol && (x.w[prevCol-1] || 0) !== 0)) skuItemFcst[reg][sku] = cur;
+    }
+    if (prevCol) {
+      prevItemFcst[reg] = {};
+      for (const [sku, x] of Object.entries(skus)) { const p = x.w[prevCol-1] || 0; if (p !== 0) prevItemFcst[reg][sku] = p; }
+    } else prevItemFcst[reg] = null;   // 이번 달 직전 제출 없음 → 전주 비교 없음('—')
+  }
+  const meta = wkInfo ? _upBuildWkMetaForMonth(wkInfo.wk, new Date(wkInfo.monday + 'T00:00:00'), curM, year) : null;
+  return { hlFcst: {}, casesFcst: {}, skuBrandFcst, skuItemFcst, prevItemFcst, complete: true, meta, book, warnings,
+           bookInfo: { month: curM, col: cc, wk: wkInfo?.wk, regionStatus } };
+}
+// 업로드된 통합 파일의 월별 이력을 저장본에 병합 — 파일에 있는 월은 교체, 없는 월은 보존
+function _upMergeFcstBook(book) {
+  if (!book) return;
+  const D = DASHBOARD_DATA;
+  const cur = (D.on_fcst_book && typeof D.on_fcst_book === 'object') ? D.on_fcst_book : { months: {} };
+  cur.months = Object.assign({}, cur.months || {}, book.months || {});
+  cur.file = book.file; cur.year = book.year; cur.uploaded_at = book.uploaded_at;
+  D.on_fcst_book = cur;
+}
+
 // ── FCST Excel 파서 ────────────────────────────────────────────────────────
 async function parseFcstExcel(file) {
   const buf = await _upReadBuffer(file);
   const wb  = XLSX.read(buf, { type: 'array' });
+  // 통합 양식('입력' 시트: 월·지점·SKU·월초 재고·W1~W5)이면 전용 파서
+  const bookRes = _upParseFcstBook(wb, file);
+  if (bookRes) return bookRes;
   const ws  = wb.Sheets[wb.SheetNames[0]];
   const sheetTitle = wb.SheetNames[0];
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
@@ -3756,12 +3933,15 @@ function _upMergeOrderPatternMonths(oldOP, newOP) {
   };
 }
 
-function _upUpdateFcstEntry(entry, newFcst, mtdKey, preserveLastWk, monthChanged) {
+function _upUpdateFcstEntry(entry, newFcst, mtdKey, preserveLastWk, monthChanged, explicitPrev) {
   mtdKey = mtdKey || 'mtd_actual';
   const oldThis = entry.this_week_fcst;
+  // explicitPrev(통합 양식): 파일의 '직전 제출 주차' 값을 전주로 그대로 사용(null=직전 제출 없음).
+  //   업로드 순서·재업로드와 무관하게 엑셀 Differ와 일치한다.
   // monthChanged=true: 새 달의 첫 주 → 비교할 전주(이번 달 FCST)가 없음 → 비교 없음('—'으로 표시)
   // preserveLastWk=true: same-week re-upload → keep last_week_fcst so differ_vs_last stays meaningful
-  if (monthChanged)         entry.last_week_fcst = null;
+  if (explicitPrev !== undefined) entry.last_week_fcst = explicitPrev == null ? null : _upRound4(explicitPrev);
+  else if (monthChanged)    entry.last_week_fcst = null;
   else if (!preserveLastWk) entry.last_week_fcst = oldThis;
   entry.this_week_fcst = _upRound4(newFcst);
   const base = entry.last_week_fcst;
@@ -3873,13 +4053,23 @@ function applyDataUpdate(fcstResult, dsrResult) {
     for (const [k,v] of Object.entries(hlFcst))    { if (hlSum[k])    _upUpdateFcstEntry(hlSum[k],    v, 'mtd_actual', isSameWeek, monthChanged); }
     for (const [k,v] of Object.entries(casesFcst)) { if (casesSum[k]) _upUpdateFcstEntry(casesSum[k], v, 'mtd_actual', isSameWeek, monthChanged); }
     const _REGIONAL_TABS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
+    // 통합 양식: complete=파일이 지점 전 SKU를 담음(파일에 없는 SKU=0, 전월 값 잔류 방지)
+    //            prevItemFcst[tab] = 직전 제출 주차 값 맵 / null(직전 제출 없음). 레거시 양식은 둘 다 없음.
+    const _complete = !!fcstResult.complete;
+    const _xPrev = fcstResult.prevItemFcst || null;
+    const _prevMap = tab => (_xPrev ? (_xPrev[tab] === undefined ? null : _xPrev[tab]) : undefined);
     for (const tabKey of Object.keys(D.sku_detail)) {
       if (tabKey === 'On Trade Total') continue; // recalculated below from regions
       const iFcst = skuItemFcst[tabKey] || {};
+      const pMap = _prevMap(tabKey);   // undefined=레거시 롤오버 / null=비교 없음 / 객체=명시 전주
       for (const brandObj of D.sku_detail[tabKey]) {
         // 1. SKU QTY 적용
         for (const skuObj of brandObj.skus) {
-          if (iFcst[skuObj.sku] !== undefined) _upUpdateFcstEntry(skuObj.data, iFcst[skuObj.sku], 'mtd', isSameWeek, monthChanged);
+          let v = iFcst[skuObj.sku];
+          if (v === undefined && _complete) v = 0;
+          if (v === undefined) continue;
+          const pv = pMap === undefined ? undefined : (pMap === null ? null : (pMap[skuObj.sku] || 0));
+          _upUpdateFcstEntry(skuObj.data, v, 'mtd', isSameWeek, monthChanged, pv);
         }
         // 2. Brand c/s = Σ(SKU QTY × hl_factor / 0.0792)
         const brandCases = _upRound4(brandObj.skus.reduce((s, skuObj) => {
@@ -3887,25 +4077,36 @@ function applyDataUpdate(fcstResult, dsrResult) {
           const hf  = skuObj.data.hl_factor ?? 0.0792;
           return s + qty * hf / 0.0792;
         }, 0));
-        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek, monthChanged);
+        const bPrev = pMap === undefined ? undefined : (pMap === null ? null : _upRound4(brandObj.skus.reduce((s, skuObj) =>
+          s + (pMap[skuObj.sku] || 0) * (skuObj.data.hl_factor ?? 0.0792) / 0.0792, 0)));
+        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek, monthChanged, bPrev);
       }
     }
     // On Trade Total = sum of all regional SKU QTY (not from file's On Trade Total tab)
     if (D.sku_detail['On Trade Total']) {
       // Build SKU QTY map + hl_factor map from regional tabs
       const ottSkuQty = {}, ottSkuHlFactor = {};
+      // 명시 전주(통합 양식): 직전 제출이 없는 지점은 '변동 없음'(전주=현재)으로 합산 — 엑셀 Total Differ와 동일
+      const ottSkuPrev = _xPrev ? {} : null;
+      const ottAnyPrev = _xPrev ? _REGIONAL_TABS.some(t => _prevMap(t) != null) : false;
       for (const tabKey of _REGIONAL_TABS) {
+        const pMap = _prevMap(tabKey);
         for (const brandObj of (D.sku_detail[tabKey] || [])) {
           for (const skuObj of brandObj.skus) {
-            ottSkuQty[skuObj.sku] = (ottSkuQty[skuObj.sku] || 0) + (skuObj.data.this_week_fcst ?? 0);
+            const curQ = skuObj.data.this_week_fcst ?? 0;
+            ottSkuQty[skuObj.sku] = (ottSkuQty[skuObj.sku] || 0) + curQ;
+            if (ottSkuPrev) ottSkuPrev[skuObj.sku] = (ottSkuPrev[skuObj.sku] || 0) + (pMap ? (pMap[skuObj.sku] || 0) : curQ);
             if (skuObj.data.hl_factor != null) ottSkuHlFactor[skuObj.sku] = skuObj.data.hl_factor;
           }
         }
       }
+      const _ottPv = sku => !ottSkuPrev ? undefined : (ottAnyPrev ? (ottSkuPrev[sku] || 0) : null);
       for (const brandObj of D.sku_detail['On Trade Total']) {
         for (const skuObj of brandObj.skus) {
-          if (ottSkuQty[skuObj.sku] !== undefined) {
-            _upUpdateFcstEntry(skuObj.data, ottSkuQty[skuObj.sku], 'mtd', isSameWeek, monthChanged);
+          let q = ottSkuQty[skuObj.sku];
+          if (q === undefined && _complete) q = 0;
+          if (q !== undefined) {
+            _upUpdateFcstEntry(skuObj.data, q, 'mtd', isSameWeek, monthChanged, _ottPv(skuObj.sku));
             // Sync hl_factor from regional data (On Trade Total may have stale/wrong hl_factor)
             if (ottSkuHlFactor[skuObj.sku] != null) skuObj.data.hl_factor = ottSkuHlFactor[skuObj.sku];
           }
@@ -3915,24 +4116,35 @@ function applyDataUpdate(fcstResult, dsrResult) {
           const hf  = skuObj.data.hl_factor ?? 0.0792;
           return s + qty * hf / 0.0792;
         }, 0));
-        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek, monthChanged);
+        const bPrev = !ottSkuPrev ? undefined : (ottAnyPrev ? _upRound4(brandObj.skus.reduce((s, skuObj) =>
+          s + (ottSkuPrev[skuObj.sku] || 0) * (skuObj.data.hl_factor ?? 0.0792) / 0.0792, 0)) : null);
+        _upUpdateFcstEntry(brandObj.data, brandCases, 'mtd', isSameWeek, monthChanged, bPrev);
       }
     }
     // Brand c/s 합산 → 지역별 hlSum(HL) · casesSum(Cases) 갱신 + TTL 직접 누적
-    let _ttlHL = 0, _ttlCases = 0;
+    let _ttlHL = 0, _ttlCases = 0, _ttlPrevCases = 0, _ttlAnyPrev = false;
     for (const [tabKey, hlKey] of Object.entries(_UP_TAB_TO_HL_KEY)) {
       if (!hlSum[hlKey]) continue;
       const regionCases = _upRound4((D.sku_detail[tabKey] || []).reduce((s, b) => s + (b.data?.this_week_fcst || 0), 0));
-      if (regionCases <= 0) continue;
+      if (regionCases <= 0 && !_complete) continue;   // 통합 양식은 0(미제출)도 그대로 반영 — 전월 값 잔류 방지
       const regionHL = _upRound4(regionCases * 0.0792);
-      _upUpdateFcstEntry(hlSum[hlKey],    regionHL,    'mtd_actual', recalcPreserveLastWk, monthChanged);
-      if (casesSum[hlKey]) _upUpdateFcstEntry(casesSum[hlKey], regionCases, 'mtd_actual', recalcPreserveLastWk, monthChanged);
+      // 명시 전주: 브랜드 전주(c/s) 합. 직전 제출 없는 지점은 null('—'), TTL엔 '변동 없음'으로 합산
+      const pMap = _prevMap(tabKey);
+      const rPrevC = pMap === undefined ? undefined
+        : (pMap === null ? null : _upRound4((D.sku_detail[tabKey] || []).reduce((s, b) => s + (b.data?.last_week_fcst || 0), 0)));
+      if (rPrevC != null) _ttlAnyPrev = true;
+      _ttlPrevCases += (rPrevC != null ? rPrevC : regionCases);
+      _upUpdateFcstEntry(hlSum[hlKey],    regionHL,    'mtd_actual', recalcPreserveLastWk, monthChanged,
+        rPrevC === undefined ? undefined : (rPrevC === null ? null : _upRound4(rPrevC * 0.0792)));
+      if (casesSum[hlKey]) _upUpdateFcstEntry(casesSum[hlKey], regionCases, 'mtd_actual', recalcPreserveLastWk, monthChanged, rPrevC);
       _ttlHL    += regionHL;
       _ttlCases += regionCases;
     }
     // TTL / BEER TTL: 루프에서 직접 누적한 값 사용 (hlSum[r] 재독 X)
-    if (hlSum['TTL']         && _ttlHL    > 0) _upUpdateFcstEntry(hlSum['TTL'],         _upRound4(_ttlHL),    'mtd_actual', recalcPreserveLastWk, monthChanged);
-    if (casesSum['BEER TTL'] && _ttlCases > 0) _upUpdateFcstEntry(casesSum['BEER TTL'], _upRound4(_ttlCases), 'mtd_actual', recalcPreserveLastWk, monthChanged);
+    const _ttlPv = !_xPrev ? undefined : (_ttlAnyPrev ? _upRound4(_ttlPrevCases) : null);
+    if (hlSum['TTL']         && (_ttlHL    > 0 || _complete)) _upUpdateFcstEntry(hlSum['TTL'],         _upRound4(_ttlHL),    'mtd_actual', recalcPreserveLastWk, monthChanged,
+      _ttlPv == null ? _ttlPv : _upRound4(_ttlPv * 0.0792));
+    if (casesSum['BEER TTL'] && (_ttlCases > 0 || _complete)) _upUpdateFcstEntry(casesSum['BEER TTL'], _upRound4(_ttlCases), 'mtd_actual', recalcPreserveLastWk, monthChanged, _ttlPv);
     D.last_fcst_month = fcstMonth;  // 직전 FCST 적용 월 기록 (다음 월 변경 판단 기준)
   }
 
@@ -4183,6 +4395,7 @@ function _upReRenderAll() {
   _tabInitialized['wk10'] = true;
   // 지점분석 탭이 열려있으면 즉시 갱신(업로드·백필 후 반영)
   if (document.getElementById('tab-branch')?.classList.contains('active')) { renderBranchReport(_brBranch); _tabInitialized['branch'] = true; }
+  if (document.getElementById('tab-branch-stock')?.classList.contains('active')) { renderBranchStock(); _tabInitialized['branch-stock'] = true; }
   document.title = '🍺 On-Trade · Sales Dashboard';
   // Summary overlay가 열려있으면 데이터 갱신
   if (typeof showSummary === 'function' && document.getElementById('summary-overlay')?.style.display === 'flex') {
@@ -4780,7 +4993,27 @@ async function handleUpload() {
   await new Promise(r => setTimeout(r, 30));
   try {
     let fcstResult = null, dsrResult = null;
-    if (fcstFile) { statusEl.textContent = 'Processing FCST...'; fcstResult = await parseFcstExcel(fcstFile); }
+    let bookMsg = '';
+    if (fcstFile) {
+      statusEl.textContent = 'Processing FCST...';
+      fcstResult = await parseFcstExcel(fcstFile);
+      if (fcstResult && fcstResult.book) {   // 통합 양식: 월별 주차 이력·월초 재고 보관
+        _upMergeFcstBook(fcstResult.book);
+        delete _tabInitialized['branch-stock'];
+        const bi = fcstResult.bookInfo;
+        if (bi) {
+          const late = Object.entries(bi.regionStatus).filter(([, s]) => !s.thisWeek).map(([r]) => r);
+          bookMsg = ` · ${bi.month}월 W${bi.col}(WK${bi.wk}) 기준` + (late.length ? ` · 이번 주 미제출: ${late.join(', ')}(직전 제출값 사용)` : ' · 5/5 지점 제출');
+        }
+        const stM = Object.values(fcstResult.book.months).filter(x => x.has_stock).map(x => x.month);
+        if (stM.length) bookMsg += ` · 월초 재고 ${stM.join(',')}월`;
+        if (fcstResult.warnings && fcstResult.warnings.length) {
+          console.warn('FCST 통합 양식 경고:', fcstResult.warnings);
+          bookMsg += ` · ⚠ 숫자 아닌 칸 ${fcstResult.warnings.length}건(콘솔 확인, 0 처리)`;
+        }
+        if (fcstResult.bookOnly) fcstResult = null;   // FCST 칸이 전부 비어 있으면 재고만 저장
+      }
+    }
     if (dsrFile)  { statusEl.textContent = 'Processing DSR...';  const _dsrFcstMon = fcstResult?.meta?.wkMeta?.month || null; dsrResult = await parseDsrExcel(dsrFile, _dsrFcstMon); }
     if (revFile)  { statusEl.textContent = 'Processing Revenue...'; const revResult = await parseRevenueExcel(revFile); applyRevenueData(revResult); }
     if (stockFile) {
@@ -4817,7 +5050,7 @@ async function handleUpload() {
     }
     try {
       await _upDeployToSupabase(statusEl);
-      statusEl.textContent = `✓ ${wkLabel} 업데이트 완료 (Supabase 저장됨)${frMsg}`;
+      statusEl.textContent = `✓ ${wkLabel} 업데이트 완료 (Supabase 저장됨)${bookMsg}${frMsg}`;
       statusEl.style.color = 'var(--positive)';
     } catch(sbErr) {
       console.warn('Supabase deploy failed:', sbErr);
@@ -8069,6 +8302,198 @@ function renderRofoSheet() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+//  Stock & Cover — 통합 FCST 양식(on_fcst_book)의 월초 재고 × 당월 FCST
+//  · 재고율 = 월초 재고 ÷ 당월 FCST (100% = 한 달치)
+//  · 일 수요 = max(FCST÷월 영업일, MTD÷경과 영업일) — FCST 하향이 쇼트를 가리지 않도록 큰 쪽(Stock Coverage와 같은 원칙)
+//  · 소진 예상일 = 월 첫 영업일부터 (재고 ÷ 일 수요) 영업일째. 월중 보충 입고는 데이터가 없어 미반영 → '보충 없을 때' 기준.
+//  · 보충 필요 = max(0, FCST − 월초 재고): 이번 달 FCST를 채우려면 들어와야 할 최소 물량.
+// ═══════════════════════════════════════════════════════════════════════════════
+const _BS_TABS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
+function _bsWorkdays(y, m) { return _upCountWorkdays(new Date(y, m-1, 1), new Date(y, m, 0)); }
+// 월 1일부터 n번째 영업일(1-based) 날짜 — 다음 달로 넘어가도 계속 센다
+function _bsNthWorkday(y, m, n) {
+  const d = new Date(y, m-1, 1); let c = 0;
+  for (let guard = 0; guard < 800; guard++) {
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5 && ++c >= n) return new Date(d);
+    d.setDate(d.getDate() + 1);
+  }
+  return null;
+}
+function _bsSkuMeta() {   // sku → {brand, hf}
+  const out = {};
+  for (const tab of Object.keys(DASHBOARD_DATA.sku_detail || {})) for (const b of DASHBOARD_DATA.sku_detail[tab] || [])
+    for (const s of b.skus || []) if (!out[s.sku]) out[s.sku] = { brand: b.brand, hf: s.data?.hl_factor ?? _UP_SKU_HL[s.sku] ?? 0.0792 };
+  return out;
+}
+// 지점·SKU의 해당 월 실적(QTY): 활성월=MTD, 지난달=act_monthly, 미래=null
+function _bsActual(tab, sku, m) {
+  const act = _upGetFcstMonth();
+  if (m > act) return null;
+  for (const b of DASHBOARD_DATA.sku_detail?.[tab] || []) for (const s of b.skus || []) if (s.sku === sku) {
+    if (m === act) return s.data?.mtd ?? null;
+    const v = s.data?.act_monthly?.[m-1]; return v == null ? null : v;
+  }
+  return null;
+}
+function _bsLastCol(sub, upto) { let c = 0; for (let k = 1; k <= (upto || 5); k++) if (sub && sub[k-1]) c = k; return c; }
+
+function renderBranchStock() {
+  const D = DASHBOARD_DATA, book = D.on_fcst_book;
+  const mSel = document.getElementById('bs-month'), cards = document.getElementById('bs-cards');
+  const tbl = document.getElementById('bs-table'), trail = document.getElementById('bs-trail'), meta = document.getElementById('bs-meta');
+  if (!mSel || !tbl) return;
+  const keys = Object.keys(book?.months || {}).sort();
+  if (!keys.length) {
+    cards.innerHTML = ''; trail.innerHTML = ''; meta.textContent = '';
+    tbl.innerHTML = '<tbody><tr><td style="padding:18px;color:var(--text-muted);font-size:13px;">아직 통합 FCST 파일이 업로드되지 않았습니다. Data Update › ② 개별 파일 › FCST Excel에 <b>26Y_On-T_Weekly_FCST_통합.xlsx</b>를 올리면 주차별 FCST와 월초 재고가 여기에 표시됩니다.</td></tr></tbody>';
+    return;
+  }
+  // 월 선택: 기본 = 대시보드 활성 FCST 월(있으면) → 아니면 가장 최근 월
+  const prevSel = mSel.value;
+  const actKey = keys.find(k => book.months[k].month === _upGetFcstMonth() && book.months[k].year === (book.year || 2026));
+  mSel.innerHTML = keys.map(k => `<option value="${k}">${book.months[k].year}년 ${book.months[k].month}월${book.months[k].has_stock ? ' · 재고' : ''}</option>`).join('');
+  mSel.value = keys.includes(prevSel) ? prevSel : (actKey || keys[keys.length-1]);
+  const M = book.months[mSel.value], y = M.year, m = M.month;
+  const branch = document.getElementById('bs-branch').value;
+  const tabs = branch === 'On Trade Total' ? _BS_TABS : [branch];
+  const skuMeta = _bsSkuMeta();
+  const T = _bsWorkdays(y, m), act = _upGetFcstMonth();
+  const elapsed = m < act ? T : (m === act ? (D.wd_progress?.elapsed || 0) : 0);
+  const lastDay = new Date(y, m, 0);
+  meta.textContent = `원본: ${book.file || '-'} · 업로드 ${book.uploaded_at ? new Date(book.uploaded_at).toLocaleString('ko-KR') : '-'} · ${m}월 영업일 ${elapsed}/${T}`;
+
+  // ── SKU별 집계 (지점 선택 시 그 지점, Total은 5개 지점 합) ──
+  const order = [], rowsBy = {};
+  const calc = (tabList) => {
+    const out = {};
+    for (const tab of tabList) {
+      const lc = _bsLastCol(M.submitted?.[tab]);
+      for (const [sku, x] of Object.entries(M.rows?.[tab] || {})) {
+        const o = out[sku] || (out[sku] = { sku, S: null, F: 0, A: null });
+        if (x.stock != null) o.S = (o.S || 0) + x.stock;
+        o.F += lc ? (x.w[lc-1] || 0) : 0;
+        const a = _bsActual(tab, sku, m);
+        if (a != null) o.A = (o.A || 0) + a;
+      }
+    }
+    return out;
+  };
+  const evalRow = o => {
+    const rF = o.F > 0 ? o.F / T : 0;
+    const rA = (elapsed > 0 && o.A != null && o.A > 0) ? o.A / elapsed : 0;
+    const r = Math.max(rF, rA);
+    o.paceSrc = rA > rF ? 'MTD' : 'FCST';
+    o.ratio = (o.S != null && o.F > 0) ? o.S / o.F : null;
+    o.coverWD = (o.S == null) ? null : (r > 0 ? o.S / r : (o.S > 0 ? Infinity : 0));
+    o.deplete = (o.coverWD != null && isFinite(o.coverWD) && o.coverWD > 0 && o.coverWD <= T * 3) ? _bsNthWorkday(y, m, Math.max(1, Math.ceil(o.coverWD))) : null;
+    o.remain = (o.S != null && o.A != null && m <= act) ? o.S - o.A : null;
+    o.need = (o.S != null) ? Math.max(0, o.F - o.S) : null;
+    o.status = o.S == null ? 'none' : (o.F <= 0 && !(o.A > 0) ? (o.S > 0 ? 'idle' : 'none') : (o.coverWD < T ? 'short' : (o.ratio != null && o.ratio >= 2 ? 'over' : 'ok')));
+    if (o.S != null && o.S <= 0 && (o.F > 0 || (o.A || 0) > 0)) o.status = 'short';
+    return o;
+  };
+  const sel = calc(tabs);
+  for (const o of Object.values(sel)) { evalRow(o); order.push(o.sku); rowsBy[o.sku] = o; }
+
+  // ── 지점 카드 ──
+  const hfOf = sku => (skuMeta[sku]?.hf ?? _UP_SKU_HL[sku] ?? 0.0792);
+  const cardFor = (label, tabList) => {
+    const rs = Object.values(calc(tabList)).map(evalRow);
+    let sHL = 0, fHL = 0, hasS = false, nShort = 0, nOver = 0;
+    rs.forEach(o => { if (o.S != null) { hasS = true; sHL += o.S * hfOf(o.sku); fHL += o.F * hfOf(o.sku); }
+      if (o.status === 'short') nShort++; if (o.status === 'over') nOver++; });
+    const ratio = hasS && fHL > 0 ? sHL / fHL : null;
+    const active = branch === label;
+    const col = ratio == null ? 'var(--text-muted)' : (ratio < 1 ? 'var(--negative)' : (ratio >= 2 ? '#b7791f' : 'var(--positive)'));
+    return `<div class="table-wrap" onclick="document.getElementById('bs-branch').value='${label.replace(/'/g, "\\'")}';renderBranchStock()" style="padding:10px 12px;margin:0;cursor:pointer;${active ? 'outline:2px solid var(--primary);' : ''}">`
+      + `<div style="font-size:11.5px;font-weight:700;color:var(--primary);margin-bottom:4px;">${label}</div>`
+      + `<div style="font-size:20px;font-weight:800;color:${col};line-height:1;">${ratio == null ? '—' : Math.round(ratio * 100) + '%'}</div>`
+      + `<div style="font-size:10px;color:var(--text-muted);margin:3px 0 5px;">재고율 (재고÷FCST, HL)</div>`
+      + `<div style="font-size:10.5px;color:#555;">${hasS ? `재고 ${Math.round(sHL).toLocaleString('ko-KR')} / FCST ${Math.round(fHL).toLocaleString('ko-KR')} HL` : '월초 재고 미입력'}</div>`
+      + (hasS ? `<div style="font-size:10.5px;margin-top:3px;"><span style="color:var(--negative);font-weight:700;">쇼트 ${nShort}</span> · <span style="color:#b7791f;font-weight:700;">과다 ${nOver}</span></div>` : '')
+      + `</div>`;
+  };
+  cards.innerHTML = cardFor('On Trade Total', _BS_TABS) + _BS_TABS.map(t => cardFor(t, [t])).join('');
+
+  // ── 재고율 표 ──
+  const RA = 'text-align:right;';
+  const f0 = v => v == null ? '—' : Math.round(v).toLocaleString('ko-KR');
+  const ST = { short: ['쇼트 위험', 'var(--negative)', '#fdecec'], over: ['재고 과다', '#b7791f', '#fdf6e3'], ok: ['적정', 'var(--positive)', ''],
+               idle: ['FCST 없음·재고만', '#6b7280', '#f3f4f6'], none: ['재고 미입력', 'var(--text-muted)', ''] };
+  const anyStock = order.some(s => rowsBy[s].S != null);
+  // 정렬: 쇼트 위험 → 과다 → 정체 → 적정 → 미입력, 같은 상태는 FCST 큰 순
+  const rank = { short: 0, over: 1, idle: 2, ok: 3, none: 4 };
+  const sorted = order.slice().sort((a, b) => (rank[rowsBy[a].status] - rank[rowsBy[b].status]) || (rowsBy[b].F - rowsBy[a].F));
+  let body = '';
+  let tS = 0, tF = 0, tA = 0, tHasS = false, tHasA = false, tSHL = 0, tFHL = 0;
+  for (const sku of sorted) {
+    const o = rowsBy[sku], st = ST[o.status], hf = hfOf(sku);
+    if (o.S != null) { tS += o.S; tHasS = true; tSHL += o.S * hf; tFHL += o.F * hf; }
+    tF += o.F; if (o.A != null) { tA += o.A; tHasA = true; }
+    const cover = o.coverWD == null ? '—' : (!isFinite(o.coverWD) ? '∞' : (o.coverWD > T * 3 ? '3개월+' : o.coverWD.toFixed(1) + '일'));
+    const dep = o.S == null ? '—' : (o.S <= 0 ? '소진' : (o.deplete
+      ? `${o.deplete.getMonth()+1}/${o.deplete.getDate()}${o.deplete > lastDay ? '' : ' <span style="color:var(--negative);font-weight:700;">(월중)</span>'}`
+      : (isFinite(o.coverWD) && o.coverWD > 0 ? '3개월+' : '—')));
+    body += `<tr style="${st[2] ? 'background:' + st[2] + ';' : ''}">`
+      + `<td style="color:var(--text-muted);font-size:11px;">${skuMeta[sku]?.brand || ''}</td><td>${sku}</td>`
+      + `<td style="${RA}">${f0(o.S)}</td><td style="${RA}">${f0(o.F)}</td>`
+      + `<td style="${RA}font-weight:700;">${o.ratio == null ? '—' : Math.round(o.ratio * 100) + '%'}</td>`
+      + `<td style="${RA}">${cover}${o.S != null && o.paceSrc === 'MTD' ? ' <span title="MTD 페이스가 FCST보다 빨라 MTD 기준" style="font-size:10px;color:#b7791f;">MTD</span>' : ''}</td>`
+      + `<td style="${RA}">${dep}</td>`
+      + `<td style="${RA}">${f0(o.A)}</td><td style="${RA}">${f0(o.remain)}</td>`
+      + `<td style="${RA}">${o.need == null ? '—' : (o.need > 0 ? '<b>' + f0(o.need) + '</b>' : '0')}</td>`
+      + `<td><span style="color:${st[1]};font-weight:700;font-size:11.5px;">${st[0]}</span></td></tr>`;
+  }
+  const tRatio = tHasS && tFHL > 0 ? tSHL / tFHL : null;
+  body += `<tr class="td-section"><td></td><td>Total (QTY 단순합 · 재고율은 HL 기준)</td><td style="${RA}">${tHasS ? f0(tS) : '—'}</td><td style="${RA}">${f0(tF)}</td>`
+    + `<td style="${RA}">${tRatio == null ? '—' : Math.round(tRatio * 100) + '%'}</td><td></td><td></td><td style="${RA}">${tHasA ? f0(tA) : '—'}</td>`
+    + `<td style="${RA}">${tHasS && tHasA ? f0(tS - tA) : '—'}</td><td></td><td></td></tr>`;
+  const note = anyStock ? '' : `<tr><td colspan="11" style="padding:10px 12px;font-size:12px;color:var(--text-muted);background:#f8fafc;">${m}월 월초 재고가 아직 입력되지 않았습니다 — 통합 파일 '입력' 시트의 <b>월초 재고</b> 열(H)에 월 1회 입력 후 다시 업로드하면 재고율·소진 예상일이 계산됩니다.</td></tr>`;
+  tbl.innerHTML = `<thead><tr><th style="text-align:left">Brand</th><th style="text-align:left">SKU</th><th style="${RA}">월초 재고</th><th style="${RA}">당월 FCST</th>`
+    + `<th style="${RA}" title="월초 재고 ÷ 당월 FCST">재고율</th><th style="${RA}" title="재고 ÷ 일 수요(영업일)">커버</th><th style="${RA}" title="보충 없을 때 재고가 바닥나는 날">소진 예상</th>`
+    + `<th style="${RA}">${m === act ? 'MTD' : '실적'}</th><th style="${RA}" title="월초 재고 − 실적 (월중 보충 입고 미반영)">잔여 추정</th><th style="${RA}" title="max(0, FCST − 월초 재고)">보충 필요</th><th style="text-align:left">상태</th></tr></thead>`
+    + `<tbody>${note}${body}</tbody>`;
+
+  // ── 주차별 FCST 제출 이력 ──
+  const weeks = M.weeks || [];
+  const trailRows = {};   // sku → [col1..5] (Total은 지점별 직전 제출값 이월 합)
+  const subCount = [0,1,2,3,4].map(k => tabs.filter(t => M.submitted?.[t]?.[k]).length);
+  for (const tab of tabs) {
+    const sub = M.submitted?.[tab] || [];
+    for (const [sku, x] of Object.entries(M.rows?.[tab] || {})) {
+      const arr = trailRows[sku] || (trailRows[sku] = [null, null, null, null, null]);
+      let carry = null;
+      for (let k = 0; k < 5; k++) {
+        if (sub[k]) carry = x.w[k] || 0;
+        if (tabs.length === 1 ? sub[k] : (carry != null && k < (M.cur_col || 0))) arr[k] = (arr[k] || 0) + (tabs.length === 1 ? (x.w[k] || 0) : carry);
+      }
+    }
+  }
+  const cols = weeks.map(w => w.col);
+  let th = `<th style="text-align:left">Brand</th><th style="text-align:left">SKU</th>`;
+  for (const w of weeks) th += `<th style="${RA}">W${w.col} · WK${w.wk}<div style="font-weight:400;font-size:10px;color:${subCount[w.col-1] ? 'var(--text-muted)' : 'var(--negative)'};">${w.monday.slice(5).replace('-', '/')} · ${subCount[w.col-1]}/${tabs.length} 제출</div></th>`;
+  let tb = '';
+  const colTot = cols.map(() => null);
+  for (const [sku, arr] of Object.entries(trailRows)) {
+    if (!arr.some(v => v != null && v !== 0)) continue;
+    tb += `<tr><td style="color:var(--text-muted);font-size:11px;">${skuMeta[sku]?.brand || ''}</td><td>${sku}</td>`;
+    let prev = null;
+    cols.forEach((c, i) => {
+      const v = arr[c-1];
+      if (v != null) colTot[i] = (colTot[i] || 0) + v * hfOf(sku);
+      const d = (v != null && prev != null) ? v - prev : null;
+      tb += `<td style="${RA}">${v == null ? '<span style="color:#cbd5e1;">—</span>' : f0(v)}`
+        + (d ? ` <span style="font-size:10px;color:${d > 0 ? 'var(--positive)' : 'var(--negative)'};">(${d > 0 ? '+' : ''}${f0(d)})</span>` : '') + `</td>`;
+      if (v != null) prev = v;
+    });
+    tb += '</tr>';
+  }
+  tb += `<tr class="td-section"><td></td><td>Total (HL)</td>` + colTot.map(v => `<td style="${RA}">${v == null ? '—' : Math.round(v).toLocaleString('ko-KR')}</td>`).join('') + '</tr>';
+  trail.innerHTML = `<thead><tr>${th}</tr></thead><tbody>${tb}</tbody>`;
+}
+
 function renderYTDSkuTable() {
   const sec  = document.getElementById('ytdsku-branch')?.value || 'On Trade Total';
   const data = DASHBOARD_DATA.sku_detail[sec] || [];
@@ -9295,7 +9720,7 @@ const _tabInitialized = {};
 //  시트가 12개로 늘어 한 줄에 다 안 들어가므로 그룹(상단) → 하위 시트(하단 칩)로 분리.
 //  switchTab(tabId) API는 그대로 유지 — 그룹은 tabId로 역산해서 활성화한다.
 const TAB_GROUPS = [
-  { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['rofo-sheet','Rofo'], ['order','Order Pattern']] },
+  { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['branch-stock','Stock & Cover'], ['rofo-sheet','Rofo'], ['order','Order Pattern']] },
   { key: 'perf',   label: 'Performance', tabs: [['ytd','YTD'], ['branch','Branch Analysis'], ['revenue','Revenue']] },
   { key: 'sku',    label: 'SKU',         tabs: [['sku','SKU Detail'], ['sku-hist','SKU History']] },
   { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['keg','공케그·CO2'], ['range','Range DC'], ['vc','Value Chain']] },
@@ -9334,6 +9759,7 @@ function switchTab(tabId) {
     if (tabId === 'ytd')      { renderYTDCharts(); renderYTDTable(); renderYTDSkuTable(); }
     if (tabId === 'branch')   { renderBranchReport(); }
     if (tabId === 'rofo-sheet'){ renderRofoSheet(); _rofoLoadComments().then(renderRofoSheet); }
+    if (tabId === 'branch-stock') { renderBranchStock(); }
     if (tabId === 'revenue')  { initRevenueTab(); }
     if (tabId === 'sku')      { renderSkuTable(); }
     if (tabId === 'sku-hist') { renderSkuHistTable(); renderSkuHistCompare(); }
