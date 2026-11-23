@@ -255,6 +255,15 @@ td.sr-cell{white-space:nowrap}
 .gauge-wrap{width:130px;height:130px;border-radius:50%;background:conic-gradient(var(--clr) var(--pct),rgba(255,255,255,.08) var(--pct));display:flex;align-items:center;justify-content:center}
 .gauge-val{width:98px;height:98px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:1.45rem;font-weight:700}
 /* Bottle KPI — region progress */
+.bkpi-cards{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.bkpi-cards .card{padding:12px 14px}
+.bkpi-cards .card-value{font-size:22px}
+details.bfold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px}
+details.bfold>summary::-webkit-details-marker{display:none}
+details.bfold>summary::before{content:'▸';color:var(--accent);font-size:13px;transition:transform .15s}
+details.bfold[open]>summary::before{transform:rotate(90deg)}
+details.bfold>summary h3{margin:0}
+details.bfold[open]>summary{margin-bottom:12px}
 .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.75rem}
 .rcard{background:var(--surface2,rgba(255,255,255,.04));border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem}
 .rcard h4{margin:0 0 .6rem;font-size:.85rem;font-weight:700;color:var(--text)}
@@ -290,7 +299,7 @@ td.sr-cell{white-space:nowrap}
 
 <!-- BOTTLE -->
 <div class="page active" id="page-bottle">
-  <div class="cards" id="bKpiCards"></div>
+  <div class="cards bkpi-cards" id="bKpiCards"></div>
 
   <!-- 지역별 달성률 -->
   <div class="box">
@@ -298,9 +307,9 @@ td.sr-cell{white-space:nowrap}
     <div class="rgrid" id="bRegGrid"></div>
   </div>
 
-  <!-- SR 개인 전국 순위 -->
-  <div class="box">
-    <h3>SR 개인 전국 순위 <span id="bRankPeriod" style="font-size:12px;font-weight:400;color:var(--muted)"></span></h3>
+  <!-- SR 개인 전국 순위 (기본 접힘) -->
+  <details class="box bfold">
+    <summary><h3>SR 개인 전국 순위 <span id="bRankPeriod" style="font-size:12px;font-weight:400;color:var(--muted)"></span></h3></summary>
     <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">
       <b>점수 = 달성률 점수 × 50% + 절대수 점수 × 50%</b> (각 항목 전국 최댓값=100점 정규화, 높을수록 상위)<br>
       · <b>달성률</b> = 누적 달성 아울렛 수 ÷ 누적 목표 × 100 &nbsp;→&nbsp; 달성률 점수 = (해당 SR 달성률 ÷ 전국 최고 달성률) × 100<br>
@@ -309,7 +318,7 @@ td.sr-cell{white-space:nowrap}
     </div>
     <div class="tw sr-scroll"><table id="bRankTable"></table></div>
     <div id="bRankNoTgt" style="font-size:11.5px;color:var(--muted);margin-top:8px"></div>
-  </div>
+  </details>
 
   <div class="box">
     <h3>SR 상세 실적 테이블</h3>
@@ -1247,130 +1256,89 @@ const _FUTM=Q3_MONTHS.concat(Q4_MONTHS);
 const BD_HAS_Q3=new Set(); bD.srs.forEach(s=>{ if(_FUTM.some(m=>s[m.key]&&s[m.key][1]!=null)) BD_HAS_Q3.add(s.name); });
 const BD_SHADE=new Set(bD.srs.map(s=>s.name).filter(n=>!BD_HAS_Q3.has(n)));
 
-let q1Exp=false, q2Exp=false;
-function toggleQ1(){q1Exp=!q1Exp;renderSrTable();}
-function toggleQ2(){q2Exp=!q2Exp;renderSrTable();}
+// 1~12월 통합. 상반기 타겟=bD 하드코딩, 하반기 타겟=STI(Q3·Q4) SR 합.
+const BD_ALLM=BD_MONTHS.concat(Q3_MONTHS,Q4_MONTHS);
+const BD_KR_LBL=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const BD_EN_LBL=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const BD_QUARTERS=[{q:'1Q',idx:[0,1,2]},{q:'2Q',idx:[3,4,5]},{q:'3Q',idx:[6,7,8]},{q:'4Q',idx:[9,10,11]}];
+// 지역 월 타겟: 1~6월은 bD.regions, 7~12월은 소속 SR STI 타겟 합 (없으면 null)
+function bdRegTarget(region,i){
+  if(i<6){const rd=bD.regions[region];return rd?rd.target[i]:null;}
+  const key=BD_ALLM[i].key;let t=null;
+  bD.srs.filter(s=>s.region===region).forEach(s=>{const v=s[key]?s[key][1]:null;if(v!=null)t=(t||0)+v;});
+  return t;
+}
+function bdOverallTarget(i){
+  if(i<6) return bD.overall.target[i];
+  let t=null;Object.keys(bD.regions).forEach(r=>{const v=bdRegTarget(r,i);if(v!=null)t=(t||0)+v;});
+  return t;
+}
+// 분기 펼침 상태 — 1~3Q 접힘, 진행 중인 4Q는 펼침
+const bdQExp={'1Q':false,'2Q':false,'3Q':false,'4Q':true};
+function toggleBdQ(q){bdQExp[q]=!bdQExp[q];renderSrTable();}
 function renderSrTable(){
   const t=document.getElementById('srTable');
   if(!t)return;
   const sep='border-left:2px solid var(--border)';
+  const hsep='border-left:3px solid var(--accent)';
   const ca='text-align:center';
   const btnSt='background:none;border:1px solid var(--accent);border-radius:3px;cursor:pointer;font-size:10px;padding:0 5px;margin-left:5px;vertical-align:middle;color:var(--accent);font-weight:700;line-height:16px';
-  const mLbl={jan:'Jan',feb:'Feb',mar:'Mar',apr:'Apr',may:'May',jun:'Jun'};
-  // SR 월별 실적 (actMonths 있으면 그 월만; 없으면 전체). BOTTLE_OUTLETS 없으면 하드코딩 fallback.
-  const _ALLM=BD_MONTHS.concat(Q3_MONTHS,Q4_MONTHS);
-  const srActM=(sr,mk)=>{
+  const useAct=BOTTLE_OUTLETS.length>0;
+  // SR 월별 실적 (actMonths 있으면 그 월만). BOTTLE_OUTLETS 없으면 하드코딩 fallback.
+  const srActM=(sr,i)=>{
+    const mk=BD_ALLM[i].mk;
     if(sr.actMonths && !sr.actMonths.includes(mk)) return null;
-    if(BOTTLE_OUTLETS.length>0) return BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[mk]||0)>0).length;
-    const kk=(_ALLM.find(x=>x.mk===mk)||{}).key;
-    return (kk && sr[kk])?sr[kk][0]??null:null;
+    if(useAct) return BOTTLE_OUTLETS.filter(d=>d.sr===sr.name&&(d[mk]||0)>0).length;
+    const kk=BD_ALLM[i].key;
+    return sr[kk]?sr[kk][0]??null:null;
   };
+  const regActM=(region,i)=>{
+    const teams=BD_REGION_TEAMS[region]||[region];
+    if(useAct) return BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[BD_ALLM[i].mk]||0)>0).length;
+    const rd=bD.regions[region]; return (i<6&&rd)?rd.actual[i]:null;
+  };
+  const srTgtM=(sr,i)=>{const k=BD_ALLM[i].key;return sr[k]?sr[k][1]??null:null;};
+  const cell3=(st,tg,ac)=>`<td style="${st};${ca}">${tg??'–'}</td><td style="${ca}">${ac??'–'}</td><td style="${ca}">${badge(pct(ac,tg))}</td>`;
+  // 분기 합: 값 있는 달만 합산(전부 없으면 null)
+  const qSum=(idx,f)=>{let v=0,has=false;idx.forEach(i=>{const x=f(i);if(x!=null){v+=x;has=true;}});return has?v:null;};
+  const th2=st=>`<th style="${st};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
   // 헤더 2행
   let h1=`<tr><th rowspan="2" style="${ca}">SR</th><th rowspan="2" style="${ca}">지역</th>`;
   let h2=`<tr>`;
-  if(q1Exp){
-    h1+=`<th colspan="3" style="${ca};${sep}">Jan <button onclick="toggleQ1()" style="${btnSt}">–</button></th>`;
-    h1+=`<th colspan="3" style="${ca};${sep}">Feb</th>`;
-    h1+=`<th colspan="3" style="${ca};${sep}">Mar</th>`;
-    for(let i=0;i<3;i++) h2+=`<th style="${sep};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
-  } else {
-    h1+=`<th colspan="3" style="${ca};${sep}">1Q <button onclick="toggleQ1()" style="${btnSt}">+</button></th>`;
-    h2+=`<th style="${sep};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
-  }
-  if(q2Exp){
-    h1+=`<th colspan="3" style="${ca};${sep}">Apr <button onclick="toggleQ2()" style="${btnSt}">–</button></th>`;
-    h1+=`<th colspan="3" style="${ca};${sep}">May</th>`;
-    h1+=`<th colspan="3" style="${ca};${sep}">Jun</th>`;
-    for(let i=0;i<3;i++) h2+=`<th style="${sep};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
-  } else {
-    h1+=`<th colspan="3" style="${ca};${sep}">2Q <button onclick="toggleQ2()" style="${btnSt}">+</button></th>`;
-    h2+=`<th style="${sep};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
-  }
-  // 3Q·4Q (Jul~Dec) — STI 타겟
-  Q3_MONTHS.concat(Q4_MONTHS).forEach((m,i)=>{
-    const s3=(i===0||i===3)?'border-left:3px solid var(--accent)':sep;
-    h1+=`<th colspan="3" style="${ca};${s3};color:var(--accent)">${m.label}</th>`;
-    h2+=`<th style="${s3};${ca}">Target</th><th style="${ca}">Act</th><th style="${ca}">%</th>`;
+  BD_QUARTERS.forEach((Q,qi)=>{
+    const h=qi>=2;   // 하반기 = STI 타겟, 강조색
+    const st0=h?hsep:sep, col=h?';color:var(--accent)':'';
+    if(bdQExp[Q.q]){
+      Q.idx.forEach((i,j)=>{
+        const btn=j===0?` <button onclick="toggleBdQ('${Q.q}')" style="${btnSt}">–</button>`:'';
+        h1+=`<th colspan="3" style="${ca};${j===0?st0:sep}${col}">${BD_EN_LBL[i]}${btn}</th>`;
+        h2+=th2(j===0?st0:sep);
+      });
+    } else {
+      h1+=`<th colspan="3" style="${ca};${st0}${col}">${Q.q} <button onclick="toggleBdQ('${Q.q}')" style="${btnSt}">+</button></th>`;
+      h2+=th2(st0);
+    }
   });
   h1+='</tr>'; h2+='</tr>';
   // 데이터 행
   let tbHtml='';
   [...new Set(bD.srs.map(s=>s.region))].forEach(region=>{
-    const rd=bD.regions[region];
-    const teams=BD_REGION_TEAMS[region]||[region];
     let rCells=`<td colspan="2" style="${ca}">${region} 합계</td>`;
-    if(q1Exp){
-      BD_MONTHS.slice(0,3).forEach((m,i)=>{
-        const target=rd?rd.target[i]:null;
-        const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length:rd?rd.actual[i]:null;
-        rCells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
-      });
-    } else {
-      const q1T=rd?rd.target.slice(0,3).reduce((s,v)=>s+(v||0),0):null;
-      let q1A=0;
-      if(BOTTLE_OUTLETS.length>0) BD_MONTHS.slice(0,3).forEach(m=>{q1A+=BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length;});
-      else q1A=rd?rd.actual.slice(0,3).reduce((s,v)=>s+(v||0),0):0;
-      rCells+=`<td style="${sep};${ca}">${q1T??'–'}</td><td style="${ca}">${q1A}</td><td style="${ca}">${badge(pct(q1A,q1T))}</td>`;
-    }
-    if(q2Exp){
-      BD_MONTHS.slice(3,6).forEach((m,i)=>{
-        const mi=i+3;
-        const target=rd?rd.target[mi]:null;
-        const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length:rd?rd.actual[mi]:null;
-        rCells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
-      });
-    } else {
-      const q2T=rd?rd.target.slice(3,6).reduce((s,v)=>s+(v||0),0):null;
-      let q2A=0;
-      if(BOTTLE_OUTLETS.length>0) BD_MONTHS.slice(3,6).forEach(m=>{q2A+=BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length;});
-      else q2A=rd?rd.actual.slice(3,6).reduce((s,v)=>s+(v||0),0):0;
-      rCells+=`<td style="${sep};${ca}">${q2T??'–'}</td><td style="${ca}">${q2A}</td><td style="${ca}">${badge(pct(q2A,q2T))}</td>`;
-    }
-    // 3Q·4Q — 지역 타겟 = 소속 SR 타겟 합
-    Q3_MONTHS.concat(Q4_MONTHS).forEach((m,i)=>{
-      const s3=(i===0||i===3)?'border-left:3px solid var(--accent)':sep;
-      let target=null; bD.srs.filter(s=>s.region===region).forEach(s=>{const v=s[m.key]?s[m.key][1]:null; if(v!=null)target=(target||0)+v;});
-      const actual=BOTTLE_OUTLETS.length>0?BOTTLE_OUTLETS.filter(d=>teams.includes(d.team)&&(d[m.mk]||0)>0).length:null;
-      rCells+=`<td style="${s3};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
+    BD_QUARTERS.forEach((Q,qi)=>{
+      const st0=qi>=2?hsep:sep;
+      if(bdQExp[Q.q]) Q.idx.forEach((i,j)=>{rCells+=cell3(j===0?st0:sep,bdRegTarget(region,i),regActM(region,i));});
+      else rCells+=cell3(st0,qSum(Q.idx,i=>bdRegTarget(region,i)),qSum(Q.idx,i=>regActM(region,i))??0);
     });
     tbHtml+=`<tr class="rrow">${rCells}</tr>`;
     bD.srs.filter(s=>s.region===region).slice().sort((a,b)=>(BD_SHADE.has(a.name)?1:0)-(BD_SHADE.has(b.name)?1:0)).forEach(sr=>{
       let cells=`<td class="sr-cell" style="${ca}">${sr.name}</td><td style="${ca}">${rtag(sr.region)}</td>`;
-      if(q1Exp){
-        BD_MONTHS.slice(0,3).forEach(m=>{
-          const target=sr[m.key]?sr[m.key][1]??null:null;
-          const actual=srActM(sr,m.mk);
-          cells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
-        });
-      } else {
-        let q1T=0,hasT=false;
-        BD_MONTHS.slice(0,3).forEach(m=>{const v=sr[m.key]?sr[m.key][1]:null;if(v!==null){q1T+=v;hasT=true;}});
-        let q1A=0;
-        BD_MONTHS.slice(0,3).forEach(m=>{const a=srActM(sr,m.mk); if(a!=null)q1A+=a;});
-        cells+=`<td style="${sep};${ca}">${hasT?q1T:'–'}</td><td style="${ca}">${q1A||'–'}</td><td style="${ca}">${badge(pct(q1A,hasT?q1T:null))}</td>`;
-      }
-      if(q2Exp){
-        BD_MONTHS.slice(3,6).forEach(m=>{
-          const target=sr[m.key]?sr[m.key][1]??null:null;
-          const actual=srActM(sr,m.mk);
-          cells+=`<td style="${sep};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
-        });
-      } else {
-        let q2T=0,hasT=false;
-        BD_MONTHS.slice(3,6).forEach(m=>{const v=sr[m.key]?sr[m.key][1]:null;if(v!==null){q2T+=v;hasT=true;}});
-        let q2A=0;
-        BD_MONTHS.slice(3,6).forEach(m=>{const a=srActM(sr,m.mk); if(a!=null)q2A+=a;});
-        cells+=`<td style="${sep};${ca}">${hasT?q2T:'–'}</td><td style="${ca}">${q2A||'–'}</td><td style="${ca}">${badge(pct(q2A,hasT?q2T:null))}</td>`;
-      }
-      // 3Q·4Q — STI 타겟, 실적은 BOTTLE_OUTLETS(m7~m12)
-      Q3_MONTHS.concat(Q4_MONTHS).forEach((m,i)=>{
-        const s3=(i===0||i===3)?'border-left:3px solid var(--accent)':sep;
-        const target=sr[m.key]?sr[m.key][1]??null:null;
-        const actual=srActM(sr,m.mk);
-        cells+=`<td style="${s3};${ca}">${target??'–'}</td><td style="${ca}">${actual??'–'}</td><td style="${ca}">${badge(pct(actual,target))}</td>`;
+      BD_QUARTERS.forEach((Q,qi)=>{
+        const st0=qi>=2?hsep:sep;
+        if(bdQExp[Q.q]) Q.idx.forEach((i,j)=>{cells+=cell3(j===0?st0:sep,srTgtM(sr,i),srActM(sr,i));});
+        else { const qa=qSum(Q.idx,i=>srActM(sr,i)); cells+=cell3(st0,qSum(Q.idx,i=>srTgtM(sr,i)),qa||null); }
       });
-      const shade=BD_SHADE.has(sr.name);   // Q3 타겟 없음(퇴사/이동/미배정) → 음영
-      tbHtml+=`<tr${shade?' style="background:#eef1f4;color:#94a3b8;font-style:italic" title="Q3 타겟 없음 (퇴사/이동)"':''}>${cells}</tr>`;
+      const shade=BD_SHADE.has(sr.name);   // 하반기 타겟 없음(퇴사/이동/미배정) → 음영
+      tbHtml+=`<tr${shade?' style="background:#eef1f4;color:#94a3b8;font-style:italic" title="하반기 타겟 없음 (퇴사/이동)"':''}>${cells}</tr>`;
     });
   });
   t.innerHTML=`<thead>${h1+h2}</thead><tbody>${tbHtml}</tbody>`;
@@ -1398,10 +1366,10 @@ function renderBottleKPI(){
   // regional actuals
   const nM=BD_MONTHS.length;
   const regTotals={};
-  Object.keys(bD.regions).forEach(r=>{regTotals[r]=Array(nM).fill(0);});
+  Object.keys(bD.regions).forEach(r=>{regTotals[r]=Array(12).fill(0);});
   BOTTLE_OUTLETS.forEach(d=>{
     const reg=teamToReg[d.team];
-    if(reg&&regTotals[reg]) BD_MONTHS.forEach((m,i)=>{if((d[m.mk]||0)>0)regTotals[reg][i]++;});
+    if(reg&&regTotals[reg]) BD_ALLM.forEach((m,i)=>{if((d[m.mk]||0)>0)regTotals[reg][i]++;});
   });
   // SR actuals (match by sr name)
   const srTotals={};
@@ -1415,11 +1383,11 @@ function renderBottleKPI(){
   const pctColor=p=>p===null?'var(--accent)':p>=100?'var(--green)':p>=80?'var(--yellow)':'var(--red)';
   const cardsEl=document.getElementById('bKpiCards');
   if(cardsEl){
-    cardsEl.innerHTML=bD.months.map((m,i)=>{
-      const tgt=bD.overall.target[i];
-      const act=useActuals?totals[i]:bD.overall.actual[i];
+    cardsEl.innerHTML=BD_KR_LBL.map((m,i)=>{
+      const tgt=bdOverallTarget(i);
+      const act=useActuals?totals[i]:(i<6?bD.overall.actual[i]:null);
       const p=pct(act,tgt);
-      return `<div class="card"><div class="card-label">${m} 전체 달성률</div><div class="card-value" style="color:${pctColor(p)}">${p!==null?p+'%':'–'}</div><div class="card-sub">목표 ${tgt} / 실적 ${act}</div></div>`;
+      return `<div class="card"><div class="card-label">${m} 전체 달성률</div><div class="card-value" style="color:${pctColor(p)}">${p!==null?p+'%':'–'}</div><div class="card-sub">목표 ${tgt??'–'} / 실적 ${act??'–'}</div></div>`;
     }).join('')+`<div class="card"><div class="card-label">총 SR 수</div><div class="card-value" style="color:var(--accent)">${bD.srs.length}</div><div class="card-sub">서울 ${bD.srs.filter(s=>s.region==='서울').length} · 부산 ${bD.srs.filter(s=>s.region==='부산').length} · 기타 ${bD.srs.filter(s=>s.region!=='서울'&&s.region!=='부산').length}</div></div>`;
   }
 
@@ -1427,9 +1395,9 @@ function renderBottleKPI(){
   const regEl=document.getElementById('bRegGrid');
   if(regEl){
     regEl.innerHTML=Object.entries(bD.regions).map(([region,rd])=>{
-      const bars=bD.months.map((m,i)=>{
-        const tgt=rd.target[i];
-        const act=useActuals?(regTotals[region]?regTotals[region][i]:0):rd.actual[i];
+      const bars=BD_KR_LBL.map((m,i)=>{
+        const tgt=bdRegTarget(region,i);
+        const act=useActuals?(regTotals[region]?regTotals[region][i]:0):(i<6?rd.actual[i]:null);
         const p=pct(act,tgt);
         const col=p===null?'var(--accent)':p>=100?'var(--green)':p>=80?'var(--yellow)':'var(--red)';
         const w=p===null?0:Math.min(p,100);
@@ -1453,8 +1421,8 @@ function renderBottleKPI(){
 // SR 개인 전국 순위 — 달성률 50% + 절대 달성수 50% (3월~데이터·목표 있는 달 누적)
 function renderBottleSrRanking(){
   const t=document.getElementById('bRankTable'); if(!t)return;
-  // 집계 대상 월: 3월부터 7월까지, '목표 설정 + 실데이터 존재'인 달만
-  const CAND=BD_MONTHS.concat([{key:'jul',mk:'m7',label:'7월'}]);
+  // 집계 대상 월: 3월부터 12월까지, '목표 설정 + 실데이터 존재'인 달만
+  const CAND=BD_ALLM.map((m,i)=>({...m,label:BD_KR_LBL[i]}));
   const startIdx=CAND.findIndex(m=>m.key==='mar');
   const active=[];
   for(let i=startIdx;i<CAND.length;i++){
