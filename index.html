@@ -2249,7 +2249,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       <span id="bs-meta" style="font-size:11px;color:var(--text-muted);"></span>
     </div>
     <div id="bs-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
-    <div class="section-title">월초 재고 × 당월 FCST — 재고율 · 소진 예상 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(QTY · 수요 = max(FCST 페이스, MTD 페이스) · 영업일 기준 · 월중 보충 입고 미반영)</span></div>
+    <div class="section-title">월초 재고 × 당월 FCST — 재고일수 · 소진 예상 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(QTY · 통합 엑셀 지점 시트와 같은 기준: 달력일 · 실적 기준 우선 · 월중 보충 입고 미반영)</span></div>
     <div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="bs-table"></table></div>
     <div class="section-title" style="margin-top:22px;">주차별 FCST 제출 이력 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(당월 FCST QTY · 괄호 = 직전 주 대비 · Total은 미제출 지점 직전 제출값 이월)</span></div>
     <div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="bs-trail"></table></div>
@@ -3536,7 +3536,17 @@ function _upParseFcstBook(wb, file) {
     months[`${year}-${String(m).padStart(2,'0')}`] = { year, month: m, weeks, cur_col: curCol || null, submitted, rows: rowsOut, has_stock: anyStock };
     if (anyFcst) curM = m;
   }
-  const book = { file: file?.name || '', year, uploaded_at: new Date().toISOString(), months };
+  // 재고 상태 기준(엑셀 Total 시트 Z1:AA2 '재고 부족 기준 (일 미만)' / '재고 과다 기준 (일 초과)')
+  let thresholds = null;
+  const wsT = wb.Sheets['Total'];
+  if (wsT) {
+    const rowsT = XLSX.utils.sheet_to_json(wsT, { header: 1, defval: null, range: 0 }).slice(0, 4);
+    const pick = re => { for (const r of rowsT) for (let j = 0; j < (r || []).length - 1; j++)
+      if (r[j] != null && re.test(String(r[j])) && typeof r[j+1] === 'number') return r[j+1]; return null; };
+    const sh = pick(/재고\s*부족\s*기준/), ov = pick(/재고\s*과다\s*기준/);
+    if (sh != null || ov != null) thresholds = { short: sh ?? 7, over: ov ?? 14 };
+  }
+  const book = { file: file?.name || '', year, uploaded_at: new Date().toISOString(), months, thresholds };
   if (!curM) return { bookOnly: true, book, warnings };
 
   // ── 현재 월·주차의 지점별 FCST(최신 제출) / 전주 FCST(그 주 이전 마지막 제출) ──
@@ -3572,6 +3582,7 @@ function _upMergeFcstBook(book) {
   const cur = (D.on_fcst_book && typeof D.on_fcst_book === 'object') ? D.on_fcst_book : { months: {} };
   cur.months = Object.assign({}, cur.months || {}, book.months || {});
   cur.file = book.file; cur.year = book.year; cur.uploaded_at = book.uploaded_at;
+  if (book.thresholds) cur.thresholds = book.thresholds;
   D.on_fcst_book = cur;
 }
 
@@ -8304,23 +8315,14 @@ function renderRofoSheet() {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Stock & Cover — 통합 FCST 양식(on_fcst_book)의 월초 재고 × 당월 FCST
-//  · 재고율 = 월초 재고 ÷ 당월 FCST (100% = 한 달치)
-//  · 일 수요 = max(FCST÷월 영업일, MTD÷경과 영업일) — FCST 하향이 쇼트를 가리지 않도록 큰 쪽(Stock Coverage와 같은 원칙)
-//  · 소진 예상일 = 월 첫 영업일부터 (재고 ÷ 일 수요) 영업일째. 월중 보충 입고는 데이터가 없어 미반영 → '보충 없을 때' 기준.
-//  · 보충 필요 = max(0, FCST − 월초 재고): 이번 달 FCST를 채우려면 들어와야 할 최소 물량.
+//  ※ 기준은 통합 엑셀의 지점 시트(재고일수·재고 상태 열)와 동일하게 맞춘다 — 같은 SKU가 엑셀과 대시보드에서 다른 상태로 보이면 안 됨.
+//  · 재고일수(FCST) = 월초 재고 ÷ (당월 FCST ÷ 월 달력일수)
+//  · 재고일수(실적) = 월초 재고 ÷ (MTD ÷ 경과일수[DSR 마지막 일자의 '일'])
+//  · 재고 상태 = 실적 기준 우선(없으면 FCST 기준) · 부족 < 7일 · 과다 > 14일 (엑셀 Total AA1/AA2 값을 업로드 시 읽어 사용)
+//  · 소진 예상일 = 월 1일 + 재고일수(같은 기준). 월중 보충 입고 미반영 → '보충 없을 때' 기준.
+//  · 재고율 = 월초 재고 ÷ 당월 FCST · 보충 필요 = max(0, FCST − 월초 재고).
 // ═══════════════════════════════════════════════════════════════════════════════
 const _BS_TABS = ['Seoul','BuSan','DaeGu&JeJu','DaeJeon','GwangJu'];
-function _bsWorkdays(y, m) { return _upCountWorkdays(new Date(y, m-1, 1), new Date(y, m, 0)); }
-// 월 1일부터 n번째 영업일(1-based) 날짜 — 다음 달로 넘어가도 계속 센다
-function _bsNthWorkday(y, m, n) {
-  const d = new Date(y, m-1, 1); let c = 0;
-  for (let guard = 0; guard < 800; guard++) {
-    const dow = d.getDay();
-    if (dow >= 1 && dow <= 5 && ++c >= n) return new Date(d);
-    d.setDate(d.getDate() + 1);
-  }
-  return null;
-}
 function _bsSkuMeta() {   // sku → {brand, hf}
   const out = {};
   for (const tab of Object.keys(DASHBOARD_DATA.sku_detail || {})) for (const b of DASHBOARD_DATA.sku_detail[tab] || [])
@@ -8359,10 +8361,16 @@ function renderBranchStock() {
   const branch = document.getElementById('bs-branch').value;
   const tabs = branch === 'On Trade Total' ? _BS_TABS : [branch];
   const skuMeta = _bsSkuMeta();
-  const T = _bsWorkdays(y, m), act = _upGetFcstMonth();
-  const elapsed = m < act ? T : (m === act ? (D.wd_progress?.elapsed || 0) : 0);
-  const lastDay = new Date(y, m, 0);
-  meta.textContent = `원본: ${book.file || '-'} · 업로드 ${book.uploaded_at ? new Date(book.uploaded_at).toLocaleString('ko-KR') : '-'} · ${m}월 영업일 ${elapsed}/${T}`;
+  const act = _upGetFcstMonth();
+  const lastDay = new Date(y, m, 0), T = lastDay.getDate();   // 월 달력일수 (엑셀 '조회 월 일수')
+  // 경과일수 = DSR 마지막 일자의 '일' (엑셀 '경과 일수'와 동일). 활성월은 Order Pattern 일자 라벨에서, 지난달은 월 전체.
+  let elapsed = m < act ? T : 0, dsrAsOf = '';
+  if (m === act) {
+    const lbl = (D.order_pattern?.daily_labels || []).filter(s => parseInt(String(s).split('/')[0]) === m).slice(-1)[0];
+    if (lbl) { elapsed = parseInt(String(lbl).split('/')[1]) || 0; dsrAsOf = lbl; }
+  }
+  const TH = Object.assign({ short: 7, over: 14 }, book.thresholds || {});
+  meta.textContent = `원본: ${book.file || '-'} · 업로드 ${book.uploaded_at ? new Date(book.uploaded_at).toLocaleString('ko-KR') : '-'} · ${m}월 경과 ${elapsed}/${T}일${dsrAsOf ? ` (DSR ~${dsrAsOf})` : ''} · 부족 < ${TH.short}일 · 과다 > ${TH.over}일`;
 
   // ── SKU별 집계 (지점 선택 시 그 지점, Total은 5개 지점 합) ──
   const order = [], rowsBy = {};
@@ -8371,27 +8379,36 @@ function renderBranchStock() {
     for (const tab of tabList) {
       const lc = _bsLastCol(M.submitted?.[tab]);
       for (const [sku, x] of Object.entries(M.rows?.[tab] || {})) {
-        const o = out[sku] || (out[sku] = { sku, S: null, F: 0, A: null });
-        if (x.stock != null) o.S = (o.S || 0) + x.stock;
-        o.F += lc ? (x.w[lc-1] || 0) : 0;
-        const a = _bsActual(tab, sku, m);
+        const o = out[sku] || (out[sku] = { sku, S: null, F: 0, A: null, Fs: 0, As: null });
+        const f = lc ? (x.w[lc-1] || 0) : 0, a = _bsActual(tab, sku, m);
+        o.F += f;
         if (a != null) o.A = (o.A || 0) + a;
+        // 재고 계산용(Fs/As): 엑셀처럼 '재고가 입력된 지점×SKU'의 FCST·MTD만 합산
+        if (x.stock != null) { o.S = (o.S || 0) + x.stock; o.Fs += f; if (a != null) o.As = (o.As || 0) + a; }
       }
     }
     return out;
   };
+  // 엑셀 지점 시트와 같은 계산: 재고일수(FCST)·재고일수(실적) → 실적 우선 상태
+  const coverOf = (S, F, A) => {
+    const dF = (S != null && F > 0) ? S / (F / T) : null;
+    const dA = (S != null && A != null && A > 0 && elapsed > 0) ? S / (A / elapsed) : null;
+    const days = dA != null ? dA : dF;
+    let status = 'none';
+    if (S != null) {
+      if (days == null) status = S > 0 ? 'idle' : 'none';
+      else status = days < TH.short ? 'short' : (days > TH.over ? 'over' : 'ok');
+      if (S <= 0 && (F > 0 || (A || 0) > 0)) status = 'short';
+    }
+    return { dF, dA, days, src: dA != null ? '실적' : (dF != null ? 'FCST' : ''), status };
+  };
   const evalRow = o => {
-    const rF = o.F > 0 ? o.F / T : 0;
-    const rA = (elapsed > 0 && o.A != null && o.A > 0) ? o.A / elapsed : 0;
-    const r = Math.max(rF, rA);
-    o.paceSrc = rA > rF ? 'MTD' : 'FCST';
-    o.ratio = (o.S != null && o.F > 0) ? o.S / o.F : null;
-    o.coverWD = (o.S == null) ? null : (r > 0 ? o.S / r : (o.S > 0 ? Infinity : 0));
-    o.deplete = (o.coverWD != null && isFinite(o.coverWD) && o.coverWD > 0 && o.coverWD <= T * 3) ? _bsNthWorkday(y, m, Math.max(1, Math.ceil(o.coverWD))) : null;
-    o.remain = (o.S != null && o.A != null && m <= act) ? o.S - o.A : null;
-    o.need = (o.S != null) ? Math.max(0, o.F - o.S) : null;
-    o.status = o.S == null ? 'none' : (o.F <= 0 && !(o.A > 0) ? (o.S > 0 ? 'idle' : 'none') : (o.coverWD < T ? 'short' : (o.ratio != null && o.ratio >= 2 ? 'over' : 'ok')));
-    if (o.S != null && o.S <= 0 && (o.F > 0 || (o.A || 0) > 0)) o.status = 'short';
+    const c = coverOf(o.S, o.Fs, o.As);
+    Object.assign(o, c);
+    o.ratio = (o.S != null && o.Fs > 0) ? o.S / o.Fs : null;
+    o.deplete = (c.days != null && c.days > 0 && c.days <= 120) ? new Date(y, m-1, Math.max(1, Math.ceil(c.days))) : null;
+    o.remain = (o.S != null && o.As != null && m <= act) ? o.S - o.As : null;
+    o.need = (o.S != null) ? Math.max(0, o.Fs - o.S) : null;
     return o;
   };
   const sel = calc(tabs);
@@ -8401,18 +8418,22 @@ function renderBranchStock() {
   const hfOf = sku => (skuMeta[sku]?.hf ?? _UP_SKU_HL[sku] ?? 0.0792);
   const cardFor = (label, tabList) => {
     const rs = Object.values(calc(tabList)).map(evalRow);
-    let sHL = 0, fHL = 0, hasS = false, nShort = 0, nOver = 0;
-    rs.forEach(o => { if (o.S != null) { hasS = true; sHL += o.S * hfOf(o.sku); fHL += o.F * hfOf(o.sku); }
-      if (o.status === 'short') nShort++; if (o.status === 'over') nOver++; });
-    const ratio = hasS && fHL > 0 ? sHL / fHL : null;
+    // 지점 합계는 엑셀 상단 합계처럼 '재고 입력된 SKU'만 환산 C/S(QTY×HL계수÷0.0792)로 합산
+    let sC = 0, fC = 0, aC = 0, hasS = false, hasA = false, nShort = 0, nOver = 0;
+    rs.forEach(o => {
+      if (o.S != null) { const k = hfOf(o.sku) / 0.0792; hasS = true; sC += o.S * k; fC += o.Fs * k; if (o.As != null) { hasA = true; aC += o.As * k; } }
+      if (o.status === 'short') nShort++; if (o.status === 'over') nOver++;
+    });
+    const c = hasS ? coverOf(sC, fC, hasA ? aC : null) : null;
     const active = branch === label;
-    const col = ratio == null ? 'var(--text-muted)' : (ratio < 1 ? 'var(--negative)' : (ratio >= 2 ? '#b7791f' : 'var(--positive)'));
+    const col = !c || c.days == null ? 'var(--text-muted)' : ({ short: 'var(--negative)', over: '#b7791f', ok: 'var(--positive)' }[c.status] || 'var(--text-muted)');
+    const lblSt = c ? ({ short: '부족', over: '과다', ok: '적정', idle: '판매 없음' }[c.status] || '') : '';
     return `<div class="table-wrap" onclick="document.getElementById('bs-branch').value='${label.replace(/'/g, "\\'")}';renderBranchStock()" style="padding:10px 12px;margin:0;cursor:pointer;${active ? 'outline:2px solid var(--primary);' : ''}">`
       + `<div style="font-size:11.5px;font-weight:700;color:var(--primary);margin-bottom:4px;">${label}</div>`
-      + `<div style="font-size:20px;font-weight:800;color:${col};line-height:1;">${ratio == null ? '—' : Math.round(ratio * 100) + '%'}</div>`
-      + `<div style="font-size:10px;color:var(--text-muted);margin:3px 0 5px;">재고율 (재고÷FCST, HL)</div>`
-      + `<div style="font-size:10.5px;color:#555;">${hasS ? `재고 ${Math.round(sHL).toLocaleString('ko-KR')} / FCST ${Math.round(fHL).toLocaleString('ko-KR')} HL` : '월초 재고 미입력'}</div>`
-      + (hasS ? `<div style="font-size:10.5px;margin-top:3px;"><span style="color:var(--negative);font-weight:700;">쇼트 ${nShort}</span> · <span style="color:#b7791f;font-weight:700;">과다 ${nOver}</span></div>` : '')
+      + `<div style="font-size:20px;font-weight:800;color:${col};line-height:1;">${!c || c.days == null ? '—' : c.days.toFixed(1) + '일'} <span style="font-size:11px;">${lblSt}</span></div>`
+      + `<div style="font-size:10px;color:var(--text-muted);margin:3px 0 5px;">재고일수 (${c && c.src ? c.src + ' 기준' : '실적 우선'})${c && c.dF != null && c.src === '실적' ? ` · FCST ${c.dF.toFixed(1)}일` : ''}</div>`
+      + `<div style="font-size:10.5px;color:#555;">${hasS ? `재고 ${Math.round(sC).toLocaleString('ko-KR')} c/s · 재고율 ${fC > 0 ? Math.round(sC / fC * 100) + '%' : '—'}` : '월초 재고 미입력'}</div>`
+      + (hasS ? `<div style="font-size:10.5px;margin-top:3px;"><span style="color:var(--negative);font-weight:700;">부족 ${nShort}</span> · <span style="color:#b7791f;font-weight:700;">과다 ${nOver}</span></div>` : '')
       + `</div>`;
   };
   cards.innerHTML = cardFor('On Trade Total', _BS_TABS) + _BS_TABS.map(t => cardFor(t, [t])).join('');
@@ -8420,40 +8441,43 @@ function renderBranchStock() {
   // ── 재고율 표 ──
   const RA = 'text-align:right;';
   const f0 = v => v == null ? '—' : Math.round(v).toLocaleString('ko-KR');
-  const ST = { short: ['쇼트 위험', 'var(--negative)', '#fdecec'], over: ['재고 과다', '#b7791f', '#fdf6e3'], ok: ['적정', 'var(--positive)', ''],
-               idle: ['FCST 없음·재고만', '#6b7280', '#f3f4f6'], none: ['재고 미입력', 'var(--text-muted)', ''] };
+  const ST = { short: ['부족', 'var(--negative)', '#fdecec'], over: ['과다', '#b7791f', '#fdf6e3'], ok: ['적정', 'var(--positive)', ''],
+               idle: ['판매 없음', '#6b7280', '#f3f4f6'], none: ['재고 미입력', 'var(--text-muted)', ''] };
   const anyStock = order.some(s => rowsBy[s].S != null);
-  // 정렬: 쇼트 위험 → 과다 → 정체 → 적정 → 미입력, 같은 상태는 FCST 큰 순
+  // 정렬: 부족 → 과다 → 판매 없음 → 적정 → 미입력, 같은 상태는 FCST 큰 순
   const rank = { short: 0, over: 1, idle: 2, ok: 3, none: 4 };
   const sorted = order.slice().sort((a, b) => (rank[rowsBy[a].status] - rank[rowsBy[b].status]) || (rowsBy[b].F - rowsBy[a].F));
+  const fd = v => v == null ? '—' : (v > 999 ? '999+' : v.toFixed(1));
   let body = '';
-  let tS = 0, tF = 0, tA = 0, tHasS = false, tHasA = false, tSHL = 0, tFHL = 0;
+  let tS = 0, tF = 0, tA = 0, tAs = 0, tHasS = false, tHasA = false, tSC = 0, tFC = 0, tAC = 0;
   for (const sku of sorted) {
-    const o = rowsBy[sku], st = ST[o.status], hf = hfOf(sku);
-    if (o.S != null) { tS += o.S; tHasS = true; tSHL += o.S * hf; tFHL += o.F * hf; }
+    const o = rowsBy[sku], st = ST[o.status], k = hfOf(sku) / 0.0792;
+    if (o.S != null) { tS += o.S; tHasS = true; tSC += o.S * k; tFC += o.Fs * k; if (o.As != null) { tAC += o.As * k; tAs += o.As; } }
     tF += o.F; if (o.A != null) { tA += o.A; tHasA = true; }
-    const cover = o.coverWD == null ? '—' : (!isFinite(o.coverWD) ? '∞' : (o.coverWD > T * 3 ? '3개월+' : o.coverWD.toFixed(1) + '일'));
     const dep = o.S == null ? '—' : (o.S <= 0 ? '소진' : (o.deplete
       ? `${o.deplete.getMonth()+1}/${o.deplete.getDate()}${o.deplete > lastDay ? '' : ' <span style="color:var(--negative);font-weight:700;">(월중)</span>'}`
-      : (isFinite(o.coverWD) && o.coverWD > 0 ? '3개월+' : '—')));
+      : (o.days != null ? '120일+' : '—')));
+    const dStyle = (v) => v == null ? '' : (v < TH.short ? 'color:var(--negative);font-weight:700;' : (v > TH.over ? 'color:#b7791f;' : ''));
     body += `<tr style="${st[2] ? 'background:' + st[2] + ';' : ''}">`
       + `<td style="color:var(--text-muted);font-size:11px;">${skuMeta[sku]?.brand || ''}</td><td>${sku}</td>`
-      + `<td style="${RA}">${f0(o.S)}</td><td style="${RA}">${f0(o.F)}</td>`
-      + `<td style="${RA}font-weight:700;">${o.ratio == null ? '—' : Math.round(o.ratio * 100) + '%'}</td>`
-      + `<td style="${RA}">${cover}${o.S != null && o.paceSrc === 'MTD' ? ' <span title="MTD 페이스가 FCST보다 빨라 MTD 기준" style="font-size:10px;color:#b7791f;">MTD</span>' : ''}</td>`
+      + `<td style="${RA}">${f0(o.S)}</td><td style="${RA}">${f0(o.F)}</td><td style="${RA}">${f0(o.A)}</td>`
+      + `<td style="${RA}${o.src === 'FCST' ? 'font-weight:700;' : ''}${dStyle(o.dF)}">${fd(o.dF)}</td>`
+      + `<td style="${RA}${o.src === '실적' ? 'font-weight:700;' : ''}${dStyle(o.dA)}">${fd(o.dA)}</td>`
       + `<td style="${RA}">${dep}</td>`
-      + `<td style="${RA}">${f0(o.A)}</td><td style="${RA}">${f0(o.remain)}</td>`
+      + `<td style="${RA}">${f0(o.remain)}</td>`
+      + `<td style="${RA}">${o.ratio == null ? '—' : Math.round(o.ratio * 100) + '%'}</td>`
       + `<td style="${RA}">${o.need == null ? '—' : (o.need > 0 ? '<b>' + f0(o.need) + '</b>' : '0')}</td>`
       + `<td><span style="color:${st[1]};font-weight:700;font-size:11.5px;">${st[0]}</span></td></tr>`;
   }
-  const tRatio = tHasS && tFHL > 0 ? tSHL / tFHL : null;
-  body += `<tr class="td-section"><td></td><td>Total (QTY 단순합 · 재고율은 HL 기준)</td><td style="${RA}">${tHasS ? f0(tS) : '—'}</td><td style="${RA}">${f0(tF)}</td>`
-    + `<td style="${RA}">${tRatio == null ? '—' : Math.round(tRatio * 100) + '%'}</td><td></td><td></td><td style="${RA}">${tHasA ? f0(tA) : '—'}</td>`
-    + `<td style="${RA}">${tHasS && tHasA ? f0(tS - tA) : '—'}</td><td></td><td></td></tr>`;
-  const note = anyStock ? '' : `<tr><td colspan="11" style="padding:10px 12px;font-size:12px;color:var(--text-muted);background:#f8fafc;">${m}월 월초 재고가 아직 입력되지 않았습니다 — 통합 파일 '입력' 시트의 <b>월초 재고</b> 열(H)에 월 1회 입력 후 다시 업로드하면 재고율·소진 예상일이 계산됩니다.</td></tr>`;
-  tbl.innerHTML = `<thead><tr><th style="text-align:left">Brand</th><th style="text-align:left">SKU</th><th style="${RA}">월초 재고</th><th style="${RA}">당월 FCST</th>`
-    + `<th style="${RA}" title="월초 재고 ÷ 당월 FCST">재고율</th><th style="${RA}" title="재고 ÷ 일 수요(영업일)">커버</th><th style="${RA}" title="보충 없을 때 재고가 바닥나는 날">소진 예상</th>`
-    + `<th style="${RA}">${m === act ? 'MTD' : '실적'}</th><th style="${RA}" title="월초 재고 − 실적 (월중 보충 입고 미반영)">잔여 추정</th><th style="${RA}" title="max(0, FCST − 월초 재고)">보충 필요</th><th style="text-align:left">상태</th></tr></thead>`
+  const tc = tHasS ? coverOf(tSC, tFC, tHasA ? tAC : null) : null;
+  body += `<tr class="td-section"><td></td><td>Total (재고 입력 SKU · 재고일수는 환산 c/s)</td><td style="${RA}">${tHasS ? f0(tS) : '—'}</td><td style="${RA}">${f0(tF)}</td><td style="${RA}">${tHasA ? f0(tA) : '—'}</td>`
+    + `<td style="${RA}">${tc ? fd(tc.dF) : '—'}</td><td style="${RA}">${tc ? fd(tc.dA) : '—'}</td><td></td>`
+    + `<td style="${RA}">${tHasS && tHasA ? f0(tS - tAs) : '—'}</td><td style="${RA}">${tFC > 0 ? Math.round(tSC / tFC * 100) + '%' : '—'}</td><td></td>`
+    + `<td>${tc ? `<span style="color:${ST[tc.status][1]};font-weight:700;font-size:11.5px;">${ST[tc.status][0]}</span>` : ''}</td></tr>`;
+  const note = anyStock ? '' : `<tr><td colspan="12" style="padding:10px 12px;font-size:12px;color:var(--text-muted);background:#f8fafc;">${m}월 월초 재고가 아직 입력되지 않았습니다 — 통합 파일 '입력' 시트의 <b>월초 재고</b> 열에 월 1회 입력 후 다시 업로드하면 재고일수·소진 예상일이 계산됩니다.</td></tr>`;
+  tbl.innerHTML = `<thead><tr><th style="text-align:left">Brand</th><th style="text-align:left">SKU</th><th style="${RA}">월초 재고</th><th style="${RA}">당월 FCST</th><th style="${RA}">${m === act ? 'MTD' : '실적'}</th>`
+    + `<th style="${RA}" title="월초 재고 ÷ (FCST ÷ 월 일수)">재고일수<br>(FCST)</th><th style="${RA}" title="월초 재고 ÷ (MTD ÷ 경과일수)">재고일수<br>(실적)</th><th style="${RA}" title="월 1일 + 재고일수(실적 우선) — 보충 없을 때">소진 예상</th>`
+    + `<th style="${RA}" title="월초 재고 − MTD · 음수 = 월중 입고분">월초 재고<br>− MTD</th><th style="${RA}" title="월초 재고 ÷ 당월 FCST">재고율</th><th style="${RA}" title="max(0, FCST − 월초 재고)">보충 필요</th><th style="text-align:left" title="실적 기준 우선 · 부족 < ${TH.short}일 · 과다 > ${TH.over}일">재고 상태</th></tr></thead>`
     + `<tbody>${note}${body}</tbody>`;
 
   // ── 주차별 FCST 제출 이력 ──
