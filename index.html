@@ -1543,15 +1543,23 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     var regions = _UP_DASH_REGIONS.filter(function(k){ return hl[k]; });
     Chart.defaults.color = 'rgba(255,255,255,.82)';
 
-    // ── Chart A Analysis Comment ──
-    var overFcst = regions.filter(function(k){ return hl[k].ap_fcst_ach >= 1.0; });
-    var underFcst = regions.filter(function(k){ return hl[k].ap_fcst_ach < 0.95; });
-    var topRegion = regions.reduce(function(a,b){ return hl[a].ap_fcst_ach > hl[b].ap_fcst_ach ? a : b; });
-    var botRegion = regions.reduce(function(a,b){ return hl[a].ap_fcst_ach < hl[b].ap_fcst_ach ? a : b; });
+    // ── Chart A Analysis Comment ── 지점 판정은 RoFo 기준 우선(그 달 RoFo 없으면 AP), AP는 참고로 병기
+    var _rRofo = function(k){ var v = hl[k] && hl[k].rofo_monthly ? hl[k].rofo_monthly[_sumMon - 1] : null; return (v != null && v > 0) ? v : null; };
+    var _rRofoAch = function(k){ var r = _rRofo(k); return (r && hl[k].this_week_fcst != null) ? hl[k].this_week_fcst / r : null; };
+    var _rBaseAch = function(k){ var a = _rRofoAch(k); return a != null ? a : hl[k].ap_fcst_ach; };
+    var _rBaseName = regions.some(function(k){ return _rRofoAch(k) != null; }) ? 'RoFo' : 'AP';
+    var overFcst = regions.filter(function(k){ return _rBaseAch(k) >= 1.0; });
+    var underFcst = regions.filter(function(k){ return _rBaseAch(k) < 0.95; });
+    var overAp = regions.filter(function(k){ return hl[k].ap_fcst_ach >= 1.0; });
+    var underAp = regions.filter(function(k){ return hl[k].ap_fcst_ach < 0.95; });
 
     document.getElementById('sum-chartA-comment').innerHTML =
-        (overFcst.length > 0 ? '<strong style="color:#4ade80;">AP 초과 지역 (Above AP):</strong> ' + overFcst.join(', ') + '<br>' : '')
-      + (underFcst.length > 0 ? '<strong style="color:#f87171;">AP 미달 지역 (Below AP):</strong> ' + underFcst.join(', ') + '<br>' : '')
+        (overFcst.length > 0 ? '<strong style="color:#4ade80;">' + _rBaseName + ' 초과 지역 (Above ' + _rBaseName + '):</strong> ' + overFcst.map(function(k){ return k + ' ' + _fmtPct(_rBaseAch(k)); }).join(', ') + '<br>' : '')
+      + (underFcst.length > 0 ? '<strong style="color:#f87171;">' + _rBaseName + ' 미달 지역 (Below ' + _rBaseName + '):</strong> ' + underFcst.map(function(k){ return k + ' ' + _fmtPct(_rBaseAch(k)); }).join(', ') + '<br>' : '')
+      + (_rBaseName === 'RoFo'
+          ? '<span style="color:rgba(255,255,255,.6);">참고 · AP 기준: '
+            + (overAp.length ? '초과 ' + overAp.join(', ') : '초과 없음') + (underAp.length ? ' / 미달 ' + underAp.join(', ') : '') + '</span><br>'
+          : '')
       + '<br>특히, '
       + (hl['DaeJeon'] && hl['DaeJeon'].fcst_growth_lym < -0.1 ? 'DaeJeon(전년 대비 -' + Math.abs((hl['DaeJeon'].fcst_growth_lym*100)).toFixed(1) + '%)과 ' : '')
       + (hl['GwangJu'] && hl['GwangJu'].fcst_growth_lym < -0.1 ? 'GwangJu(전년 대비 -' + Math.abs((hl['GwangJu'].fcst_growth_lym*100)).toFixed(1) + '%) ' : '')
@@ -1560,7 +1568,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     // Region badges
     document.getElementById('sum-region-badges').innerHTML = regions.map(function(k) {
       var d = hl[k];
-      var ach = d.ap_fcst_ach;
+      var ach = _rBaseAch(k), apAch = d.ap_fcst_ach;
       var ac = _achColor(ach);
       var ab = _achBadgeBg(ach);
       var lym = d.fcst_growth_lym || 0;
@@ -1570,7 +1578,8 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         + '<span style="color:#fff;font-size:12px;font-weight:600;margin-right:6px;">' + k + '</span>'
         + '<div style="display:flex;gap:10px;align-items:center;">'
         + '<span style="font-size:11px;font-weight:600;display:inline-flex;align-items:baseline;gap:6px;"><span style="color:rgba(255,255,255,.5);letter-spacing:.5px;">LYM</span><span style="color:' + lymColor + ';">' + gSign + (lym*100).toFixed(1) + '%</span></span>'
-        + '<span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:' + ab + ';color:' + ac + ';">' + _fmtPct(ach) + '</span>'
+        + '<span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:' + ab + ';color:' + ac + ';" title="This Wk FCST / ' + _rBaseName + '">' + _rBaseName + ' ' + _fmtPct(ach) + '</span>'
+        + (_rBaseName === 'RoFo' ? '<span style="font-size:10.5px;color:' + _achColor(apAch) + ';opacity:.85;" title="This Wk FCST / AP">AP ' + _fmtPct(apAch) + '</span>' : '')
         + '</div></div>';
     }).join('');
 
@@ -1858,7 +1867,8 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         + '<td>'+fmt1(d.this_week_fcst)+'</td>'
         + '<td style="color:var(--kn-text-mute);">'+fmt1(d.last_week_fcst)+'</td>'
         + '<td>'+wowCell(d)+'</td>'
-        + '<td><span class="wr-pill" style="background:'+(b.ach==null?'rgba(255,255,255,.06)':'rgba(0,0,0,.28)')+';color:'+ac+';">'+fmtPct(b.ach)+'</span> <span style="color:var(--kn-text-mute);font-size:10.5px;">'+b.name+'</span></td>'
+        + '<td>'+(b.name==='RoFo' ? '<span class="wr-pill" style="background:rgba(0,0,0,.28);color:'+ac+';">'+fmtPct(b.ach)+'</span>' : '<span style="color:#9ca3af;">—</span>')+'</td>'
+        + '<td style="color:'+achCol(d.ap_fcst_ach)+';">'+fmtPct(d.ap_fcst_ach)+'</td>'
         + '<td style="color:'+mtdC+';">'+fmtPct(d.fcst_mtd_ach)+'</td>'
         + '<td style="color:'+lymC+';">'+(lym==null?'—':(lym>=0?'+':'')+(lym*100).toFixed(1)+'%')+'</td>'
         + '</tr>';
@@ -1870,14 +1880,14 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
       .sort(function(a,b){ return b.mv - a.mv; });
 
     var head = '<thead><tr>'
-      + '<th>지점</th><th>This Wk<br>FCST</th><th>Last Wk<br>FCST</th><th>전주대비 (WoW)</th><th>FCST 달성률</th><th>MTD</th><th>vs LY</th>'
+      + '<th>지점</th><th>This Wk<br>FCST</th><th>Last Wk<br>FCST</th><th>전주대비 (WoW)</th><th>vs RoFo</th><th>vs AP</th><th>MTD</th><th>vs LY</th>'
       + '</tr></thead>';
     var body = rows.map(function(x){ return row(x.d, x.label, false); }).join('');
     var ttlRow = hl['TTL'] ? row(hl['TTL'], 'On Trade TTL', true) : '';
 
     box.innerHTML = '<div class="wr-tbl-wrap kn-card" style="padding:6px 4px;">'
       + '<table class="wr-tbl">'+head+'<tbody>'+body+ttlRow+'</tbody></table></div>'
-      + '<div style="margin-top:8px;font-size:11px;color:var(--kn-text-mute);">WoW = 이번 주 FCST − 지난 주 FCST · 달성률 = This Wk FCST ÷ (RoFo 있으면 RoFo, 없으면 AP) · 변동폭 큰 지점 순 정렬</div>';
+      + '<div style="margin-top:8px;font-size:11px;color:var(--kn-text-mute);">WoW = 이번 주 FCST − 지난 주 FCST · vs RoFo · vs AP = This Wk FCST ÷ 각 목표 (RoFo 우선) · 변동폭 큰 지점 순 정렬</div>';
   }
 
   // 발주패턴(Order Pattern) 기반 누적 진행률 — 완료된 월들의 주차별 발주분포 '연평균'으로
@@ -9617,11 +9627,12 @@ function renderSumMTDDiagnosis() {
     return               {label:'At Risk', color:'#f87171', bg:'rgba(248,113,113,.12)',  border:'rgba(248,113,113,.35)'};
   }
 
+  // RoFo가 우선 기준(그 달 RoFo 없으면 AP 폴백), AP는 그 다음 비교 기준
+  const mIdx      = (meta?.month || _UP_FCST_MONTH) - 1;
+  const rofoOf    = d => { const v = d?.rofo_monthly?.[mIdx]; return (v != null && v > 0) ? v : null; };
   const ttl       = hl['TTL'];
   const ttlGap    = (ttl.fcst_mtd_ach||0) - wdPct;
   const bColor    = ttlGap >= 0.02 ? '#4ade80' : ttlGap >= -0.05 ? '#fbbf24' : '#f87171';
-  const behindReg = REGIONS.filter(r => hl[r.key] && (hl[r.key].ap_mtd_ach - wdPct) < -0.05).map(r=>r.label);
-  const aheadReg  = REGIONS.filter(r => hl[r.key] && (hl[r.key].ap_mtd_ach - wdPct) >= 0.02).map(r=>r.label);
   const diagText  = ttlGap >= 0.02
     ? `WD Baseline 대비 ${fmtPp(ttlGap)} 앞서는 중 — 현재 페이스 유지 시 FCST 달성 가능`
     : ttlGap >= -0.05
@@ -9646,19 +9657,27 @@ function renderSumMTDDiagnosis() {
     const d = hl[r.key]; if (!d) return;
     const st          = getStatus(d);
     const gap         = (d.fcst_mtd_ach||0) - wdPct;   // 상태 칩 · 우측 vs WD 표시의 공통 기준
-    const expectedMTD = d.ap * wdPct;
+    const rofo        = rofoOf(d);
+    const rofoMtdAch  = (rofo && d.mtd_actual != null) ? d.mtd_actual / rofo : null;
+    const rofoFcstAch = (rofo && d.this_week_fcst != null) ? d.this_week_fcst / rofo : null;
+    const baseFcstAch = rofoFcstAch != null ? rofoFcstAch : d.ap_fcst_ach;   // 도넛 = FCST ÷ RoFo (없으면 AP)
+    const baseName    = rofoFcstAch != null ? 'RoFo' : 'AP';
+    const expectedMTD = (rofo != null ? rofo : d.ap) * wdPct;                // WD 기대치도 RoFo 기준
     const gapHL       = d.mtd_actual - expectedMTD;
-    const mtdBarW     = Math.min(d.ap_mtd_ach * 100, 100).toFixed(1);
+    const mtdBarW     = Math.min((d.ap_mtd_ach||0) * 100, 100).toFixed(1);
+    const rofoBarW    = Math.min((rofoMtdAch||0) * 100, 100).toFixed(1);
+    const barCol      = a => a == null ? 'rgba(255,255,255,.35)' : ((a - wdPct) >= 0.02 ? '#4ade80' : (a - wdPct) >= -0.05 ? '#fbbf24' : '#f87171');
     const fcstBarW    = Math.min((d.fcst_mtd_ach||0) * 100, 100).toFixed(1);
     const wdBarW      = Math.min(wdPct * 100, 100).toFixed(1);
     const fcstGap     = gap;   // Row2 FCST 바 색상도 같은 기준
     const fcstBarColor= fcstGap >= 0.02 ? '#4ade80' : fcstGap >= -0.05 ? '#60a5fa' : '#f87171';
-    const fcstColor   = d.ap_fcst_ach >= 1.0 ? '#4ade80' : d.ap_fcst_ach >= 0.9 ? '#fbbf24' : '#f87171';
+    const achCol      = a => a == null ? '#6b7280' : a >= 1.0 ? '#4ade80' : a >= 0.9 ? '#fbbf24' : '#f87171';
+    const fcstColor   = achCol(baseFcstAch);
     const gapHLColor  = gapHL >= 0 ? '#4ade80' : '#f87171';
 
     // 지역 도넛(FCST 달성률)을 행 좌측에 통합 — 옛 Regional 슬라이드의 고유 정보는 이 값 하나였다
     const dR = 26, dC = 2 * Math.PI * dR;
-    const dOff = dC * (1 - Math.min(d.ap_fcst_ach || 0, 1));
+    const dOff = dC * (1 - Math.min(baseFcstAch || 0, 1));
 
     html += `
       <div style="background:rgba(0,0,0,.5);border:1px solid ${st.border};border-left:3px solid ${st.color};border-radius:8px;padding:11px 18px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);display:grid;grid-template-columns:66px 1fr;gap:16px;align-items:center;">
@@ -9672,9 +9691,10 @@ function renderSumMTDDiagnosis() {
                       data-target-offset="${dOff}" data-full-offset="${dC}"
                       style="transition:stroke-dashoffset 1.2s cubic-bezier(.65,.05,.36,1);"/>
             </svg>
-            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${fcstColor};">${Math.round((d.ap_fcst_ach||0)*100)}%</div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:${fcstColor};">${Math.round((baseFcstAch||0)*100)}%</div>
           </div>
-          <div style="font-size:8.5px;letter-spacing:.4px;color:rgba(255,255,255,.45);white-space:nowrap;">FCST 달성</div>
+          <div style="font-size:8.5px;letter-spacing:.4px;color:rgba(255,255,255,.45);white-space:nowrap;">FCST vs ${baseName}</div>
+          ${baseName === 'RoFo' ? `<div style="font-size:9px;color:${achCol(d.ap_fcst_ach)};white-space:nowrap;">AP ${fmtPct(d.ap_fcst_ach)}</div>` : ''}
         </div>
 
         <div style="display:flex;flex-direction:column;gap:7px;min-width:0;">
@@ -9687,14 +9707,23 @@ function renderSumMTDDiagnosis() {
           <span style="color:${st.color};font-weight:600;font-size:12px;text-align:right;">vs WD Baseline ${fmtPp(gap)}</span>
         </div>
 
-        <!-- Row 2: AP bar | FCST bar | three numbers -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1.7fr;gap:18px;align-items:center;">
+        <!-- Row 2: RoFo bar | AP bar | FCST bar | numbers  (RoFo가 우선 기준) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 2.1fr;gap:14px;align-items:center;">
           <div>
             <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.7);margin-bottom:3px;">
-              <span>AP Basis</span><span style="color:${st.color};font-weight:700;">${fmtPct(d.ap_mtd_ach)}</span>
+              <span style="font-weight:700;color:#fff;">RoFo Basis</span><span style="color:${barCol(rofoMtdAch)};font-weight:700;">${fmtPct(rofoMtdAch)}</span>
             </div>
             <div style="background:rgba(255,255,255,.08);border-radius:3px;height:7px;position:relative;overflow:visible;">
-              <div class="kn-bar-fill" data-target-w="${mtdBarW}%" style="background:${st.color};height:100%;border-radius:3px;width:0;opacity:.85;transition:width 1s cubic-bezier(.65,.05,.36,1);"></div>
+              <div class="kn-bar-fill" data-target-w="${rofoBarW}%" style="background:${barCol(rofoMtdAch)};height:100%;border-radius:3px;width:0;opacity:.9;transition:width 1s cubic-bezier(.65,.05,.36,1);"></div>
+              <div style="position:absolute;top:-4px;left:${wdBarW}%;width:2px;height:15px;background:rgba(255,255,255,.55);border-radius:1px;" title="WD Baseline ${fmtPct(wdPct)}"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.7);margin-bottom:3px;">
+              <span>AP Basis</span><span style="color:${barCol(d.ap_mtd_ach)};font-weight:700;">${fmtPct(d.ap_mtd_ach)}</span>
+            </div>
+            <div style="background:rgba(255,255,255,.08);border-radius:3px;height:7px;position:relative;overflow:visible;">
+              <div class="kn-bar-fill" data-target-w="${mtdBarW}%" style="background:${barCol(d.ap_mtd_ach)};height:100%;border-radius:3px;width:0;opacity:.85;transition:width 1s cubic-bezier(.65,.05,.36,1);"></div>
               <div style="position:absolute;top:-4px;left:${wdBarW}%;width:2px;height:15px;background:rgba(255,255,255,.55);border-radius:1px;" title="WD Baseline ${fmtPct(wdPct)}"></div>
             </div>
           </div>
@@ -9707,13 +9736,17 @@ function renderSumMTDDiagnosis() {
               <div style="position:absolute;top:-4px;left:${wdBarW}%;width:2px;height:15px;background:rgba(255,255,255,.55);border-radius:1px;" title="WD Baseline ${fmtPct(wdPct)}"></div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1.25fr 1fr;gap:6px;">
+            <div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:5px 9px;">
+              <div style="color:rgba(255,255,255,.8);font-size:9px;letter-spacing:.3px;font-weight:700;">RoFo 목표</div>
+              <div style="color:#fff;font-weight:700;font-size:12px;">${fmt1(rofo)} <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></div>
+            </div>
             <div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:5px 9px;">
               <div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;">AP 목표</div>
               <div style="color:#fff;font-weight:700;font-size:12px;">${fmt1(d.ap)} <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></div>
             </div>
             <div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:5px 9px;">
-              <div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;">WD 기대치</div>
+              <div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;" title="${baseName} x 영업일 경과율">WD 기대치</div>
               <div style="display:flex;align-items:baseline;gap:5px;">
                 <span style="color:#fff;font-weight:700;font-size:12px;">${fmt1(expectedMTD)}</span>
                 <span style="color:${gapHLColor};font-size:9.5px;font-weight:600;">${gapHL>=0?'+':''}${gapHL.toFixed(0)} HL</span>
