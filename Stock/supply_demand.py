@@ -47,7 +47,10 @@ def _alias(sku, acct=None):
     return (SKU_ALIAS_ACCT.get(acct) or {}).get(sku) or SKU_ALIAS.get(sku, sku)
 
 SB_URL = "https://elqammnozbfhkitnncsz.supabase.co/rest/v1/"
-SB_KEY = "sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd"
+# 보안 B안 잠금 후에는 공개 키로 데이터가 안 읽힘 → 실행 시 비밀 키를 환경변수로:
+#   PowerShell: $env:SUPABASE_SECRET_KEY = "<Supabase 대시보드 → Project Settings → API Keys의 secret 키>"
+# (비밀 키는 파일·저장소·대화창에 절대 붙여넣지 말 것)
+SB_KEY = os.environ.get("SUPABASE_SECRET_KEY") or "sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd"
 MAP = json.load(open(os.path.join(HERE, "sku_map.json"), encoding="utf-8"))
 HLF = {v["sku"]: v["hl_per_case"] for v in MAP.values()}
 # 현재 재고 0이라 sku_map에 없지만 수요가 붙을 수 있는 SKU (HL->QTY 환산용)

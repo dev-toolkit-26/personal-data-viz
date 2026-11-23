@@ -8,6 +8,8 @@
 <title>KPI Dashboard 2026</title>
 <script src="chart.min.js"></script>
 <script src="xlsx.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="data_session.js?v=20261123"></script>
 <script>
 // ═══════════════════════════════════════════════════
 //  Supabase REST helpers
@@ -15,11 +17,14 @@
 const SUPA_URL='https://elqammnozbfhkitnncsz.supabase.co';
 const SUPA_KEY='sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd';
 const SH={apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY,'Content-Type':'application/json'};
+// 보안 B안: REST 요청은 DataSession.fetch로 — 비밀번호 통과 세션의 JWT로 나가고, 로그인 전에는 대기
+DataSession.init({url:SUPA_URL,key:SUPA_KEY});
+const _sbAuth=DataSession.attach(supabase.createClient(SUPA_URL,SUPA_KEY,{global:{fetch:DataSession.fetch}}));
 async function sGet(t,q){
   const PAGE=2000,all=[];
   let offset=0;
   while(true){
-    const r=await fetch(SUPA_URL+'/rest/v1/'+t+'?select=*&limit='+PAGE+'&offset='+offset+(q?'&'+q:''),{headers:SH});
+    const r=await DataSession.fetch(SUPA_URL+'/rest/v1/'+t+'?select=*&limit='+PAGE+'&offset='+offset+(q?'&'+q:''),{headers:SH});
     if(!r.ok)throw new Error(await r.text());
     const rows=await r.json();
     if(rows.length===0)break;
@@ -29,7 +34,7 @@ async function sGet(t,q){
   return all;
 }
 async function sDel(t,q){
-  const r=await fetch(SUPA_URL+'/rest/v1/'+t+(q?'?'+q:''),{method:'DELETE',headers:SH});
+  const r=await DataSession.fetch(SUPA_URL+'/rest/v1/'+t+(q?'?'+q:''),{method:'DELETE',headers:SH});
   if(!r.ok)throw new Error(await r.text());
 }
 async function sIns(t,d){
@@ -37,7 +42,7 @@ async function sIns(t,d){
   const CHUNK=500;
   for(let i=0;i<d.length;i+=CHUNK){
     const chunk=d.slice(i,i+CHUNK);
-    const r=await fetch(SUPA_URL+'/rest/v1/'+t,{method:'POST',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(chunk)});
+    const r=await DataSession.fetch(SUPA_URL+'/rest/v1/'+t,{method:'POST',headers:{...SH,'Prefer':'return=minimal'},body:JSON.stringify(chunk)});
     if(!r.ok)throw new Error(await r.text());
   }
 }
@@ -47,7 +52,7 @@ async function sIns(t,d){
 async function sReplaceMany(jobs){
   const maxIds=[];
   for(const [t] of jobs){
-    const r=await fetch(SUPA_URL+'/rest/v1/'+t+'?select=id&order=id.desc&limit=1',{headers:SH});
+    const r=await DataSession.fetch(SUPA_URL+'/rest/v1/'+t+'?select=id&order=id.desc&limit=1',{headers:SH});
     if(!r.ok)throw new Error(await r.text());
     const j=await r.json(); maxIds.push(j.length?j[0].id:0);
   }
@@ -67,7 +72,7 @@ async function sUpsert(t,d,onConflict){
   const url=SUPA_URL+'/rest/v1/'+t+(onConflict?('?on_conflict='+encodeURIComponent(onConflict)):'');
   for(let i=0;i<d.length;i+=CHUNK){
     const chunk=d.slice(i,i+CHUNK);
-    const r=await fetch(url,{method:'POST',headers:{...SH,'Prefer':'return=minimal,resolution=merge-duplicates'},body:JSON.stringify(chunk)});
+    const r=await DataSession.fetch(url,{method:'POST',headers:{...SH,'Prefer':'return=minimal,resolution=merge-duplicates'},body:JSON.stringify(chunk)});
     if(!r.ok)throw new Error(await r.text());
   }
 }
@@ -275,6 +280,51 @@ details.bfold[open]>summary{margin-bottom:12px}
 </style>
 </head>
 <body>
+<!-- 보안 B안: KPI 로그인 (On 대시보드와 같은 비밀번호·같은 세션) -->
+<div id="kpi-pw-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#0f1115;align-items:center;justify-content:center;font-family:Inter,'Segoe UI',sans-serif;">
+  <div style="width:min(340px,calc(100vw - 32px));background:#181b22;border:1px solid #2a2f3a;border-radius:14px;padding:28px 24px;color:#e5e7eb;">
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px;">KPI Dashboard 2026</div>
+    <div style="font-size:12.5px;color:#9ca3af;margin-bottom:16px;">On-Trade 대시보드 비밀번호로 로그인하세요.</div>
+    <input id="kpi-pw-input" type="password" autocomplete="current-password" placeholder="Password"
+      style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid #374151;background:#0f1115;color:#fff;font-size:14px;">
+    <div id="kpi-pw-error" style="display:none;color:#f87171;font-size:12px;margin-top:8px;"></div>
+    <button id="kpi-pw-btn" type="button" onclick="kpiCheckPw()"
+      style="width:100%;margin-top:12px;padding:10px;border:0;border-radius:8px;background:#16a34a;color:#fff;font-weight:600;font-size:14px;cursor:pointer;">Confirm</button>
+  </div>
+</div>
+<script>
+function _kpiScopeOK(sc){ return !sc || sc==='both' || sc==='on'; }
+(function kpiGate(){
+  const tok=sessionStorage.getItem('auth_token');
+  if(sessionStorage.getItem('auth')==='ok' && tok && _kpiScopeOK(sessionStorage.getItem('auth_scope'))){ DataSession.activate(tok); return; }
+  const ov=document.getElementById('kpi-pw-overlay'); ov.style.display='flex';
+  const inp=document.getElementById('kpi-pw-input');
+  inp.addEventListener('keydown',e=>{ if(e.key==='Enter') kpiCheckPw(); });
+  setTimeout(()=>inp.focus(),50);
+})();
+async function kpiCheckPw(){
+  const inp=document.getElementById('kpi-pw-input'), btn=document.getElementById('kpi-pw-btn'), err=document.getElementById('kpi-pw-error');
+  const val=inp.value; if(!val) return;
+  btn.disabled=true; btn.textContent='Verifying...'; err.style.display='none';
+  try{
+    const res=await fetch(SUPA_URL+'/functions/v1/validate-token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:val})});
+    const data=await res.json();
+    if(data.ok && _kpiScopeOK(data.scope)){
+      sessionStorage.setItem('auth','ok');
+      sessionStorage.setItem('auth_label',data.label||'');
+      sessionStorage.setItem('auth_admin',data.is_admin?'ok':'');
+      sessionStorage.setItem('auth_scope',data.scope||'both');
+      sessionStorage.setItem('auth_token',val);
+      await DataSession.activate(val);
+      document.getElementById('kpi-pw-overlay').style.display='none';
+    }else{
+      err.textContent=data.ok?'On-Trade 접근 권한이 없는 계정입니다.':'Incorrect password.';
+      err.style.display='block'; inp.value=''; inp.focus();
+    }
+  }catch(e){ err.textContent='Connection error. Please try again.'; err.style.display='block'; }
+  finally{ btn.disabled=false; btn.textContent='Confirm'; }
+}
+</script>
 <div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:16px">
   <div style="width:48px;height:48px;border:5px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></div>
   <div style="color:#fff;font-size:15px;font-weight:600">Supabase에서 데이터 로딩 중...</div>

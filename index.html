@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="data_session.js?v=20261123"></script>
 <script src="off_ingest.js"></script>
 <!-- Freight 모듈: 배포 후 캐시된 옛 버전이 보이지 않도록 시간 기반 쿼리(1시간 단위)로 로드 -->
 <script>/* 캐시버스터: 1분 버킷. 예전 1시간(3600000) 버킷은 같은 시간대에 여러 번 푸시하면
@@ -1094,6 +1095,9 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         sessionStorage.setItem('auth_scope', data.scope || 'both');
         sessionStorage.setItem('auth_token', val);
         sessionStorage.setItem('channel', 'on');
+        // 데이터 세션 권한 부여 → 대기 중이던 첫 데이터 로드가 끝난 뒤 요약 표시
+        await DataSession.activate(val);
+        if (window._bootLoad) { try { await window._bootLoad; } catch (e) {} }
         document.getElementById('pw-overlay').style.display = 'none';
         showSummary();
       } else if (data.ok) {
@@ -10732,7 +10736,10 @@ async function minutesDelete() {
 // ── Data Update Tab Auth ────────────────────────────────────────────────────
 const SUPABASE_URL    = 'https://elqammnozbfhkitnncsz.supabase.co';
 const SUPABASE_ANON   = 'sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd';
-const _supabase       = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// 보안 B안: 데이터 요청은 비밀번호 통과 세션(data_session.js)으로만 — 로그인 전 요청은 로그인까지 대기
+DataSession.init({ url: SUPABASE_URL, key: SUPABASE_ANON });
+const _supabase       = DataSession.attach(supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { global: { fetch: DataSession.fetch } }));
+if (sessionStorage.getItem('auth') === 'ok' && sessionStorage.getItem('auth_token')) DataSession.activate(sessionStorage.getItem('auth_token'));
 
 // Per-user identity helpers (auth_label/auth_admin set on login at index.html:715-716)
 function _currentOwner() { return sessionStorage.getItem('auth_label') || ''; }
@@ -11591,8 +11598,8 @@ function init() {
 }
 
 async function startOnTrade() {
-  await loadFromSupabase();
-  init();
+  window._bootLoad = (async function () { await loadFromSupabase(); init(); })();
+  return window._bootLoad;
 }
 (function bootstrap() {
   // 채널 선택 화면이 떠 있으면 대기 — On 카드 클릭 시 startOnTrade() 실행

@@ -18,6 +18,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../data_session.js?v=20261123"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
 <script src="tts-dictionary.js"></script>
 <!-- Off-Trade 베이스 데이터 (FCST 25Y/AP/RoFo from Account Volume 취합본). RoFo만 매달 갱신. -->
@@ -1009,6 +1010,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
         sessionStorage.setItem('auth_admin', data.is_admin ? 'ok' : '');
         sessionStorage.setItem('auth_scope', data.scope || 'both');
         sessionStorage.setItem('auth_token', val);
+        // 데이터 세션 권한 부여 → 대기 중이던 첫 데이터 로드가 끝난 뒤 요약 표시
+        await DataSession.activate(val);
+        if (window._bootLoad) { try { await window._bootLoad; } catch (e) {} }
         document.getElementById('pw-overlay').style.display = 'none';
         showSummary();
       } else if (data.ok) {
@@ -7175,7 +7179,10 @@ async function minutesDelete() {
 // ════════════════════════════════════════════════════════════════════════════
 const SUPABASE_URL    = 'https://elqammnozbfhkitnncsz.supabase.co';   // 통합: On-Trade 프로젝트 재사용
 const SUPABASE_ANON   = 'sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd';
-const _supabase       = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// 보안 B안: 데이터 요청은 비밀번호 통과 세션(../data_session.js)으로만 — 로그인 전 요청은 로그인까지 대기
+DataSession.init({ url: SUPABASE_URL, key: SUPABASE_ANON });
+const _supabase       = DataSession.attach(supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { global: { fetch: DataSession.fetch } }));
+if (sessionStorage.getItem('auth') === 'ok' && sessionStorage.getItem('auth_token')) DataSession.activate(sessionStorage.getItem('auth_token'));
 
 // Per-user identity helpers (auth_label/auth_admin set on login at index.html:715-716)
 function _currentOwner() { return sessionStorage.getItem('auth_label') || ''; }
@@ -10809,7 +10816,7 @@ setTimeout(_offUpdateDataStatus, 50);
 
 console.log('[Off] Tab override + Data Update 핸들러 로드 완료');
 
-(async function bootstrap() {
+window._bootLoad = (async function bootstrap() {
   await loadFromSupabase();
   init();
 })();

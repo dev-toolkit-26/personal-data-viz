@@ -15,7 +15,10 @@ import json, os, sys, copy, collections, urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 BACKUP = os.path.join(HERE, "backup", "off_snapshot_before_PA_rename.json")
 SB = "https://elqammnozbfhkitnncsz.supabase.co/rest/v1/off_dashboard_snapshots"
-KEY = "sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd"
+# 보안 B안 잠금 후에는 공개 키로 데이터가 안 읽힘 → 실행 시 비밀 키를 환경변수로:
+#   PowerShell: $env:SUPABASE_SECRET_KEY = "<Supabase 대시보드 → Project Settings → API Keys의 secret 키>"
+# (비밀 키는 파일·저장소·대화창에 절대 붙여넣지 말 것)
+KEY = os.environ.get("SUPABASE_SECRET_KEY") or "sb_publishable_WTQJ-31cuRjF21E2lbrdhA__8pzucpd"
 RENAME = {"PA ORI 500 Can": "PA WHE 500 Can",
           "PA XXX 500 Can": "PA HEL 500 Can",
           "PA ORI 20000 Keg": "PA WHE 20000 Keg"}
