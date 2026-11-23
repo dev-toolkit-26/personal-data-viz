@@ -9641,6 +9641,35 @@ function renderSumMTDDiagnosis() {
 
   let html = '';
 
+  // ─── On Trade 전체 요약 (RoFo 대비 → AP 대비) ─────────
+  {
+    const tRofo   = rofoOf(ttl);
+    const tFcst   = ttl.this_week_fcst, tMtd = ttl.mtd_actual;
+    const fRofo   = (tRofo && tFcst != null) ? tFcst / tRofo : null;
+    const fAp     = (ttl.ap && tFcst != null) ? tFcst / ttl.ap : null;
+    const mRofo   = (tRofo && tMtd != null) ? tMtd / tRofo : null;
+    const mAp     = (ttl.ap && tMtd != null) ? tMtd / ttl.ap : null;
+    const achC    = a => a == null ? 'rgba(255,255,255,.5)' : a >= 1.0 ? '#4ade80' : a >= 0.9 ? '#fbbf24' : '#f87171';
+    const mtdC    = a => a == null ? 'rgba(255,255,255,.5)' : (a - wdPct) >= 0.02 ? '#4ade80' : (a - wdPct) >= -0.05 ? '#fbbf24' : '#f87171';
+    const tile = (label, val, col, sub, main) => `
+      <div style="background:rgba(0,0,0,.5);border:1px solid ${main ? col : 'rgba(255,255,255,.1)'};border-top:3px solid ${col};border-radius:8px;padding:10px 14px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);">
+        <div style="font-size:10.5px;letter-spacing:.4px;color:rgba(255,255,255,${main ? '.85' : '.6'});font-weight:${main ? 700 : 500};">${label}</div>
+        <div style="font-size:${main ? 26 : 22}px;font-weight:800;color:${col};line-height:1.15;margin:3px 0 2px;">${fmtPct(val)}</div>
+        <div style="font-size:10.5px;color:rgba(255,255,255,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sub}</div>
+      </div>`;
+    html += `
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px;">
+        <span style="font-size:13px;font-weight:700;color:#fff;">On Trade 전체</span>
+        <span style="font-size:11px;color:rgba(255,255,255,.55);">This Wk FCST ${fmt1(tFcst)} HL · MTD ${fmt1(tMtd)} HL · 영업일 경과 ${fmtPct(wdPct)}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;">
+        ${tile('FCST 달성률 · vs RoFo', fRofo, achC(fRofo), `RoFo ${fmt1(tRofo)} HL · 차이 ${tRofo != null && tFcst != null ? (tFcst - tRofo >= 0 ? '+' : '') + fmt1(tFcst - tRofo) + ' HL' : '-'}`, true)}
+        ${tile('FCST 달성률 · vs AP', fAp, achC(fAp), `AP ${fmt1(ttl.ap)} HL · 차이 ${ttl.ap != null && tFcst != null ? (tFcst - ttl.ap >= 0 ? '+' : '') + fmt1(tFcst - ttl.ap) + ' HL' : '-'}`, false)}
+        ${tile('MTD 진척률 · vs RoFo', mRofo, mtdC(mRofo), `영업일 경과 ${fmtPct(wdPct)} 대비 ${mRofo != null ? fmtPp(mRofo - wdPct) : '-'}`, true)}
+        ${tile('MTD 진척률 · vs AP', mAp, mtdC(mAp), `영업일 경과 ${fmtPct(wdPct)} 대비 ${mAp != null ? fmtPp(mAp - wdPct) : '-'}`, false)}
+      </div>`;
+  }
+
   // ─── Banner ────────────────────────────────────────
   html += `
     <div style="background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-left:3px solid ${bColor};border-radius:8px;padding:11px 18px;margin-bottom:14px;display:grid;grid-template-columns:auto 1fr;gap:4px 20px;font-size:13px;line-height:1.6;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);">
