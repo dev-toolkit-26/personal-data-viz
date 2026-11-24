@@ -7,3 +7,6 @@ __pycache__/
 !On_Trade_BD_template.xlsx
 _excluded/
 DSR/
+
+# Weekly Review 공유 폴더 (로컬 전용, 푸시 금지)
+.weekly-review/
