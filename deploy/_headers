@@ -1,0 +1,16 @@
+# Cloudflare Pages 응답 헤더
+# · 검색엔진 색인 금지
+# · HTML·JS는 매번 새 버전 확인(no-cache = 저장은 하되 쓰기 전에 서버에 변경 여부 확인)
+#   → GitHub Pages 시절 "푸시했는데 반영 안 됨"(브라우저 캐시) 방지
+/*
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: same-origin
+
+/*.html
+  Cache-Control: no-cache
+
+/*.js
+  Cache-Control: no-cache
+
+/
+  Cache-Control: no-cache
