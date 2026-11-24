@@ -1083,6 +1083,15 @@ td:first-child, td:nth-child(2) { text-align: left; }
     function achC(v){ if(v==null) return '#6b7280'; return v>=0.95?'#4ade80':v>=0.90?'#fbbf24':'#f87171'; }
     function achBg(v){ if(v==null) return 'rgba(255,255,255,.08)'; return v>=0.95?'rgba(74,222,128,.15)':v>=0.90?'rgba(251,191,36,.15)':'rgba(248,113,113,.15)'; }
     function mv(m, f){ return (m && m[f] && m[f][ci] != null) ? m[f][ci] : 0; }   // 당월 값
+    // Off 전체(ex-ALSM) 월별 지표 = OFF.total(코어: E-com·Military·DF 제외) − ALSM 채널
+    function _offExAlsm(){
+      var T0 = OFF.total || {}, A0 = ((OFF.channels||[]).find(function(c){ return c.key==='ALSM'; })||{}).m || {}, out = {};
+      ['act_m','fcst_m','rofo_m','ly_m'].forEach(function(f){
+        var t = T0[f] || [], a = A0[f] || [];
+        out[f] = t.map(function(v, i){ return v == null ? null : v - (a[i] || 0); });
+      });
+      return out;
+    }
 
     // ── Slide 0: Hero + KPI (기준: 당월 FCST) ──
     var tAct = mv(T,'act_m'), tFcst = mv(T,'fcst_m'), tRofo = mv(T,'rofo_m'), tLy = mv(T,'ly_m');   // Off 전체(코어채널, ALSM 포함) — Slide 1·2 공용
@@ -1210,19 +1219,21 @@ td:first-child, td:nth-child(2) { text-align: left; }
           +'<div style="position:absolute;top:-4px;left:'+wdW+'%;width:2px;height:15px;background:rgba(255,255,255,.55);border-radius:1px;" title="WD Baseline '+fPct(wdPct)+'"></div></div></div>';
       };
       var _box=function(lbl,val,color){ return '<div style="background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.08);border-radius:4px;padding:5px 9px;"><div style="color:rgba(255,255,255,.55);font-size:9px;letter-spacing:.3px;">'+lbl+'</div><div style="color:'+color+';font-weight:700;font-size:12px;">'+fHL(val)+' <span style="color:rgba(255,255,255,.4);font-size:9px;font-weight:400;">HL</span></div></div>'; };
-      var mtdRofoT=tRofo?tAct/tRofo:null, tGap=(tAct>0&&tRofo)?tAct/tRofo-wdPct:null, tSt=_stGap(tGap), bC=tSt.color;
-      var expTtl=(tRofo!=null)?tRofo*wdPct:null, gapHLttl=(tAct>0&&expTtl!=null)?tAct-expTtl:null, gapCttl=(gapHLttl!=null&&gapHLttl>=0)?'#4ade80':'#f87171';  // WD 기대 MTD(HL) & 갭
+      // 총계는 첫 슬라이드와 같은 정의: Off 전체 = 코어 채널(E-com·Military·DF 제외) − ALSM → x* 사용
+      var mtdRofoT=xRofo?xAct/xRofo:null, tGap=(xAct>0&&xRofo)?xAct/xRofo-wdPct:null, tSt=_stGap(tGap), bC=tSt.color;
+      var expTtl=(xRofo!=null)?xRofo*wdPct:null, gapHLttl=(xAct>0&&expTtl!=null)?xAct-expTtl:null, gapCttl=(gapHLttl!=null&&gapHLttl>=0)?'#4ade80':'#f87171';  // WD 기대 MTD(HL) & 갭
       var dhtml='';
       // 배너 (On-Trade 동일)
       dhtml+='<div style="background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);border-left:3px solid '+bC+';border-radius:8px;padding:11px 18px;margin-bottom:14px;display:grid;grid-template-columns:auto 1fr;gap:4px 20px;font-size:13px;line-height:1.6;">'
         +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📅 영업일 진행률</span>'
         +'<span style="color:rgba(255,255,255,.75);"><strong style="color:#fff;">'+_wd.elapsed+'일 / '+_wd.total+'일 ('+fPct(wdPct)+')</strong> 경과 — MTD 기대 기준선</span>'
-        +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📈 TTL MTD</span>'
-        +'<span style="color:rgba(255,255,255,.75);"><strong style="color:'+bC+';">'+fHL(tAct)+' HL</strong> · RoFo 대비 <strong style="color:'+bC+';">'+fPct(mtdRofoT)+'</strong> (vs WD Baseline <strong style="color:'+bC+';">'+_pp(tGap)+'</strong>) · WD 기대 <strong style="color:#fff;">'+fHL(expTtl)+' HL</strong>'+(gapHLttl!=null?' (<span style="color:'+gapCttl+';font-weight:700;">'+(gapHLttl>=0?'+':'')+gapHLttl.toFixed(0)+' HL</span>)':'')+(tAct>0?'':' — 실적 집계 전')+'</span>'
+        +'<span style="color:rgba(255,255,255,.75);white-space:nowrap;">📈 Off 전체 MTD</span>'
+        +'<span style="color:rgba(255,255,255,.75);"><strong style="color:'+bC+';">'+fHL(xAct)+' HL</strong> · RoFo 대비 <strong style="color:'+bC+';">'+fPct(mtdRofoT)+'</strong> (vs WD Baseline <strong style="color:'+bC+';">'+_pp(tGap)+'</strong>) · WD 기대 <strong style="color:#fff;">'+fHL(expTtl)+' HL</strong>'+(gapHLttl!=null?' (<span style="color:'+gapCttl+';font-weight:700;">'+(gapHLttl>=0?'+':'')+gapHLttl.toFixed(0)+' HL</span>)':'')+(xAct>0?'':' — 실적 집계 전')+'</span>'
+        +'<span></span><span style="color:rgba(255,255,255,.5);font-size:11px;">Off 전체 = ALSM·군납(Military)·DF·E-com 제외 (첫 슬라이드와 동일 기준) · ALSM은 아래 채널 행에 별도 표시</span>'
         +'</div>';
       dhtml+='<div style="display:flex;flex-direction:column;gap:8px;">';
-      // Off 전체(코어채널 합계 = OFF.total, 배너와 동일 수치)를 CVS 위 맨 앞에 총계 행으로 추가
-      var offTtlRow = { key:'Off 전체', label:'Off 전체', m:(OFF.total||{}), accounts:[], _ttl:true };
+      // Off 전체(= 코어채널 − ALSM, 배너·첫 슬라이드와 동일 수치)를 CVS 위 맨 앞에 총계 행으로 추가
+      var offTtlRow = { key:'Off 전체', label:'Off 전체 <span style="font-size:10px;font-weight:500;color:rgba(255,255,255,.55);">ex-ALSM</span>', m:_offExAlsm(), accounts:[], _ttl:true };
       [offTtlRow].concat(chans).forEach(function(c){
         var cm=c.m||{}; var cRo=mv(cm,'rofo_m'), cFc=mv(cm,'fcst_m'), cAc=mv(cm,'act_m');
         var mRo=cRo?cAc/cRo:null, mFc=cFc?cAc/cFc:null;
@@ -1323,7 +1334,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
       (accts||[]).forEach(function(n){ var a=acctWeekly(ch,n); if(a){ for(var w=0;w<5;w++){ sum[w]+=(a[w]||0); if(a[w]) any=true; } } });
       return any ? sum : null;
     }
-    var coreChans = (OFF.channels||[]).filter(function(c){ return _offInTtl(c); });
+    // Off 전체 = 코어 채널(E-com·Military·DF 제외)에서 ALSM까지 뺀 범위 — 첫 슬라이드와 같은 기준
+    var coreChans = (OFF.channels||[]).filter(function(c){ return _offInTtl(c) && c.key !== 'ALSM'; });
     var ttlWeekly = (function(){
       var sum=[0,0,0,0,0], any=false;
       coreChans.forEach(function(c){ var w=chanWeekly(c.key,(c.accounts||[]).map(function(a){return a.name;})); if(w){ for(var i=0;i<5;i++){ sum[i]+=w[i]; if(w[i]) any=true; } } });
@@ -1358,7 +1370,9 @@ td:first-child, td:nth-child(2) { text-align: left; }
 
     // ── ① 헤드라인 (Off TTL, 현재 주 vs 직전 주) ──
     var tw = wow(ttlWeekly);
-    var tFcstM = mv(T,'fcst_m'), tRofoM = mv(T,'rofo_m'), tActM = mv(T,'act_m'), tLyM = mv(T,'ly_m');
+    var _A = ((OFF.channels||[]).find(function(c){ return c.key==='ALSM'; })||{}).m;
+    var tFcstM = mv(T,'fcst_m')-mv(_A,'fcst_m'), tRofoM = mv(T,'rofo_m')-mv(_A,'rofo_m'),
+        tActM  = mv(T,'act_m')-mv(_A,'act_m'),   tLyM   = mv(T,'ly_m')-mv(_A,'ly_m');   // ex-ALSM
     var fcstRofo = tRofoM ? tFcstM/tRofoM : null;
     var yoy = (tLyM && tFcstM) ? tFcstM/tLyM - 1 : null;
     var wc = tw.differ==null ? '#9ca3af' : tw.differ>0 ? '#4ade80' : tw.differ<0 ? '#f87171' : '#9ca3af';
@@ -1368,7 +1382,8 @@ td:first-child, td:nth-child(2) { text-align: left; }
     var wkTrend = ttlWeekly.slice(0,cwIdx+1).map(function(v,i){ return 'W'+(i+1)+' '+f1(v); }).join(' · ');
     if (box1) box1.innerHTML =
         '<div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;">'
-      +   '<span style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px;">'+monName+' '+cwLabel+' 주간 FCST '+f1(tw.thisWk)+' HL</span>'
+      +   '<span style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-.5px;">'+monName+' '+cwLabel+' Off 전체 주간 FCST '+f1(tw.thisWk)+' HL</span>'
+      +   '<span style="font-size:11px;color:var(--kn-text-mute);">ex-ALSM · 군납·DF·E-com 제외</span>'
       +   '<span style="font-size:15px;font-weight:700;color:'+wc+';">'+wIco+' 전주('+pwLabel+') 대비 '+wTxt+'</span>'
       + '</div>'
       + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
@@ -1409,10 +1424,10 @@ td:first-child, td:nth-child(2) { text-align: left; }
         +'<td style="color:'+yc+';">'+pctd(r.yoy)+'</td>'
         +'</tr>';
     }
-    var ttlRow = { label:'Off TTL', w:tw, fc:tFcstM, fcstRofo:fcstRofo, mtdRofo:(tRofoM?tActM/tRofoM:null), yoy:yoy };
+    var ttlRow = { label:'Off 전체 (ex-ALSM)', w:tw, fc:tFcstM, fcstRofo:fcstRofo, mtdRofo:(tRofoM?tActM/tRofoM:null), yoy:yoy };
     var head = '<thead><tr><th>채널</th><th>This Wk<br>'+cwLabel+'</th><th>Last Wk<br>'+pwLabel+'</th><th>전주대비 (WoW)</th><th>월 FCST</th><th>FCST 달성률</th><th>MTD</th><th>vs LY</th></tr></thead>';
     if (box2) box2.innerHTML = '<div class="wr-tbl-wrap kn-card" style="padding:6px 4px;"><table class="wr-tbl">'+head+'<tbody>'+chanRows.map(function(r){return rowHtml(r,false);}).join('')+rowHtml(ttlRow,true)+'</tbody></table></div>'
-      + '<div style="margin-top:8px;font-size:11px;color:var(--kn-text-mute);">WoW = 이번 주('+cwLabel+') 주간 FCST − 직전 주('+pwLabel+') · 달성률 = 월 FCST ÷ RoFo · 변동폭 큰 채널 순 정렬 · 주간 FCST(W1~W5, HL) 기준 · TTL은 코어 채널 합계(E-com·DF·Military 제외)</div>';
+      + '<div style="margin-top:8px;font-size:11px;color:var(--kn-text-mute);">WoW = 이번 주('+cwLabel+') 주간 FCST − 직전 주('+pwLabel+') · 달성률 = 월 FCST ÷ RoFo · 변동폭 큰 채널 순 정렬 · 주간 FCST(W1~W5, HL) 기준 · Off 전체 = ALSM·군납(Military)·DF·E-com 제외(첫 슬라이드와 동일), ALSM은 채널 행에 별도</div>';
 
     // ── ③ 이번 주 업데이트 요약 ──
     if (box3) {
