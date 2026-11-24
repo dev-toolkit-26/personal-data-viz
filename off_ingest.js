@@ -119,6 +119,7 @@
       throw new Error('필수 컬럼 누락: Group=' + cGrp + ' SKU=' + cSku + ' HL=' + cHl + ' Date=' + cDate + ' Month=' + cMon);
     }
     const aggHl = {}, aggQt = {}, aggNv = {};
+    const alsmReg = {};   // ALSM 권역별 HL: alsmReg[권역][sku] = [12]. Off rows는 계정 ALSM 하나로 합치지만 On ALSM 분석용으로 권역을 따로 보관.
     let total = 0, skipped = 0, yearMatched = 0, yearSeen = new Set();
     const monthsSeen = new Set();   // 이 업로드가 커버하는 월 인덱스(증분 병합용)
     for (let R = range.s.r + 1; R <= range.e.r; R++) {
@@ -169,11 +170,54 @@
       aggHl[k][mi] += hlN;
       aggQt[k][mi] += qtN;
       aggNv[k][mi] += nvN;
+      if (acKey === 'ALSM') {
+        const reg = alsmRegionOf(grp);
+        const rs = (alsmReg[reg] = alsmReg[reg] || {});
+        (rs[sku] = rs[sku] || Array(12).fill(0))[mi] += hlN;
+      }
       monthsSeen.add(mi);
     }
     const months = [...monthsSeen].sort((a, b) => a - b);
     console.log('[OffIngest DSR] 총 ' + total + '행 / 매칭 ' + yearMatched + '행 (연도 ' + expectedYear + ') / 무시 ' + skipped + '행 / 조합 ' + Object.keys(aggHl).length + ' / 커버월(0-based) [' + months.join(',') + '] / 감지 연도 [' + [...yearSeen].join(',') + ']');
-    return { HL: aggHl, Qty: aggQt, NSV: aggNv, total, matched: yearMatched, skipped, year: expectedYear, months };
+    return { HL: aggHl, Qty: aggQt, NSV: aggNv, alsmReg, total, matched: yearMatched, skipped, year: expectedYear, months };
+  }
+
+  // DSR Group 'ALSM Seoul' / 'ALSM CHN' / 'ALSM YN' → 권역 키 'Seoul' / 'CHN' / 'YN'
+  function alsmRegionOf(grp) {
+    const r = String(grp || '').replace(/^ALSM/i, '').trim();
+    return r || 'ETC';
+  }
+
+  // ALSM 권역 실적을 store(= Off 스냅샷 data.alsm_region)에 월 단위 병합(mutate).
+  //  store = { act:{권역:{sku:[12]}}, ly:{…}, updated_at }. kind='act'|'ly'. months(0-based)만 덮어쓰고 나머지 월 보존.
+  //  Off rows/채널 합계에는 영향 없음 — On의 ALSM 채널 분석 전용 보조 데이터.
+  function applyAlsmRegion(store, res, kind, months) {
+    if (!store[kind] || typeof store[kind] !== 'object') store[kind] = {};
+    const tgt = store[kind], src = res.alsmReg || {};
+    const mlist = months || [];
+    if (!mlist.length) return { months: [] };
+    for (const reg in tgt) for (const sku in tgt[reg]) { const a = tgt[reg][sku]; if (Array.isArray(a)) for (const mi of mlist) a[mi] = 0; }
+    for (const reg in src) {
+      tgt[reg] = tgt[reg] || {};
+      for (const sku in src[reg]) {
+        if (!Array.isArray(tgt[reg][sku])) tgt[reg][sku] = Array(12).fill(0);
+        for (const mi of mlist) tgt[reg][sku][mi] = src[reg][sku][mi] || 0;
+      }
+    }
+    store.updated_at = new Date().toISOString();
+    return { months: mlist };
+  }
+  // store[kind]의 월별 권역 합계(HL) [12]
+  function alsmRegionMonthTotals(store, kind) {
+    const out = Array(12).fill(0), t = (store && store[kind]) || {};
+    for (const reg in t) for (const sku in t[reg]) { const a = t[reg][sku]; if (Array.isArray(a)) for (let i = 0; i < 12; i++) out[i] += a[i] || 0; }
+    return out;
+  }
+  // res(파싱 결과)의 월별 권역 합계(HL) [12]
+  function alsmResMonthTotals(res) {
+    const out = Array(12).fill(0), t = (res && res.alsmReg) || {};
+    for (const reg in t) for (const sku in t[reg]) { const a = t[reg][sku]; for (let i = 0; i < 12; i++) out[i] += a[i] || 0; }
+    return out;
   }
 
   // 집계 결과(res)를 Off rows 배열에 **월 단위 병합**(mutate). isLy → ly_*, else act_*.
@@ -424,6 +468,7 @@
   global.OffIngest = {
     parseDsrWorkbook, applyDsrToRows, parseVolumeRofo, distributeChannelRofo,
     parseDsrOrderPattern, applyOrderPatternToPattern,
+    applyAlsmRegion, alsmRegionMonthTotals, alsmResMonthTotals, alsmRegionOf,
     normalizeOffSku,
     _OFF_TR_CH_MAP, _OFF_TR_AC_MAP, _OFF_GRP_CH, _VOL_CH_MAP, _OFF_SKU_ALIAS, _OFF_SKU_ALIAS_BY_ACCT,
     _offFindColByHeader, _offCellStr, _offCellNum

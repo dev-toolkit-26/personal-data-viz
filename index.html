@@ -983,6 +983,9 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         <div class="kn-section-label">지점별 전주대비 FCST 변동</div>
         <div id="wr-regional-body" style="margin-bottom:24px;"></div>
 
+        <div class="kn-section-label">ALSM — 별도 채널 <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:.7;">(On Trade TTL 미합산 · 권역 = 실적 기준)</span></div>
+        <div id="wr-alsm-body" style="margin-bottom:24px;"></div>
+
         <div class="kn-section-label">이번 주 업데이트 요약</div>
         <div id="wr-weekly-body" class="kn-card" style="padding:18px 22px;"></div>
       </div>
@@ -1779,6 +1782,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     // ── Slide 4: Weekly Report (전주대비 요약 · 지점별 WoW · 주간 요약 · KPI) ──
     renderWoWHeadline();
     renderRegionalWoW();
+    renderAlsmWeekly();          // async — Off 스냅샷의 ALSM(별도 채널)
     renderWeeklyUpdateSummary();
     renderCloseRiskAnalysis();   // async — 쇼트/폐기 위험(재고 커버리지)
   }
@@ -1892,6 +1896,63 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     box.innerHTML = '<div class="wr-tbl-wrap kn-card" style="padding:6px 4px;">'
       + '<table class="wr-tbl">'+head+'<tbody>'+body+ttlRow+'</tbody></table></div>'
       + '<div style="margin-top:8px;font-size:11px;color:var(--kn-text-mute);">WoW = 이번 주 FCST − 지난 주 FCST · vs RoFo · vs AP = This Wk FCST ÷ 각 목표 (RoFo 우선) · 변동폭 큰 지점 순 정렬</div>';
+  }
+
+  // ②-b ALSM (별도 채널) — Off 스냅샷에서 읽음, On TTL 미합산. 합계는 FCST·RoFo·실적, 권역은 실적(MTD·YTD YoY)만.
+  async function renderAlsmWeekly() {
+    var box = document.getElementById('wr-alsm-body');
+    if (!box || typeof _alsmLoad !== 'function') return;
+    if (!window._ALSM || window._ALSM.error) { box.innerHTML = '<div class="kn-card" style="padding:14px 18px;color:var(--kn-text-mute);font-size:12.5px;">ALSM 불러오는 중…</div>'; await _alsmLoad(); }
+    var A = window._ALSM;
+    if (!A || A.error) { box.innerHTML = '<div class="kn-card" style="padding:14px 18px;color:var(--kn-text-mute);font-size:12.5px;">ALSM 데이터를 불러오지 못했습니다' + (A && A.error ? ' (' + A.error + ')' : '') + '.</div>'; return; }
+    var ci = _alsmCurIdx(), wd = DASHBOARD_DATA.wd_progress || {};
+    var f1 = function(v){ return v!=null && isFinite(v) ? (+v).toLocaleString('ko-KR',{maximumFractionDigits:1}) : '—'; };
+    var pct = function(v){ return v!=null && isFinite(v) ? (v*100).toFixed(1)+'%' : '—'; };
+    var yy  = function(v){ return v!=null && isFinite(v) ? (v>=0?'+':'')+(v*100).toFixed(1)+'%' : '—'; };
+    var gc  = function(v){ return v==null ? '#9ca3af' : v>=0 ? '#4ade80' : '#f87171'; };
+    var achCol = function(v){ return v==null ? '#9ca3af' : v>=1.0 ? '#4ade80' : v>=0.9 ? '#fbbf24' : '#f87171'; };
+    var ytdEnd = ci - 1, ytdLbl = ytdEnd >= 0 ? (ytdEnd===0 ? '1월' : '1~'+(ytdEnd+1)+'월') : '—';
+
+    var wk = _alsmWeek(A, ci);
+    var fc = A.fcst[ci] > 0 ? A.fcst[ci] : (wk ? wk.tw : 0), ro = A.rofo[ci], act = A.act[ci], lyM = A.ly[ci];
+    var sig = _alsmSignal(act, fc, wd.pct);
+    var ytdA = _alsmSum(A.act, 0, ytdEnd), ytdL = _alsmSum(A.ly, 0, ytdEnd), ytdYo = ytdL > 0 ? ytdA/ytdL - 1 : null;
+
+    function wowCell(){
+      if (!wk) return '<span style="color:#9ca3af;">미제출</span>';
+      if (wk.d == null) return '<span style="color:#9ca3af;">첫 제출</span>';
+      var c = wk.d>0?'#4ade80':wk.d<0?'#f87171':'#9ca3af', arw = wk.d>0?'▲':wk.d<0?'▼':'–';
+      return '<span class="wr-delta" style="color:'+c+';">'+arw+' '+(wk.d>0?'+':'')+f1(wk.d)+' HL'+(wk.pct!=null?' <span style="opacity:.75;">('+yy(wk.pct)+')</span>':'')+'</span>';
+    }
+    var sigPill = sig ? ' <span class="wr-pill" style="background:rgba(0,0,0,.28);color:'+sig.c+';" title="MTD÷FCST − 영업일 경과율 = '+(sig.gap>=0?'+':'')+(sig.gap*100).toFixed(0)+'%p">'+sig.lbl+'</span>' : '';
+    var dash = '<td style="color:var(--kn-text-mute);">—</td>';
+    var head = '<thead><tr><th>구분</th><th>This Wk<br>FCST'+(wk?' (W'+(wk.cw+1)+')':'')+'</th><th>Last Wk<br>FCST</th><th>전주대비 (WoW)</th><th>vs RoFo</th>'
+      + '<th>MTD<br>(÷FCST · 신호)</th><th>vs LY<br>(월)</th><th>YTD vs LY<br>('+ytdLbl+')</th></tr></thead>';
+    var ttlRow = '<tr class="is-ttl"><td class="wr-reg">ALSM 합계</td>'
+      + '<td>'+f1(fc)+'</td><td style="color:var(--kn-text-mute);">'+(wk && wk.lw!=null ? f1(wk.lw) : '—')+'</td><td>'+wowCell()+'</td>'
+      + '<td>'+(ro>0 ? '<span class="wr-pill" style="background:rgba(0,0,0,.28);color:'+achCol(fc/ro)+';">'+pct(fc/ro)+'</span>' : '<span style="color:#9ca3af;">—</span>')+'</td>'
+      + '<td>'+f1(act)+'<div style="font-size:10.5px;color:var(--kn-text-mute);margin-top:2px;white-space:nowrap;">'+(fc>0?pct(act/fc):'')+sigPill+'</div></td>'
+      + '<td style="color:'+gc(lyM>0?fc/lyM-1:null)+';">'+yy(lyM>0?fc/lyM-1:null)+'</td>'
+      + '<td style="color:'+gc(ytdYo)+';">'+yy(ytdYo)+'</td></tr>';
+    var regTot = 0; (A.regions||[]).forEach(function(r){ regTot += r.act[ci]||0; });
+    var regRows = (A.regions||[]).map(function(r){
+      var ya = _alsmSum(r.act,0,ytdEnd), yl = _alsmSum(r.ly,0,ytdEnd), yo = yl>0 ? ya/yl-1 : null;
+      return '<tr><td class="wr-reg" style="padding-left:18px;">└ '+r.key+'</td>'+dash+dash+dash+dash
+        + '<td>'+f1(r.act[ci]||0)+'<div style="font-size:10.5px;color:var(--kn-text-mute);margin-top:2px;">'+(regTot>0?'비중 '+Math.round((r.act[ci]||0)/regTot*100)+'%':'')+'</div></td>'+dash
+        + '<td style="color:'+gc(yo)+';">'+yy(yo)+'</td></tr>';
+    }).join('');
+
+    // 한 줄 진단
+    var notes = [];
+    if (sig) notes.push('MTD '+f1(act)+' HL = FCST의 '+pct(act/fc)+' (영업일 경과 '+Math.round((wd.pct||0)*100)+'%) → <b style="color:'+sig.c+';">'+sig.lbl+'</b>');
+    if (ro>0 && fc>0) notes.push('FCST가 RoFo 대비 <b style="color:'+(fc-ro>=0?'#4ade80':'#f87171')+';">'+(fc-ro>=0?'+':'')+f1(fc-ro)+' HL</b>');
+    var regYo = (A.regions||[]).map(function(r){ var yl=_alsmSum(r.ly,0,ytdEnd); return { k:r.key, yo: yl>0 ? _alsmSum(r.act,0,ytdEnd)/yl-1 : null }; }).filter(function(x){ return x.yo!=null; }).sort(function(a,b){ return a.yo-b.yo; });
+    if (regYo.length) notes.push('YTD 최약 권역 <b style="color:'+gc(regYo[0].yo)+';">'+regYo[0].k+' '+yy(regYo[0].yo)+'</b>');
+    var noReg = !(A.regions||[]).length ? ' · <span style="color:#fbbf24;">권역 실적 미생성 — 통합 DSR 재업로드 1회 필요</span>' : '';
+
+    box.innerHTML = '<div class="wr-tbl-wrap kn-card" style="padding:6px 4px;"><table class="wr-tbl">'+head+'<tbody>'+ttlRow+regRows+'</tbody></table></div>'
+      + (notes.length ? '<div style="margin-top:8px;font-size:12px;color:var(--kn-text-dim);line-height:1.7;">'+notes.join(' · ')+'</div>' : '')
+      + '<div style="margin-top:6px;font-size:11px;color:var(--kn-text-mute);">원천 = Off 스냅샷(ALSM 주간 FCST·P0X RoFo·통합 DSR) · On Trade TTL·지점 수치에 미합산 · 권역 FCST·RoFo는 없음(합계로 관리) · 신호등: −5%p 이내 유효 / −5~−10%p 주의 / 그 이상 깨짐 · 상세는 Weekly › ALSM 탭'+noReg+'</div>';
   }
 
   // 발주패턴(Order Pattern) 기반 누적 진행률 — 완료된 월들의 주차별 발주분포 '연평균'으로
@@ -2267,6 +2328,24 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     <div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="bs-table"></table></div>
     <div class="section-title" style="margin-top:22px;">주차별 FCST 제출 이력 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(당월 FCST QTY · 괄호 = 직전 주 대비 · Total은 미제출 지점 직전 제출값 이월)</span></div>
     <div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="bs-trail"></table></div>
+  </div>
+
+  <!-- Tab: ALSM (독립슈퍼 별도 채널 — Off 스냅샷에서 읽음, On TTL 미합산) -->
+  <div id="tab-alsm" class="tab-content">
+    <div class="filter-bar" style="margin-bottom:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+      <span><label>Month</label> <select id="alsm-month" onchange="renderAlsmTab()"></select></span>
+      <button type="button" class="upload-file-btn" style="padding:4px 10px;font-size:11px;" onclick="window._alsmPromise=null;renderAlsmTab()">새로고침</button>
+      <span id="alsm-meta" style="font-size:11px;color:var(--text-muted);"></span>
+    </div>
+    <div id="alsm-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px;"></div>
+    <div class="section-title">월별 Actual · FCST · RoFo · LY <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(HL · ALSM 합계 · On Trade TTL에는 합산하지 않음)</span></div>
+    <div class="table-wrap"><table id="alsm-monthly"></table></div>
+    <div class="section-title" style="margin-top:22px;">권역별 실적 (Seoul · CHN · YN) <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(HL · DSR Group 기준 · FCST·RoFo는 ALSM 합계로만 관리)</span></div>
+    <div class="table-wrap"><table id="alsm-region"></table></div>
+    <div class="section-title" style="margin-top:22px;">주차별 FCST 제출 · 주간 발주 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(HL · FCST = 그 주에 제출한 당월 FCST · 발주 = DSR 1~7일 W1 …)</span></div>
+    <div class="table-wrap"><table id="alsm-weekly"></table></div>
+    <div class="section-title" style="margin-top:22px;">SKU별 <span style="font-weight:400;font-size:11px;color:var(--text-muted);">(HL · YTD = 선택월까지 마감월 · 권역 열 = YTD 실적)</span></div>
+    <div class="table-wrap" style="max-height:60vh;overflow:auto;"><table id="alsm-sku"></table></div>
   </div>
 
   <!-- Tab: Rofo Sheet (6월 지점별 SKU 진행률 vs P06_V1) -->
@@ -4421,6 +4500,7 @@ function _upReRenderAll() {
   // 지점분석 탭이 열려있으면 즉시 갱신(업로드·백필 후 반영)
   if (document.getElementById('tab-branch')?.classList.contains('active')) { renderBranchReport(_brBranch); _tabInitialized['branch'] = true; }
   if (document.getElementById('tab-branch-stock')?.classList.contains('active')) { renderBranchStock(); _tabInitialized['branch-stock'] = true; }
+  if (document.getElementById('tab-alsm')?.classList.contains('active')) { renderAlsmTab(); _tabInitialized['alsm'] = true; }
   document.title = '🍺 On-Trade · Sales Dashboard';
   // Summary overlay가 열려있으면 데이터 갱신
   if (typeof showSummary === 'function' && document.getElementById('summary-overlay')?.style.display === 'flex') {
@@ -4617,6 +4697,7 @@ async function handleCombinedRofoUpload(input) {
     offData.rofo_channel = _mergedCh;
     const { error: upErr } = await _supabase.from('off_dashboard_snapshots').upsert({ id: 1, data: offData, updated_at: new Date().toISOString() });
     if (upErr) throw new Error('Off 스냅샷 저장 실패: ' + upErr.message);
+    window._alsmPromise = null; delete _tabInitialized['alsm'];   // On ALSM 채널(RoFo) 재로드
     const chSum = Object.keys(_mergedCh).map(k => k + ':' + Math.round(_mergedCh[k].reduce((a, b) => a + (b || 0), 0)).toLocaleString('ko-KR')).join(' / ');
     const _rofoDiag = ((unmappedOff && unmappedOff.length) ? ` · 미매핑OFF채널[${unmappedOff.join(', ')}]` : '')
                     + ((otherTeam && otherTeam.length) ? ` · 기타team[${otherTeam.join(', ')}]` : '');
@@ -4939,6 +5020,7 @@ async function handleCombinedDsrUpload(input) {
     await new Promise(r => setTimeout(r, 10));
     const res26 = OffIngest.parseDsrWorkbook(wb, 2026);
     const res25 = OffIngest.parseDsrWorkbook(wb, 2025);
+    const res26AllMonths = (res26.months || []).slice();   // ALSM 권역 백필 판정용(필터 전 파일 커버월)
     if (maxMon >= 0) res26.months = (res26.months || []).filter(m => m === maxMon);   // 최신월만 반영 (과거 마감월 보존)
     const { data: offRow, error: offErr } = await _supabase.from('off_dashboard_snapshots').select('data').eq('id', 1).single();
     if (offErr) throw new Error('Off 스냅샷 읽기 실패: ' + offErr.message);
@@ -4949,6 +5031,23 @@ async function handleCombinedDsrUpload(input) {
     offData.rows = rows;
     offData.meta = offData.meta || {};
     offData.meta.actual_months = r2.actual_months;
+
+    // ── ALSM 권역(Seoul·CHN·YN) 실적 — On ALSM 채널 분석용 보조 데이터(data.alsm_region). Off 합계엔 영향 없음 ──
+    //  LY(2025)는 파일의 전 월. 2026은 최신월(maxMon) + '권역 저장분이 비어 있고 파일 권역합 = 저장된 ALSM 실적'인 과거월만
+    //  백필(부분월 파일로 마감월이 덮이는 것 방지 — 지표와 같은 보존 원칙).
+    let alsmMsg = '';
+    try {
+      const st = (offData.alsm_region = (offData.alsm_region && typeof offData.alsm_region === 'object') ? offData.alsm_region : {});
+      OffIngest.applyAlsmRegion(st, res25, 'ly', res25.months || []);
+      const stored = OffIngest.alsmRegionMonthTotals(st, 'act');
+      const inFile = OffIngest.alsmResMonthTotals(res26);
+      const alsmAct = Array(12).fill(0);
+      rows.forEach(r => { if (r.ch === 'ALSM' && Array.isArray(r.act_hl_m)) for (let i = 0; i < 12; i++) alsmAct[i] += r.act_hl_m[i] || 0; });
+      const actMonths = res26AllMonths.filter(m => m === maxMon
+        || (stored[m] < 0.01 && inFile[m] > 0 && Math.abs(inFile[m] - alsmAct[m]) <= Math.max(1, alsmAct[m] * 0.01)));
+      OffIngest.applyAlsmRegion(st, res26, 'act', actMonths);
+      if (actMonths.length) alsmMsg = ` · ALSM 권역 ${actMonths.map(m => m + 1).join(',')}월`;
+    } catch (alErr) { console.warn('ALSM 권역 집계 실패:', alErr); alsmMsg = ' · ⚠ ALSM 권역 미반영'; }
 
     // ── Order Pattern(주간/일별 발주) 재집계 — DSR raw Date 기준, 월 단위 증분 병합 ──
     let opMonths = [];
@@ -4963,6 +5062,7 @@ async function handleCombinedDsrUpload(input) {
     const { error: upErr } = await _supabase.from('off_dashboard_snapshots')
       .upsert({ id: 1, data: offData, updated_at: new Date().toISOString() });
     if (upErr) throw new Error('Off 스냅샷 저장 실패: ' + upErr.message);
+    window._alsmPromise = null; delete _tabInitialized['alsm'];   // On ALSM 채널 분석 재로드
 
     // ── 운송비(Freight): 파일에 든 모든 월의 배송건 재집계 → on_freight_months (실패해도 본 업로드는 성공 처리)
     //    (지표와 달리 maxMon 제한 없음 — saveMonths의 부분월 보호(배송일수 비교)가 마감월 덮어쓰기를 막아줌) ──
@@ -4986,7 +5086,7 @@ async function handleCombinedDsrUpload(input) {
       }
     } catch (rgErr) { console.warn('Range DC 반영 실패:', rgErr); rgMsg = ` · ⚠ Range 미반영(${rgErr.message})`; }
 
-    statusEl.textContent = `✓ 완료 — 적용월 ${maxMon >= 0 ? _MON_NM[maxMon] : '-'}만 반영(과거 마감월 보존) · On ${onCnt.toLocaleString('ko-KR')}행 · Off 26Y ${res26.matched.toLocaleString('ko-KR')}행/25Y ${res25.matched.toLocaleString('ko-KR')}행 반영 (Off 실현월 ${r2.actual_months}${opMonths.length ? ' · OrderPattern 월 ' + opMonths.map(m=>m+1).join(',') : ''})${frMsg}${rgMsg}${_UP_LAST_NEW_SKUS.length ? ` · 🆕 신규 SKU ${_UP_LAST_NEW_SKUS.length}종 등록: ${_UP_LAST_NEW_SKUS.join(', ')}` : ''}`;
+    statusEl.textContent = `✓ 완료 — 적용월 ${maxMon >= 0 ? _MON_NM[maxMon] : '-'}만 반영(과거 마감월 보존) · On ${onCnt.toLocaleString('ko-KR')}행 · Off 26Y ${res26.matched.toLocaleString('ko-KR')}행/25Y ${res25.matched.toLocaleString('ko-KR')}행 반영 (Off 실현월 ${r2.actual_months}${opMonths.length ? ' · OrderPattern 월 ' + opMonths.map(m=>m+1).join(',') : ''}${alsmMsg})${frMsg}${rgMsg}${_UP_LAST_NEW_SKUS.length ? ` · 🆕 신규 SKU ${_UP_LAST_NEW_SKUS.length}종 등록: ${_UP_LAST_NEW_SKUS.join(', ')}` : ''}`;
     statusEl.style.color = 'var(--positive)';
   } catch (err) {
     console.error('Combined DSR error:', err);
@@ -8355,6 +8455,183 @@ function _bsActual(tab, sku, m) {
 }
 function _bsLastCol(sub, upto) { let c = 0; for (let k = 1; k <= (upto || 5); k++) if (sub && sub[k-1]) c = k; return c; }
 
+// ═══════════════════════════════════════════════
+//  ALSM (독립슈퍼) — On에서 분석하는 별도 채널
+//  · 데이터 원천은 Off 스냅샷(off_dashboard_snapshots) 그대로 — 업로드 경로(Off ② 주간 FCST · 통합 DSR · P0X) 불변.
+//  · On Trade TTL·5개 지점 수치에는 합산하지 않는다(RoFo·AP 기준이 섞이지 않게).
+//  · 권역(Seoul·CHN·YN)은 실적만: data.alsm_region(통합 DSR 업로드 때 DSR Group으로 집계). FCST·RoFo는 ALSM 합계.
+// ═══════════════════════════════════════════════
+const ALSM_REGION_ORDER = ['Seoul', 'CHN', 'YN'];
+function _alsmLoad(force) {
+  if (window._alsmPromise && !force) return window._alsmPromise;
+  window._alsmPromise = (async () => {
+    const { data, error } = await _supabase.from('off_dashboard_snapshots')
+      .select('rows:data->rows, rofo:data->rofo_channel->ALSM, wf:data->pattern->weekly_fcst->ALSM, fmeta:data->pattern->fcst_meta->ALSM, wacct:data->pattern->weekly_acct->ALSM, reg:data->alsm_region, meta:data->meta, updated_at')
+      .eq('id', 1).single();
+    if (error) throw error;
+    window._ALSM = _alsmBuild(data || {});
+    return window._ALSM;
+  })().catch(e => {
+    console.warn('ALSM 로드 실패:', e);
+    window._ALSM = { error: (e && e.message) || String(e) };
+    window._alsmPromise = null;   // 다음 렌더 때 재시도
+    return window._ALSM;
+  });
+  return window._alsmPromise;
+}
+function _alsmBuild(d) {
+  const z = () => Array(12).fill(0);
+  const rows = (Array.isArray(d.rows) ? d.rows : []).filter(r => r && r.ch === 'ALSM');
+  const pick = (r, a, b) => Array.isArray(r[a]) ? r[a] : (Array.isArray(r[b]) ? r[b] : null);
+  const sumOf = (a, b) => { const o = z(); rows.forEach(r => { const v = pick(r, a, b); if (v) for (let i = 0; i < 12; i++) o[i] += +v[i] || 0; }); return o; };
+  const act = sumOf('act_hl_m', 'act_m'), ly = sumOf('ly_hl_m', 'ly_m'), fcst = sumOf('fcst_m'), rofoRows = sumOf('rofo_m');
+  // RoFo = P0X 채널값(rofo_channel.ALSM)이 유일 기준(Off와 동일). 없으면 rows 합 폴백.
+  const rofoCh = Array.isArray(d.rofo) && d.rofo.some(v => +v) ? d.rofo.map(v => +v || 0) : null;
+  const skus = rows.map(r => ({ sku: r.sku, brand: r.brand || '', act: pick(r, 'act_hl_m', 'act_m') || z(), ly: pick(r, 'ly_hl_m', 'ly_m') || z(), fcst: Array.isArray(r.fcst_m) ? r.fcst_m : z() }));
+  const reg = (d.reg && typeof d.reg === 'object') ? d.reg : {};
+  const regKeys = [...new Set([...Object.keys(reg.act || {}), ...Object.keys(reg.ly || {})])]
+    .sort((a, b) => { const ia = ALSM_REGION_ORDER.indexOf(a), ib = ALSM_REGION_ORDER.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b); });
+  const regTot = (kind, k) => { const o = z(), t = (reg[kind] || {})[k] || {}; Object.values(t).forEach(a => { if (Array.isArray(a)) for (let i = 0; i < 12; i++) o[i] += +a[i] || 0; }); return o; };
+  const regions = regKeys.map(k => ({ key: k, act: regTot('act', k), ly: regTot('ly', k), skuAct: (reg.act || {})[k] || {}, skuLy: (reg.ly || {})[k] || {} }));
+  const wfA = d.wf && d.wf.ALSM;        // { 월idx: [W1..W5] }
+  const wacct = d.wacct && d.wacct.ALSM; // [12][5]
+  const fmeta = d.fmeta && d.fmeta.ALSM;
+  return { act, ly, fcst, rofo: rofoCh || rofoRows, rofoSrc: rofoCh ? 'P0X' : 'rows', skus, regions, regUpdated: reg.updated_at || null,
+           wf: wfA || {}, wacct: Array.isArray(wacct) ? wacct : null, fmeta: fmeta || null,
+           actualMonths: (d.meta && d.meta.actual_months) || null, updated_at: d.updated_at || null };
+}
+// 당월 주간 FCST 제출(W1~W5) → 최신 제출 주 vs 직전 주
+function _alsmWeek(A, ci) {
+  const arr = A && A.wf && A.wf[ci];
+  if (!Array.isArray(arr)) return null;
+  let cw = -1; for (let w = 4; w >= 0; w--) if ((+arr[w] || 0) > 0) { cw = w; break; }
+  if (cw < 0) return null;
+  const tw = +arr[cw] || 0, lw = cw > 0 ? (+arr[cw - 1] || 0) : null;
+  return { arr, cw, tw, lw, d: lw != null ? tw - lw : null, pct: (lw != null && lw > 0) ? (tw - lw) / lw : null };
+}
+// On 대시보드 활성 월(1-based) → 0-based
+function _alsmCurIdx() { const m = (DASHBOARD_DATA.wk_meta && DASHBOARD_DATA.wk_meta.month) || (typeof _UP_FCST_MONTH !== 'undefined' ? _UP_FCST_MONTH : (new Date().getMonth() + 1)); return m - 1; }
+const _alsmSum = (a, from, to) => { let s = 0; if (Array.isArray(a)) for (let i = from; i <= to; i++) s += +a[i] || 0; return s; };
+// 숫자 진척 신호등 (설계안 v0 §4): (MTD÷FCST) − 영업일 경과율. -5%p 이내 유효 / -5~-10%p 주의 / 그 이상 깨짐
+function _alsmSignal(mtd, fcst, wdPct) {
+  if (!(fcst > 0) || mtd == null || !(wdPct > 0)) return null;
+  const gap = mtd / fcst - wdPct;
+  return gap >= -0.05 ? { k: 'ok', lbl: '유효', c: '#4ade80', gap } : gap >= -0.10 ? { k: 'warn', lbl: '주의', c: '#fbbf24', gap } : { k: 'bad', lbl: '깨짐', c: '#f87171', gap };
+}
+
+async function renderAlsmTab() {
+  const meta = document.getElementById('alsm-meta'), mSel = document.getElementById('alsm-month');
+  const cards = document.getElementById('alsm-cards');
+  const T = { m: document.getElementById('alsm-monthly'), r: document.getElementById('alsm-region'), w: document.getElementById('alsm-weekly'), s: document.getElementById('alsm-sku') };
+  if (!mSel || !T.m) return;
+  if (!window._ALSM || window._ALSM.error || !window._alsmPromise) { meta.textContent = 'Off 스냅샷에서 ALSM 불러오는 중…'; await _alsmLoad(); }
+  const A = window._ALSM;
+  if (!A || A.error) { meta.textContent = 'ALSM 데이터를 불러오지 못했습니다: ' + ((A && A.error) || ''); cards.innerHTML = ''; Object.values(T).forEach(t => t.innerHTML = ''); return; }
+
+  const NM = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const curCi = _alsmCurIdx();
+  const prev = mSel.value;
+  mSel.innerHTML = NM.map((n, i) => `<option value="${i}">${i + 1}월 (${n})</option>`).join('');
+  mSel.value = prev !== '' && prev != null ? prev : String(curCi);
+  const ci = parseInt(mSel.value, 10);
+  const f1 = v => v == null || !isFinite(v) ? '—' : (+v).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+  const pc = v => v == null || !isFinite(v) ? '—' : (v * 100).toFixed(1) + '%';
+  const yy = v => v == null || !isFinite(v) ? '—' : (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const col = v => v == null ? 'var(--text-muted)' : v >= 0 ? 'var(--positive)' : 'var(--negative)';
+  const achC = v => v == null ? 'var(--text-muted)' : v >= 1 ? 'var(--positive)' : v >= 0.9 ? '#b7791f' : 'var(--negative)';
+  const RA = 'text-align:right;';
+  const isCur = ci === curCi, wd = DASHBOARD_DATA.wd_progress || {};
+  // YTD 비교는 마감월까지: 선택월이 진행 중(=On 활성월)이면 그 전 달까지
+  const ytdEnd = isCur ? ci - 1 : ci;
+  const ytdLbl = ytdEnd >= 0 ? (ytdEnd === 0 ? '1월' : '1~' + (ytdEnd + 1) + '월') : '—';
+
+  meta.innerHTML = `원천: Off 스냅샷 (${A.updated_at ? new Date(A.updated_at).toLocaleString('ko-KR') : '-'}) · RoFo ${A.rofoSrc === 'P0X' ? 'P0X 채널' : 'rows 합(P0X 없음)'}`
+    + (A.fmeta && A.fmeta.week ? ` · 주간 FCST 최신 제출 WK${A.fmeta.week}` : '')
+    + (A.regions.length ? ` · 권역 실적 ${A.regUpdated ? new Date(A.regUpdated).toLocaleDateString('ko-KR') : ''}` : ' · <b style="color:var(--negative);">권역 실적 없음 — 통합 DSR을 한 번 다시 올리면 생성</b>')
+    + ' · On Trade TTL 미합산';
+
+  // ── 카드 ──
+  const act = A.act[ci], fc = A.fcst[ci], ro = A.rofo[ci], lyM = A.ly[ci], wk = _alsmWeek(A, ci);
+  const fcUse = fc > 0 ? fc : (wk ? wk.tw : 0);
+  const sig = isCur ? _alsmSignal(act, fcUse, wd.pct) : null;
+  const sigC = sig ? (sig.k === 'ok' ? 'var(--positive)' : sig.k === 'warn' ? '#b7791f' : 'var(--negative)') : null;
+  const ytdA = ytdEnd >= 0 ? _alsmSum(A.act, 0, ytdEnd) : null, ytdL = ytdEnd >= 0 ? _alsmSum(A.ly, 0, ytdEnd) : null;
+  const card = (t, v, sub, c) => `<div class="table-wrap" style="padding:10px 12px;margin:0;"><div style="font-size:11.5px;font-weight:700;color:var(--primary);margin-bottom:4px;">${t}</div>`
+    + `<div style="font-size:20px;font-weight:800;line-height:1.1;color:${c || 'var(--text)'};">${v}</div><div style="font-size:10.5px;color:var(--text-muted);margin-top:4px;">${sub}</div></div>`;
+  const lyBase = isCur ? fcUse : act;
+  cards.innerHTML =
+      card((ci + 1) + '월 FCST', f1(fcUse) + ' HL', ro > 0 ? `RoFo ${f1(ro)} HL 대비 <b style="color:${achC(fcUse / ro)};">${pc(fcUse / ro)}</b>` : 'RoFo 없음')
+    + card('전주 대비 FCST', wk ? (wk.d == null ? '첫 제출' : (wk.d >= 0 ? '+' : '') + f1(wk.d) + ' HL') : '—', wk ? `W${wk.cw + 1} ${f1(wk.tw)} HL${wk.lw != null ? ` ← W${wk.cw} ${f1(wk.lw)}` : ''}` : '주간 FCST 미제출', wk && wk.d != null ? col(wk.d) : null)
+    + card(isCur ? 'MTD 실적' : '실적', f1(act) + ' HL', (fcUse > 0 ? `FCST의 ${pc(act / fcUse)}` : '') + (isCur && wd.pct ? ` · 경과율 ${Math.round(wd.pct * 100)}%` : '') + (sig ? ` · <b style="color:${sigC};">${sig.lbl}</b>` : ''), sigC)
+    + card('vs LY (' + (ci + 1) + '월)', yy(lyM > 0 ? lyBase / lyM - 1 : null), `LY ${f1(lyM)} HL · ${isCur ? 'FCST 기준' : '실적 기준'}`, col(lyM > 0 ? lyBase / lyM - 1 : null))
+    + card('YTD vs LY (' + ytdLbl + ')', yy(ytdL > 0 ? ytdA / ytdL - 1 : null), `실적 ${f1(ytdA)} / LY ${f1(ytdL)} HL`, col(ytdL > 0 ? ytdA / ytdL - 1 : null))
+    + card('FY RoFo', f1(_alsmSum(A.rofo, 0, 11)) + ' HL', `마감 실적 + 잔여 RoFo ${f1(_alsmSum(A.act, 0, ytdEnd) + _alsmSum(A.rofo, ytdEnd + 1, 11))} HL`);
+
+  // ── 월별 표 ──
+  const hdM = '<thead><tr><th style="text-align:left;">구분</th>' + NM.map((n, i) => `<th${i === ci ? ' style="background:#14532d;"' : ''}>${n}</th>`).join('') + '<th>FY</th></tr></thead>';
+  const lineM = (lbl, arr, fmt, styl) => `<tr><td style="font-weight:700;">${lbl}</td>` + arr.map((v, i) => `<td style="${RA}${styl ? styl(v, i) : ''}${i === ci ? 'background:rgba(32,85,39,.06);' : ''}">${fmt(v, i)}</td>`).join('') + '</tr>';
+  const fy = a => _alsmSum(a, 0, 11);
+  // 비율은 마감월만(진행 중인 On 활성월의 MTD 부분값은 제외)
+  const am = Math.min(A.actualMonths || 12, curCi);
+  const achArr = A.act.map((v, i) => A.rofo[i] > 0 && (i < am) ? v / A.rofo[i] : null);
+  const yoyArr = A.act.map((v, i) => A.ly[i] > 0 && (i < am) ? v / A.ly[i] - 1 : null);
+  T.m.innerHTML = hdM + '<tbody>'
+    + lineM('Actual', [...A.act, fy(A.act)], v => v ? f1(v) : '—')
+    + lineM('FCST', [...A.fcst, fy(A.fcst)], v => v ? f1(v) : '—')
+    + lineM('RoFo', [...A.rofo, fy(A.rofo)], v => v ? f1(v) : '—')
+    + lineM('LY', [...A.ly, fy(A.ly)], v => v ? f1(v) : '—')
+    + lineM('Act ÷ RoFo', [...achArr, null], v => pc(v), v => `color:${achC(v)};`)
+    + lineM('YoY (Act)', [...yoyArr, null], v => yy(v), v => `color:${col(v)};`)
+    + '</tbody>';
+
+  // ── 권역 표 ──
+  if (!A.regions.length) {
+    T.r.innerHTML = '<tbody><tr><td style="padding:16px;color:var(--text-muted);font-size:12.5px;">권역 실적이 아직 없습니다. Data Update › 통합 DSR 업로드를 한 번 실행하면 DSR Group(ALSM Seoul·CHN·YN)으로 2025 LY 전체와 2026 실적(최신월 + 비어 있는 마감월)이 채워집니다.</td></tr></tbody>';
+  } else {
+    const ytdTot = A.regions.reduce((s, r) => s + _alsmSum(r.act, 0, ytdEnd), 0);
+    const hdR = '<thead><tr><th style="text-align:left;">권역</th>' + NM.slice(0, ci + 1).map((n, i) => `<th${i === ci ? ' style="background:#14532d;"' : ''}>${n}${i === ci && isCur ? ' (MTD)' : ''}</th>`).join('')
+      + `<th>YTD ${ytdLbl}</th><th>LY 동기</th><th>YoY</th><th>비중</th><th>${ci + 1}월 vs LY동월</th></tr></thead>`;
+    const rowR = (r, lbl, bold) => {
+      const ya = _alsmSum(r.act, 0, ytdEnd), yl = _alsmSum(r.ly, 0, ytdEnd), yo = yl > 0 ? ya / yl - 1 : null;
+      const mo = (!isCur && r.ly[ci] > 0) ? r.act[ci] / r.ly[ci] - 1 : null;
+      return `<tr${bold ? ' style="font-weight:700;background:#f3f4f6;"' : ''}><td style="font-weight:700;">${lbl}</td>`
+        + r.act.slice(0, ci + 1).map(v => `<td style="${RA}">${v ? f1(v) : '—'}</td>`).join('')
+        + `<td style="${RA}font-weight:700;">${f1(ya)}</td><td style="${RA}color:var(--text-muted);">${f1(yl)}</td><td style="${RA}color:${col(yo)};font-weight:700;">${yy(yo)}</td>`
+        + `<td style="${RA}">${ytdTot > 0 ? pc(ya / ytdTot) : '—'}</td><td style="${RA}color:${col(mo)};">${isCur ? '<span style="color:var(--text-muted);">진행중</span>' : yy(mo)}</td></tr>`;
+    };
+    const tot = { act: Array(12).fill(0), ly: Array(12).fill(0) };
+    A.regions.forEach(r => { for (let i = 0; i < 12; i++) { tot.act[i] += r.act[i]; tot.ly[i] += r.ly[i]; } });
+    // 권역 합 ≠ ALSM 실적이면(권역 백필 안 된 마감월) 표시
+    const gaps = []; for (let i = 0; i <= ci; i++) if (Math.abs(tot.act[i] - A.act[i]) > Math.max(1, A.act[i] * 0.01)) gaps.push(i + 1);
+    T.r.innerHTML = hdR + '<tbody>' + A.regions.map(r => rowR(r, 'ALSM ' + r.key)).join('') + rowR(tot, '권역 합계', true) + '</tbody>'
+      + (gaps.length ? `<tfoot><tr><td colspan="${ci + 7}" style="padding:8px;font-size:11px;color:#b7791f;">⚠ ${gaps.join('·')}월은 권역 합계가 ALSM 실적과 다릅니다(권역 데이터 미백필 또는 부분월). 그 달이 모두 든 통합 DSR을 다시 올리면 채워집니다.</td></tr></tfoot>` : '');
+  }
+
+  // ── 주차 표 ──
+  const wArr = (A.wf && A.wf[ci]) || null, oArr = (A.wacct && A.wacct[ci]) || null;
+  if (!wArr && !oArr) T.w.innerHTML = '<tbody><tr><td style="padding:16px;color:var(--text-muted);font-size:12.5px;">이 달의 주간 FCST 제출·주간 발주 데이터가 없습니다.</td></tr></tbody>';
+  else {
+    const W = [0, 1, 2, 3, 4];
+    const fcRow = wArr ? '<tr><td style="font-weight:700;">FCST 제출</td>' + W.map(w => { const v = +wArr[w] || 0, p = w > 0 ? (+wArr[w - 1] || 0) : 0, d = (v > 0 && p > 0) ? v - p : null; return `<td style="${RA}">${v ? f1(v) : '—'}${d != null && Math.abs(d) >= 0.05 ? ` <span style="font-size:10px;color:${col(d)};">(${d > 0 ? '+' : ''}${f1(d)})</span>` : ''}</td>`; }).join('') + '</tr>' : '';
+    let cum = 0;
+    const odRow = oArr ? '<tr><td style="font-weight:700;">주간 발주</td>' + W.map(w => `<td style="${RA}">${(+oArr[w] || 0) ? f1(+oArr[w]) : '—'}</td>`).join('') + '</tr>'
+      + `<tr><td style="font-weight:700;">누적 ÷ FCST</td>` + W.map(w => { cum += +oArr[w] || 0; return `<td style="${RA}color:var(--text-muted);">${fcUse > 0 && (+oArr[w] || 0) ? pc(cum / fcUse) : '—'}</td>`; }).join('') + '</tr>' : '';
+    T.w.innerHTML = '<thead><tr><th style="text-align:left;">' + (ci + 1) + '월</th>' + W.map(w => `<th>W${w + 1}</th>`).join('') + '</tr></thead><tbody>' + fcRow + odRow + '</tbody>';
+  }
+
+  // ── SKU 표 ──
+  const regSkuYtd = (r, sku) => { const a = r.skuAct[sku]; return Array.isArray(a) ? _alsmSum(a, 0, ytdEnd) : 0; };
+  const sk = A.skus.map(s => ({ ...s, ya: _alsmSum(s.act, 0, ytdEnd), yl: _alsmSum(s.ly, 0, ytdEnd) }))
+    .filter(s => s.ya > 0.01 || s.yl > 0.01 || (s.fcst[ci] || 0) > 0.01 || (s.act[ci] || 0) > 0.01)
+    .sort((a, b) => (b.ya - a.ya) || ((b.fcst[ci] || 0) - (a.fcst[ci] || 0)));
+  const hdS = `<thead><tr><th style="text-align:left;">SKU</th><th style="text-align:left;">Brand</th><th>${ci + 1}월 FCST</th><th>${ci + 1}월 ${isCur ? 'MTD' : 'Act'}</th><th>LY ${ci + 1}월</th><th>YTD ${ytdLbl}</th><th>LY 동기</th><th>YoY</th>`
+    + A.regions.map(r => `<th>${r.key}</th>`).join('') + '</tr></thead>';
+  T.s.innerHTML = hdS + '<tbody>' + sk.map(s => { const yo = s.yl > 0 ? s.ya / s.yl - 1 : null; return `<tr><td>${s.sku}</td><td style="color:var(--text-muted);">${s.brand}</td>`
+      + `<td style="${RA}">${f1(s.fcst[ci] || 0)}</td><td style="${RA}">${f1(s.act[ci] || 0)}</td><td style="${RA}color:var(--text-muted);">${f1(s.ly[ci] || 0)}</td>`
+      + `<td style="${RA}font-weight:700;">${f1(s.ya)}</td><td style="${RA}color:var(--text-muted);">${f1(s.yl)}</td><td style="${RA}color:${col(yo)};">${yy(yo)}</td>`
+      + A.regions.map(r => `<td style="${RA}">${f1(regSkuYtd(r, s.sku))}</td>`).join('') + '</tr>'; }).join('') + '</tbody>';
+}
+
 function renderBranchStock() {
   const D = DASHBOARD_DATA, book = D.on_fcst_book;
   const mSel = document.getElementById('bs-month'), cards = document.getElementById('bs-cards');
@@ -9810,7 +10087,7 @@ const _tabInitialized = {};
 //  시트가 12개로 늘어 한 줄에 다 안 들어가므로 그룹(상단) → 하위 시트(하단 칩)로 분리.
 //  switchTab(tabId) API는 그대로 유지 — 그룹은 tabId로 역산해서 활성화한다.
 const TAB_GROUPS = [
-  { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['branch-stock','Stock & Cover'], ['rofo-sheet','Rofo'], ['order','Order Pattern']] },
+  { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['branch-stock','Stock & Cover'], ['rofo-sheet','Rofo'], ['order','Order Pattern'], ['alsm','ALSM']] },
   { key: 'perf',   label: 'Performance', tabs: [['ytd','YTD'], ['branch','Branch Analysis'], ['revenue','Revenue']] },
   { key: 'sku',    label: 'SKU',         tabs: [['sku','SKU Detail'], ['sku-hist','SKU History']] },
   { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['keg','공케그·CO2'], ['range','Range DC'], ['vc','Value Chain']] },
@@ -9850,6 +10127,7 @@ function switchTab(tabId) {
     if (tabId === 'branch')   { renderBranchReport(); }
     if (tabId === 'rofo-sheet'){ renderRofoSheet(); _rofoLoadComments().then(renderRofoSheet); }
     if (tabId === 'branch-stock') { renderBranchStock(); }
+    if (tabId === 'alsm')     { renderAlsmTab(); }
     if (tabId === 'revenue')  { initRevenueTab(); }
     if (tabId === 'sku')      { renderSkuTable(); }
     if (tabId === 'sku-hist') { renderSkuHistTable(); renderSkuHistCompare(); }
@@ -9867,6 +10145,7 @@ function switchTab(tabId) {
     else if (tabId === 'revenue') { initRevenueTab(); }
     else if (tabId === 'sku-hist'){ renderSkuHistTable(); renderSkuHistCompare(); }
     else if (tabId === 'order')   { renderOrderPattern(); }
+    else if (tabId === 'alsm')    { renderAlsmTab(); }
     else if (tabId === 'freight') { if (window.Freight) Freight.render(_supabase); }
     else if (tabId === 'range')   { if (window.RangeDC) RangeDC.render(_supabase); }
     else if (tabId === 'minutes') { minutesLoad(); }
@@ -11598,7 +11877,7 @@ function init() {
 }
 
 async function startOnTrade() {
-  window._bootLoad = (async function () { await loadFromSupabase(); init(); })();
+  window._bootLoad = (async function () { await loadFromSupabase(); init(); try { _alsmLoad(); } catch (e) {} })();
   return window._bootLoad;
 }
 (function bootstrap() {
