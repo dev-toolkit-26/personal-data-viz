@@ -58,14 +58,10 @@
     csStd: 0.0792,                             // 환산 c/s 기준 (330ml × 24)
     downTol: 0.5,                              // FCST 연속 하향 판정 허용오차(HL)
     skuQuestionMinShare: 0.10,                 // SKU 질문은 지점 부족분의 10% 이상인 SKU만
-    pushBlock: [11, 12, 1, 2, 3],              // 밀어내기 구간(월): 마감 푸시로 쌓인 재고 → 11월 쉼 → 12월 대량 푸시 → 1~3월 여파. 계절지수는 이 구간을 묶어 평균
-    baseMonths: 6,                             // 26년 기준 매출 = 밀어내기 구간 뺀 최근 마감월 최대 6개월(계절성 제거)의 중앙값
-    baseMinMonths: 3,
     stockCheckDays: 45,
     stockTopN: 5,
     patternMinCum: 0.15,                       // 평소 이맘때 누적 비중이 15% 미만(월초)이면 패턴 전망 대신 최근 속도 사용                              // 재고 표 = 지점별 월초 재고(HL) 상위 5개 SKU — 재고가 많은 SKU가 매출도 큰 SKU                        // 재고일수 45일 초과 = '확인 필요'(실제 과다 또는 입력·추정 확인)
-    fcstLowVsDemand: 0.85,                     // 재고 과다인데 FCST가 예상 수요의 85% 미만이면 질문(재고 소진 대기 확인)
-    fcstHighVsDemand: 1.15,                    // 재고 과다인데 FCST가 예상 수요의 115% 초과면 질문(도매장 재고 더 쌓일 위험)
+    stockImpactQ: -0.05,                       // 월초 재고 초과분이 RoFo 달성률을 5%p 넘게 깎으면 질문
     maxQuestions: 3,
   };
 
@@ -114,7 +110,13 @@
   //  완료월(이번 달 제외)마다 주차별 비중을 구해 평균 → DSR 기준일까지의 누적 비중 = '평소 이맘때 진도'.
   //  월별 편차(최저~최고)로 마감 전망 범위. 월초에 몰리고 월말에 줄어드는 발주 리듬이 그대로 반영된다.
   const MON_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  function patternCum(op, groups, mon, day, dim) {
+  //  주차 구간(달력일 1~7, 8~14, 15~21, 22~28, 29~말일)마다 영업일 수가 달마다 다르다(11월 마지막 구간은 1일뿐).
+  //  → 완료월마다 '구간 비중 ÷ 구간 영업일' = 영업일 하루당 발주 강도를 구해 구간별 평균,
+  //    이번 달 실제 영업일 배치에 곱해 DSR 기준일까지의 누적 비중을 낸다(월초 몰림·월말 감소·짧은 마지막 구간 반영).
+  const wkd = (y, m, d0, d1) => { let c = 0; for (let d = d0; d <= d1; d++) { const w = new Date(y, m - 1, d).getDay(); if (w >= 1 && w <= 5) c++; } return c; };
+  const bucketDays = (y, m, upto) => { const dim = new Date(y, m, 0).getDate(), e = Math.min(upto == null ? dim : upto, dim);
+    return [[1, 7], [8, 14], [15, 21], [22, 28], [29, dim]].map(([a, b]) => (b >= a && e >= a) ? wkd(y, m, a, Math.min(b, e)) : 0); };
+  function patternCum(op, groups, mon, day, dim, year) {
     if (!op || !Array.isArray(op.weekly_labels) || !op.weekly_hl || !(day > 0)) return null;
     const byMon = {};
     op.weekly_labels.forEach((lbl, i) => {
@@ -125,19 +127,19 @@
       (byMon[mo] = byMon[mo] || [0, 0, 0, 0, 0])[Math.min(wk, 5) - 1] += v;
     });
     const cur = MON_EN[mon - 1];
-    const refs = Object.keys(byMon).filter(m => m !== cur && byMon[m].reduce((a, b) => a + b, 0) > 0);
+    const refs = Object.keys(byMon).filter(m => m !== cur && MON_EN.indexOf(m) >= 0 && byMon[m].reduce((a, b) => a + b, 0) > 0);
     if (!refs.length) return null;
-    const fracs = refs.map(m => { const a = byMon[m], t = a.reduce((x, y) => x + y, 0); return a.map(v => v / t); });
-    const avg = [0, 1, 2, 3, 4].map(k => fracs.reduce((a, f) => a + f[k], 0) / fracs.length);
-    const lens = [7, 7, 7, 7, Math.max(dim - 28, 1)];
-    const cumOf = f => {
-      if (day >= dim) return 1;
-      let c = 0;
-      for (let k = 0; k < 5; k++) { const st = 7 * k; if (day >= st + lens[k]) c += f[k]; else { if (day > st) c += f[k] * (day - st) / lens[k]; break; } }
-      return Math.max(0.01, Math.min(1, c));
-    };
-    const per = fracs.map(cumOf);
-    return { cum: cumOf(avg), lo: Math.min(...per), hi: Math.max(...per), n: refs.length, frac: avg };
+    // 완료월별 영업일당 강도
+    const intens = refs.map(m => { const a = byMon[m], t = a.reduce((x, y) => x + y, 0), bd = bucketDays(year, MON_EN.indexOf(m) + 1);
+      return a.map((v, k) => bd[k] > 0 ? v / t / bd[k] : null); });
+    const avg = [0, 1, 2, 3, 4].map(k => { const v = intens.map(x => x[k]).filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; });
+    const full = bucketDays(year, mon), done = bucketDays(year, mon, day);
+    const cumOf = I => { const tot = I.reduce((a, v, k) => a + (v || 0) * full[k], 0), dn = I.reduce((a, v, k) => a + (v || 0) * done[k], 0);
+      return tot > 0 ? Math.max(0.01, Math.min(1, dn / tot)) : null; };
+    const per = intens.map(I => cumOf(I.map((v, k) => v == null ? avg[k] : v))).filter(v => v != null);
+    const cum = cumOf(avg);
+    if (cum == null) return null;
+    return { cum, lo: Math.min(...per), hi: Math.max(...per), n: refs.length, remainBd: full.reduce((a, v) => a + v, 0) - done.reduce((a, v) => a + v, 0) };
   }
 
   // ── 이번 달 보기 (진도·마감 전망·목표 대비) ──
@@ -208,125 +210,44 @@
     const n = series.length;
     return { series, down2: n >= 3 && series[n - 1].hl < series[n - 2].hl - RULE.downTol && series[n - 2].hl < series[n - 3].hl - RULE.downTol };
   }
-  // ── 도매장 예상 수요 (월초 재고 판정용 · 참고자료) ──
-  //  월초 재고는 도매장 재고. 우리 출고는 마감 푸시·11월 쉼·12월 대량 푸시로 흔들려 그대로 쓰면 왜곡된다.
-  //  ① 실제 소진량(우선): 전월 소진 = 전월 월초재고 + 전월 출고 − 이번 달 월초재고 → 다음 달 재고가 들어오는 순간 자동 사용
-  //     (여러 달이면 계절성 뺀 중앙값 × 이번 달 지수)
-  //  ② 추정(소진량 없을 때): 26년 기준 매출 × 이번 달 계절지수
-  //     · 계절지수 = On TTL 25년 월 출고 ÷ 월평균, 밀어내기 구간(11~3월)은 묶어서 평균
-  //     · 26년 기준 매출 = 밀어내기 구간 뺀 최근 마감월(최대 6개)의 '출고 ÷ 계절지수' 중앙값 (26년 안의 푸시 달도 걸러짐)
-  function seasonIndex(D) {
-    const a = ((D.monthly_regional_2025 || {}).TTL || []).map(v => +v || 0);
-    const avg = a.reduce((x, v) => x + v, 0) / 12;
-    if (!(avg > 0)) return Array(12).fill(1);
-    const idx = a.map(v => v / avg);
-    const blk = RULE.pushBlock.map(m => m - 1);
-    const bAvg = blk.reduce((x, i) => x + idx[i], 0) / blk.length;
-    blk.forEach(i => { idx[i] = bAvg; });
-    return idx;
+  // ── 도매장 월초 재고 → 이번 달 영향 (RoFo·FCST 대비, 참고자료) ──
+  //  예상 소진(추정)은 쓰지 않는다(생맥주처럼 추세가 큰 SKU에서 맞지 않음). 기준은 목표 물량뿐:
+  //   재고일수 = 월초 재고 ÷ (월 RoFo 또는 월 FCST ÷ 달력일)
+  //   적정 재고 = 부족·과다 기준의 가운데 일수(기본 10.5일)분 → 초과분 = 월초 재고 − 적정 재고
+  //   달성률 영향 = −초과분 ÷ 목표 (초과 재고만큼 이번 달 출고가 줄어든다고 볼 때 RoFo·FCST 달성률을 몇 %p 깎나)
+  const stockTH = D => Object.assign({ short: 7, over: 14 }, (D.on_fcst_book && D.on_fcst_book.thresholds) || {});
+  const bookMonth = (D, y, m) => D.on_fcst_book && D.on_fcst_book.months && D.on_fcst_book.months[`${y}-${String(m).padStart(2, '0')}`];
+  function vsGoal(stockHl, goalHl, T, TH) {
+    if (!(goalHl > 0)) return null;
+    const daily = goalHl / T, tg = (TH.short + TH.over) / 2;
+    const days = stockHl / daily, excess = stockHl - daily * tg;
+    return { goal: goalHl, days, excess, impact: -excess / goalHl, status: days < TH.short ? 'short' : days > RULE.stockCheckDays ? 'check' : days > TH.over ? 'over' : 'ok' };
   }
-  const median = arr => { const v = arr.slice().sort((a, b) => a - b), n = v.length; return n ? (n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : null; };
-  function baseDemand(row, ctx) {   // 26년 기준 매출(월, 계절성 제거) — 박스
-    const closed = ctx.mon - 1, inBlock = i => RULE.pushBlock.includes(i + 1);
-    const vals = [], months = [];
-    for (let i = closed - 1; i >= 0 && vals.length < RULE.baseMonths; i--) if (!inBlock(i) && +row.ty[i] > 0) { vals.push(+row.ty[i] / ctx.sIdx[i]); months.push(i + 1); }
-    // 연초(1~4월)엔 같은 해 밀어내기 구간 밖 마감월이 부족 → 전년(ly 배열)의 구간 밖 달로 채움
-    for (let i = 11; i >= 0 && vals.length < RULE.baseMinMonths; i--) if (!inBlock(i) && row.ly && +row.ly[i] > 0) { vals.push(+row.ly[i] / ctx.sIdx[i]); months.push('전년 ' + (i + 1)); }
-    if (vals.length < RULE.baseMinMonths) return null;
-    return { base: median(vals), months };
+  // 지점 전체 월초 재고(HL, 입력된 전 SKU) vs RoFo·FCST
+  function branchStock(D, bookKey, y, m, hfOf, rofoHl, fcstHl) {
+    const M = bookMonth(D, y, m); if (!M || !M.rows || !M.rows[bookKey]) return null;
+    let hl = 0, n = 0;
+    Object.entries(M.rows[bookKey]).forEach(([sku, x]) => { if (x && x.stock != null) { hl += (+x.stock || 0) * hfOf(sku); n++; } });
+    if (!n) return null;
+    const TH = stockTH(D), T = new Date(y, m, 0).getDate();
+    return { hl, n, th: TH, targetDays: (TH.short + TH.over) / 2, rofo: vsGoal(hl, rofoHl, T, TH), fcst: vsGoal(hl, fcstHl, T, TH) };
   }
-  const bookStock = (D, bookKey, y, m, sku) => {
-    const M = D.on_fcst_book && D.on_fcst_book.months && D.on_fcst_book.months[`${y}-${String(m).padStart(2, '0')}`];
-    const x = M && M.rows && M.rows[bookKey] && M.rows[bookKey][sku];
-    return x && x.stock != null ? +x.stock || 0 : null;
-  };
-  // 실제 소진량: m월 이전의 완료월 k마다 (k월 재고 + k월 출고 − k+1월 재고). 출고는 마감월(데이터 월 이전)만
-  function depletions(D, bookKey, row, y, m, ctx) {
-    const out = [];
-    for (let k = m - 1; k >= 1 && out.length < 3; k--) {
-      if (y !== ctx.year || k >= ctx.mon) continue;       // 출고가 끝난 달만
-      const s0 = bookStock(D, bookKey, y, k, row.sku), s1 = bookStock(D, bookKey, y, k + 1, row.sku);
-      if (s0 == null || s1 == null) break;                  // 재고가 연속으로 있어야
-      const sellin = +row.ty[k - 1] || 0;
-      out.push({ month: k, depl: s0 + sellin - s1, sellin, change: s1 - s0 });
-    }
-    return out;
-  }
-  function expDemand(D, bookKey, row, y, m, ctx) {
-    const dp = row.ty ? depletions(D, bookKey, row, y, m, ctx).filter(d => d.depl > 0) : [];
-    if (dp.length) {
-      const base = median(dp.map(d => d.depl / ctx.sIdx[d.month - 1]));
-      return { qty: base * ctx.sIdx[m - 1], src: 'depl', last: dp[0], n: dp.length };
-    }
-    const b = row.ty ? baseDemand(row, ctx) : null;
-    return b ? { qty: b.base * ctx.sIdx[m - 1], src: 'est', base: b.base, months: b.months, idx: ctx.sIdx[m - 1] } : null;
-  }
-  // 월초 재고 → 재고일수 = 재고 ÷ (예상 수요 ÷ 달력일). 부족 < 7일 · 과다 > 14일(통합 양식 기준) · 45일 초과 '확인 필요'
-  //  Stock & Cover 탭(엑셀 지점 시트와 동일 계산)과는 분모가 다름.
-  function stockOf(D, bookKey, y, m, hitRows, hfOf, ctx, fcstQty) {
-    const M = D.on_fcst_book && D.on_fcst_book.months && D.on_fcst_book.months[`${y}-${String(m).padStart(2, '0')}`];
-    if (!M || !M.rows || !M.rows[bookKey]) return null;
-    let qty = 0, hl = 0, any = false, demand = 0, dmAny = false;
-    const parts = [];
-    hitRows.forEach(r => {
-      const x = M.rows[bookKey][r.sku];
-      if (x && x.stock != null) { qty += +x.stock || 0; hl += (+x.stock || 0) * hfOf(r.sku); any = true; }
-      const e = expDemand(D, bookKey, r, y, m, ctx);
-      if (e) { demand += e.qty; dmAny = true; parts.push(e); }
-    });
-    if (!any) return null;
-    const T = new Date(y, m, 0).getDate();
-    const TH = Object.assign({ short: 7, over: 14 }, (D.on_fcst_book && D.on_fcst_book.thresholds) || {});
-    const days = (dmAny && demand > 0) ? qty / (demand / T) : null;
-    let status = days == null ? (qty > 0 ? 'idle' : 'none') : days < TH.short ? 'short' : days > RULE.stockCheckDays ? 'check' : days > TH.over ? 'over' : 'ok';
-    if (qty <= 0 && demand > 0) status = 'short';
-    const src = parts.length && parts.every(p => p.src === 'depl') ? 'depl' : parts.some(p => p.src === 'depl') ? 'mixed' : 'est';
-    // 밀어내기 지표(전월): 출고 · 소진 · 도매장 재고 증감 — 소진량이 있는 SKU 합
-    const dp = parts.filter(p => p.src === 'depl' && p.last);
-    const push = dp.length ? { month: dp[0].last.month, sellin: dp.reduce((a, p) => a + p.last.sellin, 0), depl: dp.reduce((a, p) => a + p.last.depl, 0), change: dp.reduce((a, p) => a + p.last.change, 0) } : null;
-    // 이번 달 출고 영향: 적정 월말 재고(부족·과다 기준의 가운데 일수) 기준
-    //  재고 반영 적정 출고 = 예상 소진 + 적정 월말 재고 − 월초 재고 → 월초 재고 영향 = 적정 출고 − 예상 소진(= 적정 재고 − 월초 재고)
-    //  FCST대로 출고하면 월말 재고 = 월초 재고 + FCST − 예상 소진
-    const daily = (dmAny && demand > 0) ? demand / T : null;
-    const targetDays = (TH.short + TH.over) / 2;
-    const target = daily != null ? daily * targetDays : null;
-    const need = daily != null ? demand + target - qty : null;
-    const endQty = (daily != null && fcstQty != null) ? qty + fcstQty - demand : null;
-    const endDays = endQty != null ? endQty / daily : null;
-    const endStatus = endDays == null ? null : endDays < TH.short ? 'short' : endDays > RULE.stockCheckDays ? 'check' : endDays > TH.over ? 'over' : 'ok';
-    const hfQ = qty > 0 ? hl / qty : (hitRows.length ? hfOf(hitRows[0].sku) : RULE.csStd);
-    return { qty, hl, hfQ, T, days, demand: dmAny ? demand : null, status, th: TH, src, push,
-      est: parts.length === 1 && parts[0].src === 'est' ? parts[0] : null,
-      fcstQty, fcstVsDemand: (fcstQty != null && demand > 0) ? fcstQty / demand : null,
-      targetDays, target, need, impact: target != null ? target - qty : null,
-      endQty, endDays, endStatus, fcstVsNeed: (fcstQty != null && need > 0) ? fcstQty / need : null };
-  }
-  // 지점의 m월 월초 재고 상위 N개 SKU (HL 기준 순위) → 각 SKU 재고 판정
-  //  rowsMap = skuRows(지점) (출고 이력·계수), fcstQtyOf(sku) = 그 달 FCST(박스)
+  // 월초 재고(HL) 상위 N개 SKU — SKU별 RoFo가 지점 단위로 없어 FCST 대비만
   function topStock(D, bookKey, y, m, rowsMap, ctx, fcstQtyOf) {
-    const M = D.on_fcst_book && D.on_fcst_book.months && D.on_fcst_book.months[`${y}-${String(m).padStart(2, '0')}`];
-    if (!M || !M.rows || !M.rows[bookKey]) return [];
+    const M = bookMonth(D, y, m); if (!M || !M.rows || !M.rows[bookKey]) return [];
     const hfOf = sku => (rowsMap[sku] && rowsMap[sku].hf) || ctx.hfOf(sku);
+    const TH = stockTH(D), T = new Date(y, m, 0).getDate();
     return Object.entries(M.rows[bookKey])
       .filter(([, x]) => x && +x.stock > 0)
-      .map(([sku, x]) => ({ sku, hl: (+x.stock) * hfOf(sku) }))
+      .map(([sku, x]) => ({ sku, qty: +x.stock, hl: (+x.stock) * hfOf(sku) }))
       .sort((a, b) => b.hl - a.hl).slice(0, RULE.stockTopN)
-      .map(({ sku }) => {
-        const row = rowsMap[sku] || { sku, ty: null, ly: null };
-        const stock = stockOf(D, bookKey, y, m, [row], hfOf, ctx, fcstQtyOf(sku));
-        return stock ? { label: sku, sku, unit: /Keg$/i.test(sku) ? 'keg' : 'cs', stock } : null;
-      }).filter(Boolean);
+      .map(({ sku, qty, hl }) => {
+        const fq = fcstQtyOf(sku), hf = hfOf(sku);
+        const g = vsGoal(qty, fq, T, TH);   // 박스 단위로 계산(비율은 같음)
+        return { label: sku, sku, unit: /Keg$/i.test(sku) ? 'keg' : 'cs', qty, hl, hf, fcstQty: fq, ratio: fq > 0 ? qty / fq : null, vs: g, th: TH };
+      });
   }
-  // 상위 재고 SKU 합계(HL): 월초 재고 영향(이번 달 출고 ±), FCST대로면 월말 재고 일수
-  function stockImpact(S) {
-    const r = (S || []).filter(x => x.stock && x.stock.target != null);
-    if (!r.length) return null;
-    const h = k => k.hfQ;
-    let impact = 0, demand = 0, end = 0, endAny = false;
-    r.forEach(x => { const k = x.stock; impact += k.impact * h(k); demand += k.demand * h(k); if (k.endQty != null) { end += k.endQty * h(k); endAny = true; } });
-    const dailyHl = demand / r[0].stock.T;
-    return { impactHl: impact, demandHl: demand, endHl: endAny ? end : null, endDays: endAny && dailyHl > 0 ? end / dailyHl : null, n: r.length, targetDays: r[0].stock.targetDays };
-  }
+
   // 지점의 m월 AP (현재 월이면 지점 합계 값, 아니면 월별 AP 표)
   function apOf(D, hlKey, m, ctx) {
     if (m === ctx.mon) { const v = num((((D.wk10_summary || {}).hl || {})[hlKey] || {}).ap); if (v != null) return v; }
@@ -337,7 +258,7 @@
   const fq = v => (+v).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
   const f0q = v => Math.round(Math.abs(+v)).toLocaleString('ko-KR');
   const fcs = (hl, csf) => Math.round(Math.abs(hl) / (csf || RULE.csStd)).toLocaleString('ko-KR');
-  function questions(br, A, B, C, isDec, S) {
+  function questions(br, A, B, C, isDec, S, ST) {
     const q = [], push = (pri, text) => q.push({ pri, text });
     if (A.sigProgress && A.sigProgress.k === 'bad')
       push(isDec ? 0 : 2, `${br} 평소보다 진도 ${Math.round(Math.abs(A.progressGap * 100))}%p 늦음 — ${isDec ? '연말 ' : '월말에 몰릴 수 있음, '}노멀 마감 가능한가?`);
@@ -346,11 +267,13 @@
     const sk = (B || []).filter(x => x.sigClose && x.sigClose.k === 'bad' && x.short < 0 && (A.short == null || A.short >= 0 || x.short / A.short >= RULE.skuQuestionMinShare))
       .sort((a, b) => a.short - b.short)[0];
     if (sk) push(3, `${sk.label} 지금 속도면 FCST의 ${Math.round(sk.vsFcst * 100)}% (${fcs(sk.short, sk.csf)} ${sk.unit === 'keg' ? 'keg' : 'c/s'} 부족) — 원인과 대응은?`);
-    // 월초 재고 → 이번 달 영향: FCST대로 출고하면 월말 도매장 재고가 몇 일분이 되나
-    const endHi = (S || []).filter(x => x.stock && (x.stock.endStatus === 'over' || x.stock.endStatus === 'check')).sort((a, b) => b.stock.endDays - a.stock.endDays)[0];
-    if (endHi) push(3.6, `${endHi.label} FCST대로 출고하면 월말 도매장 재고 ${Math.round(endHi.stock.endDays)}일분(적정 ${endHi.stock.targetDays}일) — 이번 달 출고를 ${f0q(endHi.stock.fcstQty - endHi.stock.need)}${endHi.unit === 'keg' ? ' keg' : ' c/s'} 줄여야 하나?`);
-    const endLo = (S || []).filter(x => x.stock && x.stock.endStatus === 'short').sort((a, b) => a.stock.endDays - b.stock.endDays)[0];
-    if (endLo) push(3.5, `${endLo.label} FCST대로면 월말 도매장 재고 ${Math.max(0, Math.round(endLo.stock.endDays))}일분(부족) — 이번 달 ${f0q(endLo.stock.need - endLo.stock.fcstQty)}${endLo.unit === 'keg' ? ' keg' : ' c/s'} 더 나갈 여지?`);
+    // 월초 도매장 재고 → 이번 달 영향 (RoFo·FCST 대비)
+    if (ST && ST.rofo && ST.rofo.impact <= RULE.stockImpactQ)
+      push(3.6, `${br} 월초 도매장 재고가 적정(${ST.targetDays}일분)보다 ${fq(ST.rofo.excess)} HL 많음 — RoFo 달성률 −${Math.round(-ST.rofo.impact * 100)}%p 요인, 이번 달 대응은?`);
+    const so = (S || []).filter(x => x.vs && (x.vs.status === 'over' || x.vs.status === 'check')).sort((a, b) => b.vs.excess * b.hf - a.vs.excess * a.hf)[0];
+    if (so) push(3.7, `${so.label} 월초 재고가 FCST의 ${Math.round(so.vs.days)}일분 — 적정보다 ${f0q(so.vs.excess)} ${so.unit === 'keg' ? 'keg' : 'c/s'} 많아 이번 달 출고 영향은?`);
+    const ss = (S || []).filter(x => x.vs && x.vs.status === 'short').sort((a, b) => a.vs.days - b.vs.days)[0];
+    if (ss) push(3.5, `${ss.label} 월초 재고가 FCST의 ${(Math.round(ss.vs.days * 10) / 10)}일분(부족) — 이번 달 추가 출고 여지?`);
     if (C.trend && C.trend.down2) { const s = C.trend.series, n = s.length; push(4, `${br} FCST 2주 연속 하향(${fq(s[n - 3].hl)}→${fq(s[n - 1].hl)} HL) — 일시적인가, 구조적인가?`); }
     if (A.fcstVsRofo != null && A.fcstVsRofo < 1 + RULE.gapWarn) push(5, `${br} FCST가 RoFo의 ${Math.round(A.fcstVsRofo * 100)}% — RoFo 갭 계획은?`);
     return q.sort((a, b) => a.pri - b.pri).slice(0, RULE.maxQuestions).map(x => x.text);
@@ -366,6 +289,16 @@
     return q.sort((a, b) => a.pri - b.pri).slice(0, RULE.maxQuestions).map(x => x.text);
   }
 
+  // On TTL 월초 재고 = 5개 지점 합
+  function ttlStock(D, ctx, list, rofoHl, fcstHl, y, m) {
+    y = y || ctx.year; m = m || ctx.mon;
+    let hl = 0, n = 0;
+    list.forEach(b => { const rows = skuRows(D, b.sku), M = bookMonth(D, y, m); if (!M || !M.rows || !M.rows[b.book]) return;
+      Object.entries(M.rows[b.book]).forEach(([sku, x]) => { if (x && x.stock != null) { hl += (+x.stock || 0) * ((rows[sku] && rows[sku].hf) || ctx.hfOf(sku)); n++; } }); });
+    if (!n) return null;
+    const TH = stockTH(D), T = new Date(y, m, 0).getDate();
+    return { hl, n, th: TH, targetDays: (TH.short + TH.over) / 2, rofo: vsGoal(hl, rofoHl, T, TH), fcst: vsGoal(hl, fcstHl, T, TH) };
+  }
   // ── 지점 1개 (이번 달) ──
   function computeBranch(D, b, ctx) {
     const hl = ((D.wk10_summary || {}).hl || {})[b.hl] || {};
@@ -396,9 +329,12 @@
         .map(r => ({ sku: r.sku, d: r.d, csf: r.hf })),
       trend: b.book ? fcstTrend(D, b.book, ctx.year, ctx.mon, sku => (rows[sku] && rows[sku].hf) || ctx.hfOf(sku)) : null,
     };
+    const hfB = sku => (rows[sku] && rows[sku].hf) || ctx.hfOf(sku);
     const S = b.book ? topStock(D, b.book, ctx.year, ctx.mon, rows, ctx, sku => rows[sku] ? rows[sku].fcst / rows[sku].hf : null) : [];
-    const E = questions(b.label, A, B, C, ctx.mon === 12, S);
-    return { key: b.key, label: b.label, cat: b.cat, A, B, C, S, E, signal: worst(A.sigProgress, A.sigClose) };
+    const ST = b.book ? branchStock(D, b.book, ctx.year, ctx.mon, hfB, A.rofo, A.fcst)
+      : (b.key === 'ttl' ? ttlStock(D, ctx, BRANCHES, A.rofo, A.fcst) : null);
+    const E = questions(b.label, A, B, C, ctx.mon === 12, S, ST);
+    return { key: b.key, label: b.label, cat: b.cat, A, B, C, S, ST, E, signal: worst(A.sigProgress, A.sigClose) };
   }
 
   // ── ALSM (Off 스냅샷 모델, 권역 FCST 없음 → 합계) ──
@@ -481,8 +417,11 @@
         return Object.assign(x, { id, label: def.label, unit: def.unit || 'cs', skus, share: ratio(x.fcst, start.target) });
       }).filter(Boolean) : [];
       const rowsAll = skuRows(D, b.sku);
-      const S = b.book && inFY(ny) ? topStock(D, b.book, ny, nm, rowsAll, ctx, sku => nf ? (nf.bySku[sku] || 0) / ((rowsAll[sku] && rowsAll[sku].hf) || ctx.hfOf(sku)) : null) : [];
-      return { key: b.key, label: b.label, cat: b.cat, close, start, B, S, E: transitionQuestions(b.label, close, start, pm, nm),
+      const hfA = sku => (rowsAll[sku] && rowsAll[sku].hf) || ctx.hfOf(sku);
+      const S = b.book && inFY(ny) ? topStock(D, b.book, ny, nm, rowsAll, ctx, sku => nf ? (nf.bySku[sku] || 0) / hfA(sku) : null) : [];
+      const ST = !inFY(ny) ? null : b.book ? branchStock(D, b.book, ny, nm, hfA, start.rofo, start.fcst)
+        : (b.key === 'ttl' ? ttlStock(D, ctx, BRANCHES, start.rofo, start.fcst, ny, nm) : null);
+      return { key: b.key, label: b.label, cat: b.cat, close, start, B, S, ST, E: transitionQuestions(b.label, close, start, pm, nm),
         signal: worst(close.sigClose, start.sigSpeed) };
     };
     const branches = BRANCHES.map(one);
@@ -523,13 +462,13 @@
     const patCache = {};
     const patOf = groups => {   // → { baseline, pat } (패턴 없으면 영업일 경과율)
       const g = groups && groups.length ? groups : allGroups, key = g.join('|');
-      if (!(key in patCache)) patCache[key] = patternCum(op, g, mon, elapsedCal, dim);
+      if (!(key in patCache)) patCache[key] = patternCum(op, g, mon, elapsedCal, dim, year);
       const p = patCache[key];
       return p ? { baseline: p.cum, pat: p } : { baseline: wd.pct || null, pat: null };
     };
     const ttlPat = patOf(null);
-    if (ttlPat.pat) { baseline = ttlPat.baseline; baseSrc = `발주패턴(지점별, 완료월 ${ttlPat.pat.n}개 평균, 달력일 기준)`; }
-    const ctx = { wd, mon, ci: mon - 1, year, baseline, patOf, asOfDay, elapsedCal, sIdx: seasonIndex(D), remainWd: Math.max((wd.total || 0) - (wd.elapsed || 0), 0), hfOf: opts.hfOf || (() => RULE.csStd) };
+    if (ttlPat.pat) { baseline = ttlPat.baseline; baseSrc = `발주패턴(지점별, 완료월 ${ttlPat.pat.n}개 평균, 영업일 기준)`; }
+    const ctx = { wd, mon, ci: mon - 1, year, baseline, patOf, asOfDay, elapsedCal, remainWd: Math.max((wd.total || 0) - (wd.elapsed || 0), 0), hfOf: opts.hfOf || (() => RULE.csStd) };
 
     const branches = BRANCHES.map(b => computeBranch(D, b, ctx));
     const ttl = computeBranch(D, { key: 'ttl', label: 'On TTL', hl: 'TTL', sku: 'On Trade Total', book: null, groups: (op && op.groups) || [], cat: 'on_trade' }, ctx);
@@ -600,7 +539,7 @@
       `<th ${TH}>MTD</th><th ${TH}>평소 이맘때</th><th ${TH}>지금 진도</th><th ${TH}>남은 영업일</th><th ${TH}>남은 필요</th><th ${TH}>주당 필요</th><th ${TH}>최근 주당</th><th ${TH}>연간 착지</th>`,
       `<tr><td ${TD}>${hc(A.mtd, A.csf)}</td><td ${TD}>${pct(A.baseline)}</td><td ${TD}>${pill(A.sigProgress, pct(A.progress))}</td><td ${TD}>${A.remainWd}일</td>`
       + `<td ${TD}>${hc(A.need, A.csf)}</td><td ${TD}><b>${hc(A.needWeekly, A.csf)}</b></td><td ${TD}>${hc(A.recentWeekly, A.csf)}</td><td ${TD}>${f0(A.landing)}</td></tr>`)
-      + NOTE('평소 이맘때 = 이 지점의 완료된 달들 발주패턴(1~7일·8~14일… 구간 비중) 평균으로 본 DSR 기준일까지의 누적 비중 · 최근 주당 = 최근 2주(10영업일) 실적 · 연간 착지 = 마감월 실적 + 당월 + 이후 월 RoFo');
+      + NOTE('평소 이맘때 = 이 지점 완료월들의 발주패턴(1~7일·8~14일… 구간의 영업일당 발주 강도 평균)을 이번 달 영업일 배치에 적용한 DSR 기준일까지의 누적 비중 · 최근 주당 = 최근 2주(10영업일) 실적 · 연간 착지 = 마감월 실적 + 당월 + 이후 월 RoFo');
   }
   function skuTable(B, isAlsm) {
     if (!B || !B.length) return '';
@@ -612,29 +551,29 @@
       + NOTE(isAlsm ? 'ALSM SKU 최근 주당 = MTD 런레이트 (SKU별 일자 실적 없음) · c/s = SKU 실제 박스' : 'c/s = SKU 실제 박스(20L은 keg)');
   }
   const ST = { short: ['부족', SIG.bad], over: ['과다', SIG.warn], ok: ['적정', SIG.ok], check: ['확인 필요', SIG.warn], idle: ['판매 없음', null], none: ['—', null] };
-  function stockTable(B, title, isNext) {
-    const rows = (B || []).filter(x => x.stock);
-    if (!rows.length) return '';
-    const th = rows[0].stock.th, tg = rows[0].stock.targetDays;
-    const MN = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
-    const basisTxt = (k, u) => k.src === 'depl' && k.push
-      ? `실제 소진 · ${MN[k.push.month - 1]} 출고 ${f0(k.push.sellin)} / 소진 ${f0(k.push.depl)} → 재고 ${k.push.change >= 0 ? '+' : '−'}${f0(Math.abs(k.push.change))}`
-      : k.src === 'mixed' ? '일부 실제 소진' : k.est ? `추정 · 26년 기준 ${f0(k.est.base)} × 계절 ${k.est.idx.toFixed(2)}` : '추정';
-    const sum = stockImpact(rows);
-    const sumLine = sum ? `<div style="font-size:12.5px;color:#374151;margin:2px 0 4px;line-height:1.7;">`
-      + `상위 ${sum.n} SKU 합계 · 월초 재고가 적정(${tg}일분)보다 <b style="color:${sum.impactHl < 0 ? '#b91c1c' : '#15803d'};">${sum.impactHl < 0 ? f1(-sum.impactHl) + ' HL 많음 → 이번 달 출고 −' + f1(-sum.impactHl) + ' HL 요인' : f1(sum.impactHl) + ' HL 적음 → 이번 달 출고 +' + f1(sum.impactHl) + ' HL 여지'}</b>`
-      + (sum.endDays != null ? ` · FCST대로 출고하면 월말 재고 <b>${f1(Math.max(sum.endDays, 0))}일분</b>` : '') + `</div>` : '';
-    return H(title || `${isNext ? '' : '이번 달 '}월초 재고 영향 — 도매장 재고 상위 ${RULE.stockTopN} SKU`) + sumLine + TABLE(
-      `<th ${THL}>SKU</th><th ${TH}>월초 재고</th><th ${TH}>예상 소진<br>(이번 달)</th><th ${TH}>재고 반영<br>적정 출고</th><th ${TH}>FCST</th><th ${TH}>월초 재고 영향<br>(출고 ±)</th><th ${TH}>FCST대로면<br>월말 재고</th>`,
-      rows.map(x => { const k = x.stock, u = x.unit === 'keg' ? ' keg' : ' c/s', st = ST[k.status] || ST.none, es = ST[k.endStatus] || ST.none;
-        return `<tr><td ${TDL}>${esc(x.label)}</td>`
-          + `<td ${TD}>${f0(k.qty)}${u}${SMALL((k.days != null ? f1(k.days) + '일분 ' : '') + (st[1] ? st[0] : ''))}</td>`
-          + `<td ${TD}>${k.demand != null ? f0(k.demand) + u : '—'}${SMALL(basisTxt(k, u))}</td>`
-          + `<td ${TD}>${k.need != null ? f0(Math.max(k.need, 0)) + u : '—'}</td>`
-          + `<td ${TD}>${k.fcstQty != null ? f0(k.fcstQty) + u : '—'}${k.fcstVsNeed != null ? SMALL('적정의 ' + pct(k.fcstVsNeed)) : ''}</td>`
-          + `<td ${TD}>${k.impact != null ? '<b style="color:' + (k.impact < 0 ? '#b91c1c' : '#15803d') + ';">' + (k.impact < 0 ? '−' : '+') + f0(Math.abs(k.impact)) + u + '</b>' : '—'}</td>`
-          + `<td ${TD}>${k.endDays != null ? (k.endDays <= 0 ? pill(SIG.bad, '소진') + SMALL(f0(-k.endQty) + u + ' 모자람') : es[1] ? pill(es[1], f1(k.endDays) + '일') : f1(k.endDays) + '일') : '—'}</td></tr>`; }).join(''))
-      + NOTE(`참고자료 · 도매장 재고 · 예상 소진 = ${'실제 소진량(전월 재고 + 전월 출고 − 이번 달 재고)'}, 없으면 추정(26년 기준 매출[11~3월 밀어내기 구간 뺀 최근 마감월, 계절성 제거 중앙값] × 계절지수[On TTL 25년, 11~3월 묶음]) · 적정 월말 재고 = ${tg}일분(부족 ${th.short}일·과다 ${th.over}일의 가운데) · 재고 반영 적정 출고 = 예상 소진 + 적정 월말 재고 − 월초 재고 · 월초 재고 영향 = 적정 출고 − 예상 소진(−면 재고가 이번 달 출고를 줄이는 요인) · FCST대로면 월말 재고 = 월초 재고 + FCST − 예상 소진 · 월말 재고 ${RULE.stockCheckDays}일 초과는 '확인 필요'`);
+  const ST_ = ST;
+  function stockGoalRow(name, g, unitLbl) {
+    if (!g) return `<tr><td ${TDL}><b>${name}</b></td><td ${TD} colspan="4"><span style="color:#9ca3af;">목표 없음</span></td></tr>`;
+    const st = ST[g.status] || ST.none;
+    return `<tr><td ${TDL}><b>${name}</b></td><td ${TD}>${f1(g.goal)} ${unitLbl}</td><td ${TD}>${st[1] ? pill(st[1], f1(g.days) + '일') : f1(g.days) + '일'}</td>`
+      + `<td ${TD}>${'<b style="color:' + (g.excess > 0 ? '#b91c1c' : '#15803d') + ';">' + (g.excess > 0 ? '+' : '−') + f1(Math.abs(g.excess)) + ' ' + unitLbl + '</b>'}</td>`
+      + `<td ${TD}>${pill(g.impact < RULE.stockImpactQ ? SIG.bad : g.impact < 0 ? SIG.warn : SIG.ok, (g.impact >= 0 ? '+' : '−') + Math.abs(Math.round(g.impact * 100)) + '%p')}</td></tr>`;
+  }
+  function stockTable(ST, S, title) {
+    if (!ST && !(S && S.length)) return '';
+    const tg = ST ? ST.targetDays : (S[0].th.short + S[0].th.over) / 2;
+    let h = H(title || '월초 도매장 재고 → 이번 달 영향');
+    if (ST) h += `<div style="font-size:12px;color:#374151;margin:2px 0;">월초 도매장 재고 <b>${f1(ST.hl)} HL</b> (${f0(ST.hl / RULE.csStd)} c/s · 입력 ${ST.n}개 SKU)</div>`
+      + TABLE(`<th ${THL}>목표 기준</th><th ${TH}>월 목표</th><th ${TH}>재고일수</th><th ${TH}>적정(${tg}일분) 대비</th><th ${TH}>달성률 영향</th>`,
+        stockGoalRow('RoFo', ST.rofo, 'HL') + stockGoalRow('FCST', ST.fcst, 'HL'));
+    if (S && S.length) h += `<div style="font-size:12px;color:#374151;margin:6px 0 2px;">재고 상위 ${S.length} SKU (FCST 대비)</div>` + TABLE(
+      `<th ${THL}>SKU</th><th ${TH}>월초 재고</th><th ${TH}>월 FCST</th><th ${TH}>재고율<br>(÷FCST)</th><th ${TH}>재고일수<br>(FCST 기준)</th><th ${TH}>적정 대비<br>(= 출고 영향)</th>`,
+      S.map(x => { const u = x.unit === 'keg' ? ' keg' : ' c/s', g = x.vs, st = g ? (ST_[g.status] || ST_.none) : ST_.none;
+        return `<tr><td ${TDL}>${esc(x.label)}</td><td ${TD}>${f0(x.qty)}${u}${SMALL(f1(x.hl) + ' HL')}</td><td ${TD}>${x.fcstQty != null ? f0(x.fcstQty) + u : '—'}</td>`
+          + `<td ${TD}>${pct(x.ratio)}</td><td ${TD}>${g ? (st[1] ? pill(st[1], f1(g.days) + '일') : f1(g.days) + '일') : '—'}</td>`
+          + `<td ${TD}>${g ? '<b style="color:' + (g.excess > 0 ? '#b91c1c' : '#15803d') + ';">' + (g.excess > 0 ? '+' : '−') + f0(Math.abs(g.excess)) + u + '</b>' + SMALL(g.excess > 0 ? '출고 줄이는 요인' : '더 나갈 여지') : '—'}</td></tr>`; }).join(''));
+    const th = ST ? ST.th : S[0].th;
+    return h + NOTE(`참고자료 · 도매장 재고(통합 FCST 양식 '월초 재고') · 재고일수 = 월초 재고 ÷ (월 목표 ÷ 달력일) · 적정 = ${tg}일분(부족 ${th.short}일·과다 ${th.over}일의 가운데) · 적정 대비 초과분만큼 이번 달 출고가 줄어든다고 보면 달성률 영향 = −초과분 ÷ 월 목표 · SKU별 RoFo는 지점 단위로 없어 SKU는 FCST 기준 · ${RULE.stockCheckDays}일 초과는 '확인 필요'`);
   }
   function blockC(C, csf, title) {
     const items = [];
@@ -656,22 +595,25 @@
     return H('권역 실적 (FCST는 ALSM 합계로만)') + TABLE(`<th ${THL}>권역</th><th ${TH}>MTD</th><th ${TH}>YTD(마감월)</th><th ${TH}>전년 대비</th>`,
       regions.map(r => `<tr><td ${TDL}>${esc(r.key)}</td><td ${TD}>${hc(r.mtd, RULE.csStd)}</td><td ${TD}>${f0(r.ytd)}</td><td ${TD}>${r.ytdLy > 0 ? ((r.ytd / r.ytdLy - 1) >= 0 ? '+' : '') + ((r.ytd / r.ytdLy - 1) * 100).toFixed(1) + '%' : '—'}</td></tr>`).join(''));
   }
-  function stockHead(S) {
-    const m = stockImpact(S); if (!m) return '';
-    return `<div style="font-size:12.5px;margin:-2px 0 6px;"><span>월초 재고 영향 <b style="color:${m.impactHl < 0 ? '#b91c1c' : '#15803d'};">${m.impactHl < 0 ? '−' : '+'}${f1(Math.abs(m.impactHl))} HL</b> <span style="color:#6b7280;">도매장 재고가 적정(${m.targetDays}일분)보다 ${m.impactHl < 0 ? '많아 이번 달 출고를 줄이는 요인' : '적어 이번 달 더 나갈 여지'}${m.endDays != null ? ' · FCST대로면 월말 ' + f1(Math.max(m.endDays, 0)) + '일분' : ''}</span></span></div>`;
+  function stockHead(STk) {
+    if (!STk || !STk.rofo && !STk.fcst) return '';
+    const r = STk.rofo, f = STk.fcst, main = r || f;
+    const imp = g => g ? (g.impact >= 0 ? '+' : '−') + Math.abs(Math.round(g.impact * 100)) + '%p' : '—';
+    return `<div style="font-size:12.5px;margin:-2px 0 6px;"><span>월초 재고 영향 ${pill(main.impact < RULE.stockImpactQ ? SIG.bad : main.impact < 0 ? SIG.warn : SIG.ok, 'RoFo ' + imp(r) + ' · FCST ' + imp(f))} `
+      + `<span style="color:#6b7280;">도매장 재고 ${f1(STk.hl)} HL = ${r ? 'RoFo ' + f1(r.days) + '일분' : ''}${r && f ? ' · ' : ''}${f ? 'FCST ' + f1(f.days) + '일분' : ''} (적정 ${STk.targetDays}일분)</span></span></div>`;
   }
   function branchHtml(R, b) {
-    return headLine(b.A, b.C) + stockHead(b.S) + targetTable(b.A) + paceTable(b.A) + skuTable(b.B, b.key === 'alsm') + stockTable(b.S) + regionTable(b.regions) + blockC(b.C, RULE.csStd) + blockE(b.E) + footer(R);
+    return headLine(b.A, b.C) + stockHead(b.ST) + targetTable(b.A) + paceTable(b.A) + skuTable(b.B, b.key === 'alsm') + stockTable(b.ST, b.S) + regionTable(b.regions) + blockC(b.C, RULE.csStd) + blockE(b.E) + footer(R);
   }
   function ttlHtml(R) {
     const t = R.ttl, all = [...R.branches, R.alsm].filter(Boolean);
     const rows = all.map(b => `<tr><td ${TDL}><b>${esc(b.label)}</b></td><td ${TD}>${hc(b.A.fcst, RULE.csStd)}</td>`
       + `<td ${TD}>${pill(achSig(b.A.fcstVsRofo), pct(b.A.fcstVsRofo))}</td><td ${TD}>${pill(achSig(b.A.fcstVsAp), pct(b.A.fcstVsAp))}</td>`
       + `<td ${TD}>${pill(b.A.sigProgress, pp(b.A.progressGap))}</td><td ${TD}>${pill(b.A.sigClose, pct(b.A.vsFcst))}</td><td ${TD}>${hc(b.A.short, RULE.csStd, null, true)}</td>`
-      + `<td ${TD}>${(() => { const m = stockImpact(b.S); if (!m) return '—'; return '<b style="color:' + (m.impactHl < 0 ? '#b91c1c' : '#15803d') + ';">' + (m.impactHl < 0 ? '−' : '+') + f1(Math.abs(m.impactHl)) + ' HL</b>' + (m.endDays != null ? SMALL('월말 ' + f1(Math.max(m.endDays, 0)) + '일분') : ''); })()}</td>`
+      + `<td ${TD}>${b.ST && b.ST.rofo ? pill(b.ST.rofo.impact < RULE.stockImpactQ ? SIG.bad : b.ST.rofo.impact < 0 ? SIG.warn : SIG.ok, (b.ST.rofo.impact >= 0 ? '+' : '−') + Math.abs(Math.round(b.ST.rofo.impact * 100)) + '%p') + SMALL('RoFo ' + f1(b.ST.rofo.days) + '일분') : '—'}</td>`
       + `<td ${TD}>${b.C.trend && b.C.trend.down2 ? pill(SIG.bad, '↓↓') : (trendText(b.C.trend) ? '<span style="color:#6b7280;font-size:11px;">' + trendText(b.C.trend) + '</span>' : '—')}</td><td ${TD}>${b.E.length}</td></tr>`).join('');
-    return headLine(t.A, null) + targetTable(t.A) + paceTable(t.A)
-      + H('지점별 (HL · 환산 c/s)') + TABLE(`<th ${THL}>지점</th><th ${TH}>월 FCST</th><th ${TH}>FCST÷RoFo</th><th ${TH}>FCST÷AP</th><th ${TH}>진도</th><th ${TH}>마감 전망</th><th ${TH}>부족·초과</th><th ${TH}>월초 재고 영향<br>(출고 ±, 상위 ${RULE.stockTopN})</th><th ${TH}>FCST 추이</th><th ${TH}>질문</th>`, rows)
+    return headLine(t.A, null) + stockHead(t.ST) + targetTable(t.A) + paceTable(t.A)
+      + H('지점별 (HL · 환산 c/s)') + TABLE(`<th ${THL}>지점</th><th ${TH}>월 FCST</th><th ${TH}>FCST÷RoFo</th><th ${TH}>FCST÷AP</th><th ${TH}>진도</th><th ${TH}>마감 전망</th><th ${TH}>부족·초과</th><th ${TH}>월초 재고 영향<br>(RoFo 달성률)</th><th ${TH}>FCST 추이</th><th ${TH}>질문</th>`, rows)
       + NOTE('ALSM은 별도 채널 — On TTL에 합산하지 않음') + blockC(t.C, RULE.csStd) + footer(R);
   }
 
@@ -709,7 +651,7 @@
   }
   function branchTransitionHtml(R, t, b) {
     const T = R.transition;
-    return transitionHead(T, t) + closeTable(T, t.close) + startTable(T, t.start) + startSkuTable(T, t.B) + stockTable(t.S, `${T.next.month}월 월초 재고 영향 — 도매장 재고 상위 ${RULE.stockTopN} SKU`, true)
+    return transitionHead(T, t) + closeTable(T, t.close) + startTable(T, t.start) + startSkuTable(T, t.B) + stockTable(t.ST, t.S, `${T.next.month}월 월초 도매장 재고 → ${T.next.month}월 영향`)
       + (b && b.C ? blockC(b.C, RULE.csStd, `C. FCST 변화 (${R.week.month}월 데이터)`) : '') + blockE(t.E) + footer(R);
   }
   function ttlTransitionHtml(R) {
@@ -726,12 +668,12 @@
   function cards(R) {
     const T = R.transition;
     const mk = (b, html, subtitle, t) => ({ kind: 'bw', auto: true, category: b.cat, subtitle, content: html,
-      data: { A: b.A, B: b.B, S: b.S || null, C: b.C, E: b.E, signal: b.signal, regions: b.regions || null, transition: t || null },
+      data: { A: b.A, B: b.B, S: b.S || null, ST: b.ST || null, C: b.C, E: b.E, signal: b.signal, regions: b.regions || null, transition: t || null },
       generatedAt: R.generatedAt, dsrAsOf: R.dsrAsOf });
     const wk = (R.meeting && R.meeting.label) || R.week.label || '';
     if (T) {
       const out = [mk(R.ttl, ttlTransitionHtml(R), `On TTL 위클리 — ${wk} (${T.prev.month}월 마감·${T.next.month}월 시작)`, { close: T.ttl.close, start: T.ttl.start })];
-      T.branches.forEach((t, i) => out.push(mk(R.branches[i], branchTransitionHtml(R, t, R.branches[i]), `${t.label} 분석`, { close: t.close, start: t.start, B: t.B, S: t.S, E: t.E })));
+      T.branches.forEach((t, i) => out.push(mk(R.branches[i], branchTransitionHtml(R, t, R.branches[i]), `${t.label} 분석`, { close: t.close, start: t.start, B: t.B, S: t.S, ST: t.ST, E: t.E })));
       if (R.alsm && T.alsm) out.push(mk(R.alsm, branchTransitionHtml(R, T.alsm, R.alsm), 'ALSM 분석 (합계 기준)', { close: T.alsm.close, start: T.alsm.start, E: T.alsm.E }));
       return out;
     }
