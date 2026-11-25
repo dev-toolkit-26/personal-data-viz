@@ -61,7 +61,8 @@
     pushBlock: [11, 12, 1, 2, 3],              // 밀어내기 구간(월): 마감 푸시로 쌓인 재고 → 11월 쉼 → 12월 대량 푸시 → 1~3월 여파. 계절지수는 이 구간을 묶어 평균
     baseMonths: 6,                             // 26년 기준 매출 = 밀어내기 구간 뺀 최근 마감월 최대 6개월(계절성 제거)의 중앙값
     baseMinMonths: 3,
-    stockCheckDays: 45,                        // 재고일수 45일 초과 = '확인 필요'(실제 과다 또는 입력·추정 확인)
+    stockCheckDays: 45,
+    stockTopN: 5,                              // 재고 표 = 지점별 월초 재고(HL) 상위 5개 SKU — 재고가 많은 SKU가 매출도 큰 SKU                        // 재고일수 45일 초과 = '확인 필요'(실제 과다 또는 입력·추정 확인)
     fcstLowVsDemand: 0.85,                     // 재고 과다인데 FCST가 예상 수요의 85% 미만이면 질문(재고 소진 대기 확인)
     fcstHighVsDemand: 1.15,                    // 재고 과다인데 FCST가 예상 수요의 115% 초과면 질문(도매장 재고 더 쌓일 위험)
     maxQuestions: 3,
@@ -249,6 +250,22 @@
       est: parts.length === 1 && parts[0].src === 'est' ? parts[0] : null,
       fcstVsDemand: (fcstQty != null && demand > 0) ? fcstQty / demand : null };
   }
+  // 지점의 m월 월초 재고 상위 N개 SKU (HL 기준 순위) → 각 SKU 재고 판정
+  //  rowsMap = skuRows(지점) (출고 이력·계수), fcstQtyOf(sku) = 그 달 FCST(박스)
+  function topStock(D, bookKey, y, m, rowsMap, ctx, fcstQtyOf) {
+    const M = D.on_fcst_book && D.on_fcst_book.months && D.on_fcst_book.months[`${y}-${String(m).padStart(2, '0')}`];
+    if (!M || !M.rows || !M.rows[bookKey]) return [];
+    const hfOf = sku => (rowsMap[sku] && rowsMap[sku].hf) || ctx.hfOf(sku);
+    return Object.entries(M.rows[bookKey])
+      .filter(([, x]) => x && +x.stock > 0)
+      .map(([sku, x]) => ({ sku, hl: (+x.stock) * hfOf(sku) }))
+      .sort((a, b) => b.hl - a.hl).slice(0, RULE.stockTopN)
+      .map(({ sku }) => {
+        const row = rowsMap[sku] || { sku, ty: null, ly: null };
+        const stock = stockOf(D, bookKey, y, m, [row], hfOf, ctx, fcstQtyOf(sku));
+        return stock ? { label: sku, sku, unit: /Keg$/i.test(sku) ? 'keg' : 'cs', stock } : null;
+      }).filter(Boolean);
+  }
   // 지점의 m월 AP (현재 월이면 지점 합계 값, 아니면 월별 AP 표)
   function apOf(D, hlKey, m, ctx) {
     if (m === ctx.mon) { const v = num((((D.wk10_summary || {}).hl || {})[hlKey] || {}).ap); if (v != null) return v; }
@@ -258,7 +275,7 @@
   // ── 질문 ──
   const fq = v => (+v).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
   const fcs = (hl, csf) => Math.round(Math.abs(hl) / (csf || RULE.csStd)).toLocaleString('ko-KR');
-  function questions(br, A, B, C, isDec) {
+  function questions(br, A, B, C, isDec, S) {
     const q = [], push = (pri, text) => q.push({ pri, text });
     if (A.sigProgress && A.sigProgress.k === 'bad')
       push(isDec ? 0 : 2, `${br} 평소보다 진도 ${Math.round(Math.abs(A.progressGap * 100))}%p 늦음 — ${isDec ? '연말 ' : '월말에 몰릴 수 있음, '}노멀 마감 가능한가?`);
@@ -267,12 +284,12 @@
     const sk = (B || []).filter(x => x.sigClose && x.sigClose.k === 'bad' && x.short < 0 && (A.short == null || A.short >= 0 || x.short / A.short >= RULE.skuQuestionMinShare))
       .sort((a, b) => a.short - b.short)[0];
     if (sk) push(3, `${sk.label} 지금 속도면 FCST의 ${Math.round(sk.vsFcst * 100)}% (${fcs(sk.short, sk.csf)} ${sk.unit === 'keg' ? 'keg' : 'c/s'} 부족) — 원인과 대응은?`);
-    const st = (B || []).filter(x => x.stock && x.stock.status === 'short').sort((a, b) => (a.stock.days ?? -1) - (b.stock.days ?? -1))[0];
+    const st = (S || []).filter(x => x.stock && x.stock.status === 'short').sort((a, b) => (a.stock.days ?? -1) - (b.stock.days ?? -1))[0];
     if (st) push(3.5, `${st.label} 월초 재고 ${st.stock.days != null ? (Math.round(st.stock.days * 10) / 10) + '일분' : '없음'}(부족 기준 ${st.stock.th.short}일 미만) — 보충·출고 계획은?`);
-    const lo = (B || []).filter(x => x.stock && (x.stock.status === 'over' || x.stock.status === 'check') && x.stock.fcstVsDemand != null && x.stock.fcstVsDemand < RULE.fcstLowVsDemand)
+    const lo = (S || []).filter(x => x.stock && (x.stock.status === 'over' || x.stock.status === 'check') && x.stock.fcstVsDemand != null && x.stock.fcstVsDemand < RULE.fcstLowVsDemand)
       .sort((a, b) => a.stock.fcstVsDemand - b.stock.fcstVsDemand)[0];
     if (lo) push(4.5, `${lo.label} 도매장 재고 ${Math.round(lo.stock.days)}일분(${lo.stock.status === 'check' ? '45일 초과' : '과다'}) — FCST가 예상 수요의 ${Math.round(lo.stock.fcstVsDemand * 100)}%. 재고 소진 계획은?`);
-    const hiS = (B || []).filter(x => x.stock && (x.stock.status === 'over' || x.stock.status === 'check') && x.stock.fcstVsDemand != null && x.stock.fcstVsDemand > RULE.fcstHighVsDemand)
+    const hiS = (S || []).filter(x => x.stock && (x.stock.status === 'over' || x.stock.status === 'check') && x.stock.fcstVsDemand != null && x.stock.fcstVsDemand > RULE.fcstHighVsDemand)
       .sort((a, b) => b.stock.fcstVsDemand - a.stock.fcstVsDemand)[0];
     if (hiS) push(3.6, `${hiS.label} 도매장 재고 ${Math.round(hiS.stock.days)}일분(${hiS.stock.status === 'check' ? '45일 초과' : '과다'})인데 FCST가 예상 수요의 ${Math.round(hiS.stock.fcstVsDemand * 100)}% — 도매장 재고가 더 쌓이지 않나?`);
     if (C.trend && C.trend.down2) { const s = C.trend.series, n = s.length; push(4, `${br} FCST 2주 연속 하향(${fq(s[n - 3].hl)}→${fq(s[n - 1].hl)} HL) — 일시적인가, 구조적인가?`); }
@@ -310,9 +327,7 @@
       const r = recentWeekly(op, b.groups, def.match, ctx.year);
       const x = monthView({ fcst: hit.reduce((s, h) => s + h.fcst, 0), mtd: hit.reduce((s, h) => s + h.mtd, 0), recent: r ? r.v : null,
         remainWd: ctx.remainWd, baseline: ctx.baseline, csf: hit[0].hf });
-      const stock = b.book ? stockOf(D, b.book, ctx.year, ctx.mon, hit, sku => (rows[sku] && rows[sku].hf) || ctx.hfOf(sku), ctx,
-        hit.reduce((s, h) => s + h.fcst / h.hf, 0)) : null;
-      return Object.assign(x, { id, label: def.label, unit: def.unit || 'cs', skus: hit.map(h => h.sku), stock });
+      return Object.assign(x, { id, label: def.label, unit: def.unit || 'cs', skus: hit.map(h => h.sku) });
     }).filter(Boolean);
 
     const C = {
@@ -322,8 +337,9 @@
         .map(r => ({ sku: r.sku, d: r.d, csf: r.hf })),
       trend: b.book ? fcstTrend(D, b.book, ctx.year, ctx.mon, sku => (rows[sku] && rows[sku].hf) || ctx.hfOf(sku)) : null,
     };
-    const E = questions(b.label, A, B, C, ctx.mon === 12);
-    return { key: b.key, label: b.label, cat: b.cat, A, B, C, E, signal: worst(A.sigProgress, A.sigClose) };
+    const S = b.book ? topStock(D, b.book, ctx.year, ctx.mon, rows, ctx, sku => rows[sku] ? rows[sku].fcst / rows[sku].hf : null) : [];
+    const E = questions(b.label, A, B, C, ctx.mon === 12, S);
+    return { key: b.key, label: b.label, cat: b.cat, A, B, C, S, E, signal: worst(A.sigProgress, A.sigClose) };
   }
 
   // ── ALSM (Off 스냅샷 모델, 권역 FCST 없음 → 합계) ──
@@ -403,13 +419,11 @@
         if (!skus.length) return null;
         const r = recentWeekly(op, b.groups, def.match, ctx.year);
         const x = startView({ fcst: skus.reduce((s, k) => s + (nf.bySku[k] || 0), 0), totalWd: nmWd, recent: r ? r.v : null, csf: ctx.hfOf(skus[0]) });
-        const rowsAll = skuRows(D, b.sku);
-        const hitRows = skus.map(k => rowsAll[k] || { sku: k, ty: null, ly: null });
-        const stock = b.book && inFY(ny) ? stockOf(D, b.book, ny, nm, hitRows, sku => ctx.hfOf(sku), ctx,
-          skus.reduce((s, k) => s + (nf.bySku[k] || 0) / ctx.hfOf(k), 0)) : null;
-        return Object.assign(x, { id, label: def.label, unit: def.unit || 'cs', skus, share: ratio(x.fcst, start.target), stock });
+        return Object.assign(x, { id, label: def.label, unit: def.unit || 'cs', skus, share: ratio(x.fcst, start.target) });
       }).filter(Boolean) : [];
-      return { key: b.key, label: b.label, cat: b.cat, close, start, B, E: transitionQuestions(b.label, close, start, pm, nm),
+      const rowsAll = skuRows(D, b.sku);
+      const S = b.book && inFY(ny) ? topStock(D, b.book, ny, nm, rowsAll, ctx, sku => nf ? (nf.bySku[sku] || 0) / ((rowsAll[sku] && rowsAll[sku].hf) || ctx.hfOf(sku)) : null) : [];
+      return { key: b.key, label: b.label, cat: b.cat, close, start, B, S, E: transitionQuestions(b.label, close, start, pm, nm),
         signal: worst(close.sigClose, start.sigSpeed) };
     };
     const branches = BRANCHES.map(one);
@@ -540,7 +554,7 @@
       ? `실제 소진 기준 · ${MN[k.push.month - 1]} 출고 ${f0(k.push.sellin)} / 소진 ${f0(k.push.depl)} → 도매장 재고 ${k.push.change >= 0 ? '+' : '−'}${f0(Math.abs(k.push.change))}${u}`
       : k.src === 'mixed' ? '일부 실제 소진 · 일부 추정'
       : k.est ? `추정 · 26년 기준 ${f0(k.est.base)} × 계절 ${k.est.idx.toFixed(2)}` : '추정';
-    return H(title || '도매장 월초 재고 (주요 SKU)') + TABLE(
+    return H(title || `도매장 월초 재고 상위 ${RULE.stockTopN} SKU`) + TABLE(
       `<th ${THL}>SKU</th><th ${TH}>월초 재고</th><th ${TH}>예상 수요<br>(월)</th><th ${TH}>재고일수</th><th ${TH}>상태</th><th ${TH}>FCST ÷<br>예상 수요</th>`,
       rows.map(x => { const k = x.stock, u = x.unit === 'keg' ? ' keg' : ' c/s', st = ST[k.status] || ST.none;
         return `<tr><td ${TDL}>${esc(x.label)}</td><td ${TD}>${f0(k.qty)}${u}${SMALL(f1(k.hl) + ' HL')}</td>`
@@ -570,17 +584,17 @@
       regions.map(r => `<tr><td ${TDL}>${esc(r.key)}</td><td ${TD}>${hc(r.mtd, RULE.csStd)}</td><td ${TD}>${f0(r.ytd)}</td><td ${TD}>${r.ytdLy > 0 ? ((r.ytd / r.ytdLy - 1) >= 0 ? '+' : '') + ((r.ytd / r.ytdLy - 1) * 100).toFixed(1) + '%' : '—'}</td></tr>`).join(''));
   }
   function branchHtml(R, b) {
-    return headLine(b.A, b.C) + targetTable(b.A) + paceTable(b.A) + skuTable(b.B, b.key === 'alsm') + stockTable(b.B) + regionTable(b.regions) + blockC(b.C, RULE.csStd) + blockE(b.E) + footer(R);
+    return headLine(b.A, b.C) + targetTable(b.A) + paceTable(b.A) + skuTable(b.B, b.key === 'alsm') + stockTable(b.S) + regionTable(b.regions) + blockC(b.C, RULE.csStd) + blockE(b.E) + footer(R);
   }
   function ttlHtml(R) {
     const t = R.ttl, all = [...R.branches, R.alsm].filter(Boolean);
     const rows = all.map(b => `<tr><td ${TDL}><b>${esc(b.label)}</b></td><td ${TD}>${hc(b.A.fcst, RULE.csStd)}</td>`
       + `<td ${TD}>${pill(achSig(b.A.fcstVsRofo), pct(b.A.fcstVsRofo))}</td><td ${TD}>${pill(achSig(b.A.fcstVsAp), pct(b.A.fcstVsAp))}</td>`
       + `<td ${TD}>${pill(b.A.sigProgress, pp(b.A.progressGap))}</td><td ${TD}>${pill(b.A.sigClose, pct(b.A.vsFcst))}</td><td ${TD}>${hc(b.A.short, RULE.csStd, null, true)}</td>`
-      + `<td ${TD}>${(() => { const s = (b.B || []).filter(x => x.stock); if (!s.length) return '—'; const ns = s.filter(x => x.stock.status === 'short').length, no = s.filter(x => x.stock.status === 'over').length; return (ns ? pill(SIG.bad, '부족 ' + ns) + ' ' : '') + (no ? pill(SIG.warn, '과다 ' + no) : '') || '<span style="color:#15803d;">적정</span>'; })()}</td>`
+      + `<td ${TD}>${(() => { const s = (b.S || []).filter(x => x.stock); if (!s.length) return '—'; const ns = s.filter(x => x.stock.status === 'short').length, no = s.filter(x => x.stock.status === 'over').length, nc = s.filter(x => x.stock.status === 'check').length; return (ns ? pill(SIG.bad, '부족 ' + ns) + ' ' : '') + (no ? pill(SIG.warn, '과다 ' + no) + ' ' : '') + (nc ? pill(SIG.warn, '확인 ' + nc) : '') || '<span style="color:#15803d;">적정</span>'; })()}</td>`
       + `<td ${TD}>${b.C.trend && b.C.trend.down2 ? pill(SIG.bad, '↓↓') : (trendText(b.C.trend) ? '<span style="color:#6b7280;font-size:11px;">' + trendText(b.C.trend) + '</span>' : '—')}</td><td ${TD}>${b.E.length}</td></tr>`).join('');
     return headLine(t.A, null) + targetTable(t.A) + paceTable(t.A)
-      + H('지점별 (HL · 환산 c/s)') + TABLE(`<th ${THL}>지점</th><th ${TH}>월 FCST</th><th ${TH}>FCST÷RoFo</th><th ${TH}>FCST÷AP</th><th ${TH}>진도</th><th ${TH}>마감 전망</th><th ${TH}>부족·초과</th><th ${TH}>월초 재고<br>(주요 SKU)</th><th ${TH}>FCST 추이</th><th ${TH}>질문</th>`, rows)
+      + H('지점별 (HL · 환산 c/s)') + TABLE(`<th ${THL}>지점</th><th ${TH}>월 FCST</th><th ${TH}>FCST÷RoFo</th><th ${TH}>FCST÷AP</th><th ${TH}>진도</th><th ${TH}>마감 전망</th><th ${TH}>부족·초과</th><th ${TH}>월초 재고<br>(상위 ${RULE.stockTopN})</th><th ${TH}>FCST 추이</th><th ${TH}>질문</th>`, rows)
       + NOTE('ALSM은 별도 채널 — On TTL에 합산하지 않음') + blockC(t.C, RULE.csStd) + footer(R);
   }
 
@@ -618,7 +632,7 @@
   }
   function branchTransitionHtml(R, t, b) {
     const T = R.transition;
-    return transitionHead(T, t) + closeTable(T, t.close) + startTable(T, t.start) + startSkuTable(T, t.B) + stockTable(t.B, `${T.next.month}월 월초 재고 (주요 SKU)`)
+    return transitionHead(T, t) + closeTable(T, t.close) + startTable(T, t.start) + startSkuTable(T, t.B) + stockTable(t.S, `${T.next.month}월 도매장 월초 재고 상위 ${RULE.stockTopN} SKU`)
       + (b && b.C ? blockC(b.C, RULE.csStd, `C. FCST 변화 (${R.week.month}월 데이터)`) : '') + blockE(t.E) + footer(R);
   }
   function ttlTransitionHtml(R) {
@@ -635,12 +649,12 @@
   function cards(R) {
     const T = R.transition;
     const mk = (b, html, subtitle, t) => ({ kind: 'bw', auto: true, category: b.cat, subtitle, content: html,
-      data: { A: b.A, B: b.B, C: b.C, E: b.E, signal: b.signal, regions: b.regions || null, transition: t || null },
+      data: { A: b.A, B: b.B, S: b.S || null, C: b.C, E: b.E, signal: b.signal, regions: b.regions || null, transition: t || null },
       generatedAt: R.generatedAt, dsrAsOf: R.dsrAsOf });
     const wk = (R.meeting && R.meeting.label) || R.week.label || '';
     if (T) {
       const out = [mk(R.ttl, ttlTransitionHtml(R), `On TTL 위클리 — ${wk} (${T.prev.month}월 마감·${T.next.month}월 시작)`, { close: T.ttl.close, start: T.ttl.start })];
-      T.branches.forEach((t, i) => out.push(mk(R.branches[i], branchTransitionHtml(R, t, R.branches[i]), `${t.label} 분석`, { close: t.close, start: t.start, B: t.B, E: t.E })));
+      T.branches.forEach((t, i) => out.push(mk(R.branches[i], branchTransitionHtml(R, t, R.branches[i]), `${t.label} 분석`, { close: t.close, start: t.start, B: t.B, S: t.S, E: t.E })));
       if (R.alsm && T.alsm) out.push(mk(R.alsm, branchTransitionHtml(R, T.alsm, R.alsm), 'ALSM 분석 (합계 기준)', { close: T.alsm.close, start: T.alsm.start, E: T.alsm.E }));
       return out;
     }
