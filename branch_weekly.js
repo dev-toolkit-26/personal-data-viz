@@ -62,7 +62,8 @@
     baseMonths: 6,                             // 26년 기준 매출 = 밀어내기 구간 뺀 최근 마감월 최대 6개월(계절성 제거)의 중앙값
     baseMinMonths: 3,
     stockCheckDays: 45,
-    stockTopN: 5,                              // 재고 표 = 지점별 월초 재고(HL) 상위 5개 SKU — 재고가 많은 SKU가 매출도 큰 SKU                        // 재고일수 45일 초과 = '확인 필요'(실제 과다 또는 입력·추정 확인)
+    stockTopN: 5,
+    patternMinCum: 0.15,                       // 평소 이맘때 누적 비중이 15% 미만(월초)이면 패턴 전망 대신 최근 속도 사용                              // 재고 표 = 지점별 월초 재고(HL) 상위 5개 SKU — 재고가 많은 SKU가 매출도 큰 SKU                        // 재고일수 45일 초과 = '확인 필요'(실제 과다 또는 입력·추정 확인)
     fcstLowVsDemand: 0.85,                     // 재고 과다인데 FCST가 예상 수요의 85% 미만이면 질문(재고 소진 대기 확인)
     fcstHighVsDemand: 1.15,                    // 재고 과다인데 FCST가 예상 수요의 115% 초과면 질문(도매장 재고 더 쌓일 위험)
     maxQuestions: 3,
@@ -108,19 +109,54 @@
     return any ? { v: s / biz * RULE.weekDays, days: biz } : null;
   }
 
+  // ── 발주패턴 (지점별, 달력일 기준) ──
+  //  order_pattern.weekly_hl의 주차 = 달력일 구간(1~7일 W1, 8~14일 W2 … 29일~ W5).
+  //  완료월(이번 달 제외)마다 주차별 비중을 구해 평균 → DSR 기준일까지의 누적 비중 = '평소 이맘때 진도'.
+  //  월별 편차(최저~최고)로 마감 전망 범위. 월초에 몰리고 월말에 줄어드는 발주 리듬이 그대로 반영된다.
+  const MON_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function patternCum(op, groups, mon, day, dim) {
+    if (!op || !Array.isArray(op.weekly_labels) || !op.weekly_hl || !(day > 0)) return null;
+    const byMon = {};
+    op.weekly_labels.forEach((lbl, i) => {
+      const sp = String(lbl).split(' '), mo = sp[0], wk = parseInt((sp[1] || 'W0').slice(1), 10) || 0;
+      if (!wk) return;
+      let v = 0;
+      groups.forEach(g => { const bySku = op.weekly_hl[g]; if (bySku) Object.values(bySku).forEach(a => { v += (Array.isArray(a) ? +a[i] : 0) || 0; }); });
+      (byMon[mo] = byMon[mo] || [0, 0, 0, 0, 0])[Math.min(wk, 5) - 1] += v;
+    });
+    const cur = MON_EN[mon - 1];
+    const refs = Object.keys(byMon).filter(m => m !== cur && byMon[m].reduce((a, b) => a + b, 0) > 0);
+    if (!refs.length) return null;
+    const fracs = refs.map(m => { const a = byMon[m], t = a.reduce((x, y) => x + y, 0); return a.map(v => v / t); });
+    const avg = [0, 1, 2, 3, 4].map(k => fracs.reduce((a, f) => a + f[k], 0) / fracs.length);
+    const lens = [7, 7, 7, 7, Math.max(dim - 28, 1)];
+    const cumOf = f => {
+      if (day >= dim) return 1;
+      let c = 0;
+      for (let k = 0; k < 5; k++) { const st = 7 * k; if (day >= st + lens[k]) c += f[k]; else { if (day > st) c += f[k] * (day - st) / lens[k]; break; } }
+      return Math.max(0.01, Math.min(1, c));
+    };
+    const per = fracs.map(cumOf);
+    return { cum: cumOf(avg), lo: Math.min(...per), hi: Math.max(...per), n: refs.length, frac: avg };
+  }
+
   // ── 이번 달 보기 (진도·마감 전망·목표 대비) ──
   //  t = { fcst, rofo, ap, mtd, recent(주당 HL), remainWd, baseline(평소 이맘때 누적비율), csf(c/s 계수) }
   function monthView(t) {
-    const { fcst, rofo, ap, mtd, recent, remainWd, baseline, csf } = t;
+    const { fcst, rofo, ap, mtd, recent, remainWd, baseline, csf, pat } = t;
     const progress = ratio(mtd, fcst);
     const progressGap = (progress != null && baseline != null) ? progress - baseline : null;
-    const expClose = mtd != null ? mtd + (recent != null ? recent / RULE.weekDays * remainWd : 0) : null;
+    // 마감 전망: 발주패턴이 있으면 MTD ÷ 평소 이맘때 누적 비중(월말 발주 감소 반영), 없으면 최근 2주 속도 × 남은 영업일
+    const usePat = pat && pat.cum >= RULE.patternMinCum && mtd != null;
+    const expClose = usePat ? mtd / pat.cum : (mtd != null ? mtd + (recent != null ? recent / RULE.weekDays * remainWd : 0) : null);
+    const expRange = usePat ? { lo: mtd / pat.hi, hi: mtd / pat.lo } : null;
     const vsFcst = ratio(expClose, fcst);
     const need = (fcst != null && mtd != null) ? Math.max(fcst - mtd, 0) : null;
     return {
       fcst, rofo, ap, mtd, csf, remainWd, recentWeekly: recent,
       progress, baseline, progressGap, sigProgress: sigOfProgress(progressGap),
-      expClose, vsFcst, short: (expClose != null && fcst != null) ? expClose - fcst : null, sigClose: sigOfClose(vsFcst),
+      expClose, expRange, expSrc: usePat ? 'pattern' : 'recent', patN: pat ? pat.n : null,
+      vsFcst, short: (expClose != null && fcst != null) ? expClose - fcst : null, sigClose: sigOfClose(vsFcst),
       fcstVsRofo: ratio(fcst, rofo), fcstVsAp: ratio(fcst, ap), expVsRofo: ratio(expClose, rofo), expVsAp: ratio(expClose, ap),
       need, needWeekly: (need != null && remainWd > 0) ? need / remainWd * RULE.weekDays : null,
     };
@@ -337,7 +373,7 @@
     const rofoArr = Array.isArray(hl.rofo_monthly) ? hl.rofo_monthly : null;
     const rw = recentWeekly(op, b.groups, null, ctx.year);
     const A = monthView({ fcst: num(hl.this_week_fcst), rofo: rofoArr ? num(rofoArr[ctx.ci]) : null, ap: apOf(D, b.hl, ctx.mon, ctx),
-      mtd: num(hl.mtd_actual), recent: rw ? rw.v : null, remainWd: ctx.remainWd, baseline: ctx.baseline, csf: RULE.csStd });
+      mtd: num(hl.mtd_actual), recent: rw ? rw.v : null, remainWd: ctx.remainWd, ...ctx.patOf(b.groups), csf: RULE.csStd });
     // 연간 착지 = 마감월 실적 + max(당월 FCST, MTD) + 이후 월 RoFo
     const fwd = rofoArr ? sumArr(rofoArr, ctx.ci + 1, 11) : null;
     A.landing = fwd != null && (A.fcst != null || A.mtd != null) ? sumArr((D.dsr_by_region_monthly || {})[b.hl], 0, ctx.ci - 1) + Math.max(A.fcst || 0, A.mtd || 0) + fwd : null;
@@ -349,7 +385,7 @@
       if (!hit.length) return null;
       const r = recentWeekly(op, b.groups, def.match, ctx.year);
       const x = monthView({ fcst: hit.reduce((s, h) => s + h.fcst, 0), mtd: hit.reduce((s, h) => s + h.mtd, 0), recent: r ? r.v : null,
-        remainWd: ctx.remainWd, baseline: ctx.baseline, csf: hit[0].hf });
+        remainWd: ctx.remainWd, ...ctx.patOf(b.groups), csf: hit[0].hf });
       return Object.assign(x, { id, label: def.label, unit: def.unit || 'cs', skus: hit.map(h => h.sku) });
     }).filter(Boolean);
 
@@ -383,7 +419,7 @@
     const mtd = num(Am.act[ci]);
     if (recent == null && mtd != null && ctx.wd.elapsed > 0) recent = mtd / ctx.wd.elapsed * RULE.weekDays;
     const A = monthView({ fcst, rofo: num(Am.rofo[ci]), ap: Am.ap && Am.ap[ci] > 0 ? Am.ap[ci] : null, mtd, recent,
-      remainWd: ctx.remainWd, baseline: ctx.baseline, csf: RULE.csStd });
+      remainWd: ctx.remainWd, ...ctx.patOf(null), csf: RULE.csStd });
     A.landing = (fcst != null || mtd != null) ? sumArr(Am.act, 0, ci - 1) + Math.max(fcst || 0, mtd || 0) + sumArr(Am.rofo, ci + 1, 11) : null;
     const B = CORE.alsm.map(id => {
       const def = SKU[id];
@@ -391,7 +427,7 @@
       if (!hit.length) return null;
       const f = hit.reduce((s, r) => s + (+r.fcst[ci] || 0), 0), m = hit.reduce((s, r) => s + (+r.act[ci] || 0), 0);
       const x = monthView({ fcst: f, mtd: m, recent: ctx.wd.elapsed > 0 ? m / ctx.wd.elapsed * RULE.weekDays : null,
-        remainWd: ctx.remainWd, baseline: ctx.baseline, csf: ctx.hfOf(hit[0].sku) });
+        remainWd: ctx.remainWd, ...ctx.patOf(null), csf: ctx.hfOf(hit[0].sku) });
       return Object.assign(x, { id, label: def.label, unit: 'cs', skus: hit.map(h => h.sku) });
     }).filter(Boolean);
     const series = Array.isArray(arr) ? arr.map((v, k) => ({ w: k + 1, hl: +v || 0 })).filter(x => x.hl > 0) : [];
@@ -431,7 +467,7 @@
       const rw = recentWeekly(op, b.groups, null, ctx.year), recent = rw ? rw.v : null;
       const pf = monthFcst(D, b, ctx, py, pm), nf = monthFcst(D, b, ctx, ny, nm);
       const close = monthView({ fcst: pf ? pf.hl : null, rofo: rofo && inFY(py) ? num(rofo[pm - 1]) : null, ap: inFY(py) ? apOf(D, b.hl, pm, ctx) : null,
-        mtd: inFY(py) ? num(((D.dsr_by_region_monthly || {})[b.hl] || [])[pm - 1]) : null, recent, remainWd, baseline: null, csf: RULE.csStd });
+        mtd: inFY(py) ? num(((D.dsr_by_region_monthly || {})[b.hl] || [])[pm - 1]) : null, recent, remainWd, ...(pm === ctx.mon && py === ctx.year ? ctx.patOf(b.key === 'ttl' ? null : b.groups) : { baseline: null }), csf: RULE.csStd });
       close.fcstSrc = pf ? pf.src : null;
       const start = startView({ fcst: nf ? nf.hl : null, rofo: rofo && inFY(ny) ? num(rofo[nm - 1]) : null, ap: inFY(ny) ? apOf(D, b.hl, nm, ctx) : null,
         ly: inFY(ny) ? num((ly25[b.hl] || [])[nm - 1]) : null, totalWd: nmWd, recent, csf: RULE.csStd });
@@ -478,14 +514,22 @@
     const op = D.order_pattern;
     // 평소 이맘때 진도 = 발주패턴(완료월 연평균) 누적비율, 없으면 영업일 경과율
     let baseline = wd.pct || null, baseSrc = '영업일 경과율';
-    if (typeof global._wrPatternClose === 'function') {
-      try { const p = global._wrPatternClose(op, mon, wd.total || 0, wd.elapsed || 0); if (p) { baseline = p.cumFrac; baseSrc = '발주패턴 ' + p.refLabel; } } catch (e) { /* 경과율 유지 */ }
-    }
     const asOf = op && Array.isArray(op.daily_labels) ? op.daily_labels[op.daily_labels.length - 1] : null;
     const asOfDay = asOf ? parseInt(String(asOf).split('/')[1], 10) || 0 : 0;
     const asOfMon = asOf ? parseInt(String(asOf).split('/')[0], 10) || 0 : 0;
     const elapsedCal = asOfMon === mon ? asOfDay : (asOfMon > mon ? new Date(year, mon, 0).getDate() : 0);
-    const ctx = { wd, mon, ci: mon - 1, year, baseline, asOfDay, elapsedCal, sIdx: seasonIndex(D), remainWd: Math.max((wd.total || 0) - (wd.elapsed || 0), 0), hfOf: opts.hfOf || (() => RULE.csStd) };
+    const dim = new Date(year, mon, 0).getDate();
+    const allGroups = (op && op.groups) || [];
+    const patCache = {};
+    const patOf = groups => {   // → { baseline, pat } (패턴 없으면 영업일 경과율)
+      const g = groups && groups.length ? groups : allGroups, key = g.join('|');
+      if (!(key in patCache)) patCache[key] = patternCum(op, g, mon, elapsedCal, dim);
+      const p = patCache[key];
+      return p ? { baseline: p.cum, pat: p } : { baseline: wd.pct || null, pat: null };
+    };
+    const ttlPat = patOf(null);
+    if (ttlPat.pat) { baseline = ttlPat.baseline; baseSrc = `발주패턴(지점별, 완료월 ${ttlPat.pat.n}개 평균, 달력일 기준)`; }
+    const ctx = { wd, mon, ci: mon - 1, year, baseline, patOf, asOfDay, elapsedCal, sIdx: seasonIndex(D), remainWd: Math.max((wd.total || 0) - (wd.elapsed || 0), 0), hfOf: opts.hfOf || (() => RULE.csStd) };
 
     const branches = BRANCHES.map(b => computeBranch(D, b, ctx));
     const ttl = computeBranch(D, { key: 'ttl', label: 'On TTL', hl: 'TTL', sku: 'On Trade Total', book: null, groups: (op && op.groups) || [], cat: 'on_trade' }, ctx);
@@ -537,7 +581,7 @@
   function headLine(A, C) {
     const parts = [];
     if (A.progress != null) parts.push(`<span>진도 ${pill(A.sigProgress, pp(A.progressGap))} <span style="color:#6b7280;">평소 이맘때 ${pct(A.baseline)} · 지금 ${pct(A.progress)}</span></span>`);
-    if (A.expClose != null && A.fcst != null) parts.push(`<span>마감 전망 ${pill(A.sigClose, pct(A.vsFcst))} <span style="color:#6b7280;">지금 속도면 ${f0(A.expClose)} HL · FCST ${A.short >= 0 ? '초과' : '부족'} ${f1(Math.abs(A.short))} HL (${f0(Math.abs(A.short) / A.csf)} c/s)</span></span>`);
+    if (A.expClose != null && A.fcst != null) parts.push(`<span>마감 전망 ${pill(A.sigClose, pct(A.vsFcst))} <span style="color:#6b7280;">${A.expSrc === 'pattern' ? '평소 발주패턴대로면' : '지금 속도면'} ${f0(A.expClose)} HL${A.expRange ? ' (범위 ' + f0(A.expRange.lo) + '~' + f0(A.expRange.hi) + ')' : ''} · FCST ${A.short >= 0 ? '초과' : '부족'} ${f1(Math.abs(A.short))} HL (${f0(Math.abs(A.short) / A.csf)} c/s)</span></span>`);
     if (C && C.trend && C.trend.down2) parts.push(`<span>${pill(SIG.bad, 'FCST 2주 연속 하향')} <span style="color:#6b7280;">${trendText(C.trend)}</span></span>`);
     return `<div style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;margin-bottom:4px;">${parts.join('')}</div>`;
   }
@@ -549,14 +593,14 @@
     return H(title || 'A. 목표 대비 (HL · c/s)') + TABLE(
       `<th ${THL}>기준</th><th ${TH}>목표</th><th ${TH}>FCST 달성률</th><th ${TH}>마감 전망 달성률</th><th ${TH}>전망 − 목표</th>`,
       row('FCST', A.fcst, 'self', A.vsFcst) + row('RoFo', A.rofo, A.fcstVsRofo, A.expVsRofo) + row('AP', A.ap, A.fcstVsAp, A.expVsAp))
-      + NOTE(`FCST 달성률 = 이번 주 제출 FCST ÷ 목표 · 마감 전망 = MTD ${f1(A.mtd)} HL + 최근 2주 일평균 × 남은 ${A.remainWd}영업일 · c/s = 환산(330ml×24)`);
+      + NOTE(`FCST 달성률 = 이번 주 제출 FCST ÷ 목표 · 마감 전망 = ${A.expSrc === 'pattern' ? `MTD ${f1(A.mtd)} HL ÷ 평소 이맘때 누적 비중 ${pct(A.baseline)} (지점 발주패턴, 완료월 ${A.patN}개 평균 — 월초 몰림·월말 감소 반영)` : `MTD ${f1(A.mtd)} HL + 최근 2주 일평균 × 남은 ${A.remainWd}영업일`} · c/s = 환산(330ml×24)`);
   }
   function paceTable(A) {
     return H('진도 · 남은 필요량') + TABLE(
       `<th ${TH}>MTD</th><th ${TH}>평소 이맘때</th><th ${TH}>지금 진도</th><th ${TH}>남은 영업일</th><th ${TH}>남은 필요</th><th ${TH}>주당 필요</th><th ${TH}>최근 주당</th><th ${TH}>연간 착지</th>`,
       `<tr><td ${TD}>${hc(A.mtd, A.csf)}</td><td ${TD}>${pct(A.baseline)}</td><td ${TD}>${pill(A.sigProgress, pct(A.progress))}</td><td ${TD}>${A.remainWd}일</td>`
       + `<td ${TD}>${hc(A.need, A.csf)}</td><td ${TD}><b>${hc(A.needWeekly, A.csf)}</b></td><td ${TD}>${hc(A.recentWeekly, A.csf)}</td><td ${TD}>${f0(A.landing)}</td></tr>`)
-      + NOTE('평소 이맘때 = 완료된 달들의 발주패턴 평균으로 본 이 시점 누적 비중 · 최근 주당 = 최근 2주(10영업일) 실적 · 연간 착지 = 마감월 실적 + 당월 + 이후 월 RoFo');
+      + NOTE('평소 이맘때 = 이 지점의 완료된 달들 발주패턴(1~7일·8~14일… 구간 비중) 평균으로 본 DSR 기준일까지의 누적 비중 · 최근 주당 = 최근 2주(10영업일) 실적 · 연간 착지 = 마감월 실적 + 당월 + 이후 월 RoFo');
   }
   function skuTable(B, isAlsm) {
     if (!B || !B.length) return '';
