@@ -55,7 +55,9 @@
     kegHl: 0.2,                                // 20L keg = 0.2 HL
     downTol: 0.5,                              // 2주 연속 하향 판정 허용오차(HL)
     maxQuestions: 3,
-    skuQuestionMinShare: 0.10,                 // SKU 질문은 지점 필요량의 10% 이상 차지하는 SKU만 (소량 SKU 배수 과장 방지)
+    skuQuestionMinShare: 0.10,
+    closeOk: 0.97, closeWarn: 0.90,            // 월 전환: 예상 마감 ÷ 월 FCST — 97%↑ 유효 / 90%↑ 주의 / 미만 깨짐
+    gapWarn: -0.05,                            // 월 전환: 다음 달 FCST가 RoFo보다 5% 넘게 낮으면 질문                 // SKU 질문은 지점 필요량의 10% 이상 차지하는 SKU만 (소량 SKU 배수 과장 방지)
   };
 
   const num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
@@ -271,8 +273,125 @@
     return { key: 'alsm', label: 'ALSM', cat: 'alsm', A, B, C, E, regions, signal: worst(A.sigProgress, A.sigMultiple), basis: '합계(권역 FCST 없음)' };
   }
 
+  // ════════════════════════════════════════════════════════════════
+  //  월 전환 주 (회의 주의 월~일이 두 달에 걸칠 때, 예: 11/30 주)
+  //   ① 전월 마감: 남은 영업일 필요량, 최근 실적 속도로 본 예상 마감 vs FCST·RoFo, 마감 후엔 FCST 정확도
+  //   ② 다음 달 시작: 다음 달 FCST(없으면 RoFo) vs RoFo·LY, 주당 필요 vs 최근 2주 실적, 핵심 SKU
+  //  데이터 월(wk_meta.month)이 아직 전월이든(다음 달 FCST 미업로드) 이미 다음 달이든 같은 결과가 나오게
+  //  월 FCST는 그 달이 데이터 월이면 지점 합계, 아니면 통합 양식 저장본의 마지막 제출 주차에서 읽는다.
+  // ════════════════════════════════════════════════════════════════
+  const lastDayOf = (y, m) => new Date(y, m, 0);
+  function bookFcst(D, bookKey, y, m, hfOf) {
+    const M = D.on_fcst_book && D.on_fcst_book.months && D.on_fcst_book.months[`${y}-${String(m).padStart(2, '0')}`];
+    if (!M || !M.rows || !M.rows[bookKey]) return null;
+    const sub = (M.submitted && M.submitted[bookKey]) || [];
+    let col = 0; sub.forEach((v, k) => { if (v) col = k + 1; });
+    if (!col) return null;
+    const bySku = {}; let total = 0;
+    Object.entries(M.rows[bookKey]).forEach(([sku, x]) => { const v = (+((x.w || [])[col - 1]) || 0) * hfOf(sku); bySku[sku] = v; total += v; });
+    return { hl: total, col, bySku };
+  }
+  // 지점의 m월 FCST(HL): 데이터 월이면 지점 합계(+SKU), 아니면 저장본 마지막 제출
+  function monthFcst(D, b, ctx, y, m) {
+    if (ctx.mon === m && y === ctx.year) {
+      const hl = ((D.wk10_summary || {}).hl || {})[b.hl] || {};
+      const rows = skuRows(D, b.sku), bySku = {};
+      Object.values(rows).forEach(r => { bySku[r.sku] = r.fcst; });
+      return num(hl.this_week_fcst) != null ? { hl: hl.this_week_fcst, bySku, src: '이번 주 제출' } : null;
+    }
+    const bf = b.book ? bookFcst(D, b.book, y, m, sku => ctx.hfOf(sku)) : null;
+    return bf ? { hl: bf.hl, bySku: bf.bySku, src: `W${bf.col} 제출` } : null;
+  }
+  function closeOf(fcst, rofo, actual, remainWd, recentWeekly) {
+    const rd = recentWeekly != null ? recentWeekly / RULE.weekDays : null;
+    const exp = actual != null ? actual + (rd != null ? rd * remainWd : 0) : null;
+    const need = (fcst != null && actual != null) ? Math.max(fcst - actual, 0) : null;
+    const vsF = (exp != null && fcst > 0) ? exp / fcst : null;
+    const sig = vsF == null ? null : vsF >= RULE.closeOk ? SIG.ok : vsF >= RULE.closeWarn ? SIG.warn : SIG.bad;
+    return { fcst, rofo, actual, remainWd, recentWeekly, need, needDaily: (need != null && remainWd > 0) ? need / remainWd : null,
+      expClose: exp, vsFcst: vsF, vsRofo: (exp != null && rofo > 0) ? exp / rofo : null,
+      accuracy: (remainWd === 0 && fcst > 0 && actual != null) ? actual / fcst : null, sig };
+  }
+  function startOf(fcst, rofo, ly, totalWd, recent) {
+    const target = fcst != null ? fcst : rofo;
+    const needWeekly = (target != null && totalWd > 0) ? target / totalWd * RULE.weekDays : null;
+    const m = (needWeekly != null && recent > 0) ? needWeekly / recent : null;
+    return { fcst, rofo, ly, target, basis: fcst != null ? 'FCST' : (rofo != null ? 'RoFo' : null), totalWd, needWeekly,
+      recentWeekly: recent, multiple: m, sigMultiple: sigMultiple(m),
+      gapRofo: (fcst != null && rofo > 0) ? fcst / rofo - 1 : null, vsLy: (target != null && ly > 0) ? target / ly - 1 : null };
+  }
+  function transitionQuestions(br, cl, st, pm, nm) {
+    const q = [], f1q = v => (+v).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+    if (st.multiple != null && (nm === 12 ? st.multiple > RULE.multWarn : st.multiple > RULE.multBad))
+      q.push({ pri: nm === 12 ? 0 : 2, text: nm === 12
+        ? `${br} 12월 주당 필요가 최근 실적의 ${f1q(st.multiple)}배 — 연말 노멀 마감 계획은?`
+        : `${br} ${nm}월 주당 필요가 최근 실적의 ${f1q(st.multiple)}배 — 첫 주부터 어떻게 확보하나?` });
+    if (st.fcst == null) q.push({ pri: 1, text: `${br} ${nm}월 FCST 미제출 — 제출 일정은? (지금은 RoFo 기준으로 계산)` });
+    else if (st.gapRofo != null && st.gapRofo < RULE.gapWarn) q.push({ pri: 3, text: `${br} ${nm}월 FCST가 RoFo 대비 ${(st.gapRofo * 100).toFixed(0)}% — 갭 메울 계획은?` });
+    if (cl.sig && cl.sig.k === 'bad' && cl.remainWd > 0) q.push({ pri: 1, text: `${br} ${pm}월 남은 ${cl.remainWd}일 필요 ${f1q(cl.need)} HL(예상 마감 FCST의 ${(cl.vsFcst * 100).toFixed(0)}%) — 마감 가능한가?` });
+    return q.sort((a, b) => a.pri - b.pri).slice(0, RULE.maxQuestions).map(x => x.text);
+  }
+  function computeTransition(D, opts, ctx, span, alsmModel, alsmRes) {
+    const op = D.order_pattern;
+    const pm = span.prev.month, nm = span.next.month, py = span.prev.year, ny = span.next.year;
+    const L = (op && op.daily_labels) || [];
+    const asOfDate = L.length ? labelDate(L[L.length - 1], new Date(ctx.year, 11, 31)) : null;
+    const pmEnd = lastDayOf(py, pm);
+    let remainWd = 0;
+    if (asOfDate && asOfDate < pmEnd) { const from = new Date(asOfDate); from.setDate(from.getDate() + 1); remainWd = weekdays(from, pmEnd); }
+    const nmWd = weekdays(new Date(ny, nm - 1, 1), lastDayOf(ny, nm));
+    const inFY = y => y === ctx.year;   // RoFo·실적 배열은 데이터 연도(12개월)만
+    const ly25 = D.monthly_regional_2025 || {};
+    const one = (b) => {
+      const hl = ((D.wk10_summary || {}).hl || {})[b.hl] || {};
+      const rofo = Array.isArray(hl.rofo_monthly) ? hl.rofo_monthly : null;
+      const rw = recentWeekly(op, b.groups, null, ctx.year);
+      const recent = rw ? rw.v : null;
+      const pf = monthFcst(D, b, ctx, py, pm);
+      const actual = inFY(py) ? num(((D.dsr_by_region_monthly || {})[b.hl] || [])[pm - 1]) : null;
+      const cl = closeOf(pf ? pf.hl : null, rofo && inFY(py) ? num(rofo[pm - 1]) : null, actual, remainWd, recent);
+      cl.fcstSrc = pf ? pf.src : null;
+      const nf = monthFcst(D, b, ctx, ny, nm);
+      const st = startOf(nf ? nf.hl : null, rofo && inFY(ny) ? num(rofo[nm - 1]) : null,
+        inFY(ny) ? num((ly25[b.hl] || [])[nm - 1]) : null, nmWd, recent);
+      st.fcstSrc = nf ? nf.src : null;
+      // 다음 달 핵심 SKU (FCST가 있을 때만)
+      const B = nf ? (CORE[b.key] || []).map(id => {
+        const def = SKU[id];
+        const skus = Object.keys(nf.bySku).filter(s => def.match(s));
+        if (!skus.length) return null;
+        const f = skus.reduce((s, k) => s + (nf.bySku[k] || 0), 0);
+        const r = recentWeekly(op, b.groups, def.match, ctx.year);
+        const x = startOf(f, null, null, nmWd, r ? r.v : null);
+        x.id = id; x.label = def.label; x.skus = skus;
+        x.share = (st.target > 0) ? f / st.target : null;
+        if (def.keg) { x.kegFcst = f / RULE.kegHl; x.kegNeedWeekly = x.needWeekly != null ? x.needWeekly / RULE.kegHl : null; }
+        return x;
+      }).filter(Boolean) : [];
+      return { key: b.key, label: b.label, cat: b.cat, close: cl, start: st, B, E: transitionQuestions(b.label, cl, st, pm, nm),
+               signal: worst(cl.sig, st.sigMultiple) };
+    };
+    const branches = BRANCHES.map(one);
+    const ttl = one({ key: 'ttl', label: 'On TTL', hl: 'TTL', sku: 'On Trade Total', book: null, groups: (op && op.groups) || [], cat: 'on_trade' });
+    // TTL 월 FCST가 데이터 월이 아니면 저장본에 TTL이 없으니 지점 합으로
+    if (ttl.close.fcst == null) { const s = branches.reduce((a, x) => a + (x.close.fcst || 0), 0); if (s > 0) Object.assign(ttl.close, closeOf(s, ttl.close.rofo, ttl.close.actual, remainWd, ttl.close.recentWeekly)); }
+    if (ttl.start.fcst == null && branches.every(x => x.start.fcst != null)) { const s = branches.reduce((a, x) => a + x.start.fcst, 0); Object.assign(ttl.start, startOf(s, ttl.start.rofo, ttl.start.ly, nmWd, ttl.start.recentWeekly)); }
+    ttl.B = []; ttl.E = [];
+    let alsm = null;
+    if (alsmModel && !alsmModel.error && alsmRes) {
+      const lastWf = (m) => { const a = alsmModel.wf && alsmModel.wf[m - 1]; if (!Array.isArray(a)) return null; for (let w = 4; w >= 0; w--) if (+a[w] > 0) return +a[w]; return null; };
+      const pF = inFY(py) ? (alsmModel.fcst[pm - 1] > 0 ? alsmModel.fcst[pm - 1] : lastWf(pm)) : null;
+      const nF = inFY(ny) ? (alsmModel.fcst[nm - 1] > 0 ? alsmModel.fcst[nm - 1] : lastWf(nm)) : null;
+      const recent = alsmRes.A.recentWeekly;
+      const cl = closeOf(pF, inFY(py) ? num(alsmModel.rofo[pm - 1]) : null, inFY(py) ? num(alsmModel.act[pm - 1]) : null, remainWd, recent);
+      const st = startOf(nF, inFY(ny) ? num(alsmModel.rofo[nm - 1]) : null, inFY(ny) ? num(alsmModel.ly[nm - 1]) : null, nmWd, recent);
+      alsm = { key: 'alsm', label: 'ALSM', cat: 'alsm', close: cl, start: st, B: [], E: transitionQuestions('ALSM', cl, st, pm, nm), signal: worst(cl.sig, st.sigMultiple) };
+    }
+    return { prev: { year: py, month: pm, remainWd }, next: { year: ny, month: nm, totalWd: nmWd }, ttl, branches, alsm };
+  }
+
   // ── 전체 ──
-  //  opts: { alsm: window._ALSM, hfOf: sku → HL 계수 }
+  //  opts: { alsm: window._ALSM, hfOf: sku → HL 계수, meeting: { label, span:{prev:{year,month}, next:{year,month}} } }
   function compute(D, opts) {
     opts = opts || {};
     const wd = D.wd_progress || {};
@@ -292,12 +411,15 @@
     ttl.B = []; ttl.E = [];                      // TTL은 요약용: 핵심 SKU·질문은 지점 단위
     ttl.C.down = null;
     const alsm = computeAlsm(opts.alsm, ctx);
+    const span = opts.meeting && opts.meeting.span;
+    const transition = span ? computeTransition(D, opts, ctx, span, opts.alsm, alsm) : null;
     return {
       generatedAt: new Date().toISOString(),
       week: D.wk_meta ? { num: D.wk_meta.num, label: D.wk_meta.label, month: mon } : { month: mon },
       wd: { elapsed: wd.elapsed, total: wd.total, pct: wd.pct },
       dsrAsOf: asOf, pattern: { cumFrac, src: patSrc },
-      ttl, branches, alsm,
+      ttl, branches, alsm, transition,
+      meeting: opts.meeting ? { label: opts.meeting.label } : null,
       rules: RULE,
     };
   }
@@ -390,11 +512,70 @@
       + H('지점별 신호 (HL)') + `<div style="overflow-x:auto;"><table ${TBL}><tr><th ${THL}>지점</th><th ${TH}>월 FCST</th><th ${TH}>MTD</th><th ${TH}>진척</th><th ${TH}>필요 배수</th><th ${TH}>월말 몰림</th><th ${TH}>2주 연속 하향</th><th ${TH}>전주 대비</th><th ${TH}>질문</th></tr>${rows}</table></div>`
       + NOTE('ALSM은 별도 채널 — On TTL에 합산하지 않음') + blockC(t) + footer(R);
   }
+  // ── 월 전환 주 카드 ──
+  function closeBlock(T, cl) {
+    const pm = T.prev.month;
+    return H(`① ${pm}월 마감 (HL)`)
+      + `<div style="overflow-x:auto;"><table ${TBL}><tr><th ${TH}>월 FCST</th><th ${TH}>실적</th><th ${TH}>남은 영업일</th><th ${TH}>남은 필요</th><th ${TH}>일당 필요</th><th ${TH}>예상 마감</th><th ${TH}>FCST 대비</th><th ${TH}>RoFo 대비</th>${cl.accuracy != null ? `<th ${TH}>FCST 정확도</th>` : ''}</tr>`
+      + `<tr><td ${TD}>${f1(cl.fcst)}${cl.fcstSrc ? '<div style="font-size:10px;color:#9ca3af;">' + esc(cl.fcstSrc) + '</div>' : ''}</td><td ${TD}>${f1(cl.actual)}</td><td ${TD}>${cl.remainWd}일</td>`
+      + `<td ${TD}>${f1(cl.need)}</td><td ${TD}>${f1(cl.needDaily)}</td><td ${TD}><b>${f1(cl.expClose)}</b></td>`
+      + `<td ${TD}>${pill(cl.sig, pct(cl.vsFcst))}</td><td ${TD}>${pct(cl.vsRofo)}</td>${cl.accuracy != null ? `<td ${TD}>${pct(cl.accuracy)}</td>` : ''}</tr></table></div>`
+      + NOTE(`예상 마감 = 실적 + 최근 2주 일평균 × 남은 영업일 · 신호: FCST의 ${pct(RULE.closeOk)}↑ 유효 / ${pct(RULE.closeWarn)}↑ 주의`);
+  }
+  function startBlock(T, st) {
+    const nm = T.next.month;
+    return H(`② ${nm}월 시작 (HL)`)
+      + `<div style="overflow-x:auto;"><table ${TBL}><tr><th ${TH}>월 FCST</th><th ${TH}>RoFo</th><th ${TH}>FCST÷RoFo</th><th ${TH}>전년 ${nm}월</th><th ${TH}>전년 대비</th><th ${TH}>영업일</th><th ${TH}>주당 필요</th><th ${TH}>최근 주당</th><th ${TH}>필요 배수</th></tr>`
+      + `<tr><td ${TD}>${st.fcst != null ? f1(st.fcst) + (st.fcstSrc ? '<div style="font-size:10px;color:#9ca3af;">' + esc(st.fcstSrc) + '</div>' : '') : '<span style="color:#b91c1c;">미제출</span>'}</td>`
+      + `<td ${TD}>${f1(st.rofo)}</td><td ${TD}>${st.gapRofo != null ? pill(st.gapRofo < RULE.gapWarn ? SIG.bad : st.gapRofo < 0 ? SIG.warn : SIG.ok, pct(1 + st.gapRofo)) : '—'}</td>`
+      + `<td ${TD}>${f1(st.ly)}</td><td ${TD}>${st.vsLy != null ? sgn(st.vsLy * 100) + '%' : '—'}</td><td ${TD}>${st.totalWd}일</td>`
+      + `<td ${TD}><b>${f1(st.needWeekly)}</b></td><td ${TD}>${f1(st.recentWeekly)}</td><td ${TD}>${pill(st.sigMultiple, mult(st.multiple))}</td></tr></table></div>`
+      + NOTE(`주당 필요 = ${st.basis === 'RoFo' ? '<b>RoFo</b>(FCST 미제출)' : '월 FCST'} ÷ ${nm}월 영업일 × 5 · 최근 주당 = ${T.prev.month}월 최근 2주 실적`);
+  }
+  function startSkuBlock(T, t) {
+    if (!t.B || !t.B.length) return '';
+    const rows = t.B.map(x => `<tr><td ${TDL}>${esc(x.label)}</td><td ${TD}>${f1(x.fcst)}${x.kegFcst != null ? '<div style="font-size:10px;color:#9ca3af;">' + f0(x.kegFcst) + ' keg</div>' : ''}</td>`
+      + `<td ${TD}><b>${f1(x.needWeekly)}</b>${x.kegNeedWeekly != null ? '<div style="font-size:10px;color:#9ca3af;">' + f0(x.kegNeedWeekly) + ' keg</div>' : ''}</td><td ${TD}>${f1(x.recentWeekly)}</td><td ${TD}>${pill(x.sigMultiple, mult(x.multiple))}</td><td ${TD}>${pct(x.share)}</td></tr>`).join('');
+    return H(`${T.next.month}월 핵심 SKU (HL)`) + `<div style="overflow-x:auto;"><table ${TBL}><tr><th ${THL}>SKU</th><th ${TH}>월 FCST</th><th ${TH}>주당 필요</th><th ${TH}>최근 주당</th><th ${TH}>필요 배수</th><th ${TH}>FCST 비중</th></tr>${rows}</table></div>`;
+  }
+  function transitionHead(T, t) {
+    return `<div style="font-size:12px;color:#6b7280;margin-bottom:4px;">월 전환 주 — <b style="color:#205527;">${T.prev.month}월 마감</b> · <b style="color:#205527;">${T.next.month}월 시작</b></div>`
+      + `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12.5px;margin-bottom:4px;">`
+      + `<span>${T.prev.month}월 예상 마감 ${pill(t.close.sig, pct(t.close.vsFcst))}</span>`
+      + `<span>${T.next.month}월 필요 배수 ${pill(t.start.sigMultiple, mult(t.start.multiple))}</span>`
+      + (t.start.fcst == null ? `<span>${pill(SIG.warn, T.next.month + '월 FCST 미제출')}</span>` : '')
+      + `</div>`;
+  }
+  function branchTransitionHtml(R, t, b) {
+    const T = R.transition;
+    return transitionHead(T, t) + closeBlock(T, t.close) + startBlock(T, t.start) + startSkuBlock(T, t)
+      + (b && b.C ? blockC(b).replace('C. FCST 요약', `C. FCST 요약 (데이터 월 ${R.week.month}월)`) : '') + blockE(t) + footer(R);
+  }
+  function ttlTransitionHtml(R) {
+    const T = R.transition, t = T.ttl;
+    const all = [...T.branches, T.alsm].filter(Boolean);
+    const rows = all.map(x => `<tr><td ${TDL}><b>${esc(x.label)}</b></td><td ${TD}>${f1(x.close.expClose)}</td><td ${TD}>${pill(x.close.sig, pct(x.close.vsFcst))}</td>`
+      + `<td ${TD}>${x.start.fcst != null ? f1(x.start.fcst) : '<span style="color:#b91c1c;">미제출</span>'}</td><td ${TD}>${x.start.gapRofo != null ? pct(1 + x.start.gapRofo) : '—'}</td>`
+      + `<td ${TD}>${pill(x.start.sigMultiple, mult(x.start.multiple))}</td><td ${TD}>${x.E.length}</td></tr>`).join('');
+    return transitionHead(T, t) + closeBlock(T, t.close) + startBlock(T, t.start)
+      + H('지점별 (HL)') + `<div style="overflow-x:auto;"><table ${TBL}><tr><th ${THL}>지점</th><th ${TH}>${T.prev.month}월 예상 마감</th><th ${TH}>FCST 대비</th><th ${TH}>${T.next.month}월 FCST</th><th ${TH}>FCST÷RoFo</th><th ${TH}>${T.next.month}월 필요 배수</th><th ${TH}>질문</th></tr>${rows}</table></div>`
+      + NOTE('ALSM은 별도 채널 — On TTL에 합산하지 않음') + footer(R);
+  }
+
   // 계산 결과 → 자동 카드 배열 (On TTL, 지점 5, ALSM)
   function cards(R) {
-    const mk = (b, html, subtitle) => ({ kind: 'bw', auto: true, category: b.cat, subtitle, content: html,
-      data: { A: b.A, B: b.B, C: b.C, E: b.E, signal: b.signal, regions: b.regions || null }, generatedAt: R.generatedAt, dsrAsOf: R.dsrAsOf });
-    const out = [mk(R.ttl, ttlHtml(R), `On TTL 위클리 — ${R.week.label || ''}`)];
+    const T = R.transition;
+    const mk = (b, html, subtitle, t) => ({ kind: 'bw', auto: true, category: b.cat, subtitle, content: html,
+      data: { A: b.A, B: b.B, C: b.C, E: b.E, signal: b.signal, regions: b.regions || null, transition: t || null },
+      generatedAt: R.generatedAt, dsrAsOf: R.dsrAsOf });
+    const wk = (R.meeting && R.meeting.label) || R.week.label || '';
+    if (T) {
+      const out = [mk(R.ttl, ttlTransitionHtml(R), `On TTL 위클리 — ${wk} (${T.prev.month}월 마감·${T.next.month}월 시작)`, { close: T.ttl.close, start: T.ttl.start })];
+      T.branches.forEach((t, i) => out.push(mk(R.branches[i], branchTransitionHtml(R, t, R.branches[i]), `${t.label} 분석`, { close: t.close, start: t.start, B: t.B, E: t.E })));
+      if (R.alsm && T.alsm) out.push(mk(R.alsm, branchTransitionHtml(R, T.alsm, R.alsm), 'ALSM 분석 (합계 기준)', { close: T.alsm.close, start: T.alsm.start, E: T.alsm.E }));
+      return out;
+    }
+    const out = [mk(R.ttl, ttlHtml(R), `On TTL 위클리 — ${wk}`)];
     R.branches.forEach(b => out.push(mk(b, branchHtml(R, b), `${b.label} 분석`)));
     if (R.alsm) out.push(mk(R.alsm, branchHtml(R, R.alsm), 'ALSM 분석 (합계 기준)'));
     return out;
