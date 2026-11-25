@@ -9708,8 +9708,8 @@ const _tabInitialized = {};
 //  시트가 12개로 늘어 한 줄에 다 안 들어가므로 그룹(상단) → 하위 시트(하단 칩)로 분리.
 //  switchTab(tabId) API는 그대로 유지 — 그룹은 tabId로 역산해서 활성화한다.
 const TAB_GROUPS = [
-  { key: 'meeting', label: 'Weekly Meeting', tabs: [['minutes','Minutes']] },   // 위클리 회의록(지점별 분석 자동 카드) — 가장 중요해서 맨 앞 대분류
   { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['branch-stock','Stock & Cover'], ['rofo-sheet','Rofo'], ['order','Order Pattern'], ['alsm','ALSM']] },
+  { key: 'meeting', label: 'Weekly Meeting', tabs: [['minutes','Minutes']] },   // 위클리 회의록(지점별 분석 자동 카드) — 대분류로 승격, Weekly 바로 다음
   { key: 'perf',   label: 'Performance', tabs: [['ytd','YTD'], ['branch','Branch Analysis'], ['revenue','Revenue']] },
   { key: 'sku',    label: 'SKU',         tabs: [['sku','SKU Detail'], ['sku-hist','SKU History']] },
   { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['keg','공케그·CO2'], ['range','Range DC'], ['vc','Value Chain']] },
