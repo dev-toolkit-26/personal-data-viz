@@ -18,6 +18,7 @@ FILES=(
   # 스크립트
   data_session.js
   off_ingest.js
+  branch_weekly.js
   freight.js
   freight_master.js
   range_dc.js
