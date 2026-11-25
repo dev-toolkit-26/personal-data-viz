@@ -9758,7 +9758,7 @@ function switchTab(tabId) {
     if (tabId === 'range')    { if (window.RangeDC) RangeDC.render(_supabase); }
     if (tabId === 'keg')      { _kegFrameLoad(); }
     if (tabId === 'vc')       { const f = document.getElementById('vc-frame'); if (f && !f.src) f.src = 'value_chain.html?v=' + Math.floor(Date.now() / 60000); }
-    if (tabId === 'minutes')  { minutesLoad(); }
+    if (tabId === 'minutes')  { minutesLoad().then(_minutesOpenLatest); }
     if (tabId === 'calendar') { calendarInit(); todoInit(); }
   } else {
     if (tabId === 'ytd')          { renderYTDCharts(); renderYTDTable(); renderYTDSkuTable(); }
@@ -9770,7 +9770,7 @@ function switchTab(tabId) {
     else if (tabId === 'alsm')    { renderAlsmTab(); }
     else if (tabId === 'freight') { if (window.Freight) Freight.render(_supabase); }
     else if (tabId === 'range')   { if (window.RangeDC) RangeDC.render(_supabase); }
-    else if (tabId === 'minutes') { minutesLoad(); }
+    else if (tabId === 'minutes') { minutesLoad().then(_minutesOpenLatest); }
     else if (tabId === 'calendar'){ calendarRender(); calendarRenderDayEvents(); todoRender(); }
     else Object.values(_charts).forEach(c => c.resize && c.resize());
   }
@@ -10543,6 +10543,16 @@ async function minutesLoad() {
     </div>`).join('');
 }
 
+// Weekly Meeting 탭 진입 시 가장 최근 회의록(목록 맨 위 = 회의 날짜 최신)을 바로 연다.
+//  이미 열어 둔 회의록이 있거나 지점 모아 보기 중이면 그대로 둔다.
+function _minutesOpenLatest() {
+  if (window._minSkipOpenLatest) { window._minSkipOpenLatest = false; return; }   // 위클리 생성 중엔 생성 흐름이 회의록을 고른다
+  if (_minutesCurrentId || _minutesCurrentCategory !== 'all') return;   // 모바일도 최근 회의록을 열고 '목록으로'로 돌아감
+  const first = document.querySelector('#minutes-list .min-list-item');
+  const id = first && parseInt(String(first.id).replace('min-item-', ''), 10);
+  if (id) minutesSelect(id);
+}
+
 function minutesShowList() {
   document.getElementById('minutes-list-panel').style.display = '';
   _minutesShowPanel('empty');
@@ -10747,7 +10757,7 @@ async function _minWeeklyApply(isNew) {
   return true;
 }
 async function minutesWeeklyGenerate() {
-  if (typeof switchTab === 'function' && !document.getElementById('tab-minutes')?.classList.contains('active')) switchTab('minutes');
+  if (typeof switchTab === 'function' && !document.getElementById('tab-minutes')?.classList.contains('active')) { window._minSkipOpenLatest = true; switchTab('minutes'); }
   const ds = _minTodayStr(), wl = _minWeekLabelOf(ds);
   const { data: rows, error } = await _supabase.from('meeting_minutes')
     .select('id, week_label, meeting_date, action_items')
