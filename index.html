@@ -8105,7 +8105,7 @@ function _alsmBuild(d) {
   const rows = (Array.isArray(d.rows) ? d.rows : []).filter(r => r && r.ch === 'ALSM');
   const pick = (r, a, b) => Array.isArray(r[a]) ? r[a] : (Array.isArray(r[b]) ? r[b] : null);
   const sumOf = (a, b) => { const o = z(); rows.forEach(r => { const v = pick(r, a, b); if (v) for (let i = 0; i < 12; i++) o[i] += +v[i] || 0; }); return o; };
-  const act = sumOf('act_hl_m', 'act_m'), ly = sumOf('ly_hl_m', 'ly_m'), fcst = sumOf('fcst_m'), rofoRows = sumOf('rofo_m');
+  const act = sumOf('act_hl_m', 'act_m'), ly = sumOf('ly_hl_m', 'ly_m'), fcst = sumOf('fcst_m'), rofoRows = sumOf('rofo_m'), ap = sumOf('ap_m');
   // RoFo = P0X 채널값(rofo_channel.ALSM)이 유일 기준(Off와 동일). 없으면 rows 합 폴백.
   const rofoCh = Array.isArray(d.rofo) && d.rofo.some(v => +v) ? d.rofo.map(v => +v || 0) : null;
   const skus = rows.map(r => ({ sku: r.sku, brand: r.brand || '', act: pick(r, 'act_hl_m', 'act_m') || z(), ly: pick(r, 'ly_hl_m', 'ly_m') || z(), fcst: Array.isArray(r.fcst_m) ? r.fcst_m : z() }));
@@ -8117,7 +8117,7 @@ function _alsmBuild(d) {
   const wfA = d.wf && d.wf.ALSM;        // { 월idx: [W1..W5] }
   const wacct = d.wacct && d.wacct.ALSM; // [12][5]
   const fmeta = d.fmeta && d.fmeta.ALSM;
-  return { act, ly, fcst, rofo: rofoCh || rofoRows, rofoSrc: rofoCh ? 'P0X' : 'rows', skus, regions, regUpdated: reg.updated_at || null,
+  return { act, ly, fcst, ap, rofo: rofoCh || rofoRows, rofoSrc: rofoCh ? 'P0X' : 'rows', skus, regions, regUpdated: reg.updated_at || null,
            wf: wfA || {}, wacct: Array.isArray(wacct) ? wacct : null, fmeta: fmeta || null,
            actualMonths: (d.meta && d.meta.actual_months) || null, updated_at: d.updated_at || null };
 }
