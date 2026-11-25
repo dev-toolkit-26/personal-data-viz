@@ -10687,14 +10687,27 @@ async function _minWeeklyBuildCards() {
   let n = Date.now();
   return { R, cards: BranchWeekly.cards(R).map(c => Object.assign(c, { id: n++ })) };
 }
-// 자동 카드 순서대로: [자동 카드 → 같은 카테고리의 직접 쓴 카드들(없으면 빈 '이슈' 카드)] … 나머지 카드는 뒤에 그대로
+// 지점별 고정 이슈 칸: 자동 카드 바로 아래 이 순서로 깔고, 같은 이름의 기존 카드가 있으면 그 카드를 그 자리에 둔다
+//  (서울은 BDT·Outlet 두 채널을 따로 본다). 없는 지점은 기존 카드가 없을 때만 빈 '이슈' 칸 1개.
+const MINUTES_ISSUE_SLOTS = { seoul: ['BDT', 'Outlet'] };
+// 자동 카드 순서대로: [자동 카드 → 고정 이슈 칸 → 같은 카테고리의 나머지 직접 쓴 카드들] … 나머지 카드는 뒤에 그대로
 function _minWeeklyMerge(existing, autoCards) {
   const rest = existing.filter(c => !(c.auto && c.kind === 'bw'));
   const used = new Set(), out = [];
   let nid = Date.now() + 1000;
   autoCards.forEach(ac => {
     out.push(ac);
+    const slots = MINUTES_ISSUE_SLOTS[ac.category];
     let any = false;
+    if (slots) {
+      slots.forEach(slot => {
+        const re = new RegExp('(^|[^A-Za-z])' + slot + '([^A-Za-z]|$)', 'i');
+        const i = rest.findIndex((c, k) => !used.has(k) && c.category === ac.category && re.test(c.subtitle || ''));
+        if (i >= 0) { out.push(rest[i]); used.add(i); }
+        else out.push({ id: nid++, subtitle: slot + ' 이슈', category: ac.category, content: '' });
+      });
+      any = true;
+    }
     rest.forEach((c, i) => { if (!used.has(i) && c.category === ac.category) { out.push(c); used.add(i); any = true; } });
     if (!any) out.push({ id: nid++, subtitle: '이슈', category: ac.category, content: '' });
   });
