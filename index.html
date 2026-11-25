@@ -1771,14 +1771,14 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
     // ── MTD Progress Diagnosis ──
     renderSumMTDDiagnosis();
 
-    // ── Overview 상단: 이번 주 FCST 변동 한 줄 (Weekly 슬라이드는 Workspace › Minutes 위클리로 이동) ──
+    // ── Overview 상단: 이번 주 FCST 변동 한 줄 (Weekly 슬라이드는 Weekly Meeting(회의록) 위클리로 이동) ──
     renderWoWHeadline();
   }
 
   // ═══════════════════════════════════════════════
   //  이번 주 FCST 변동 한 줄 + 발주패턴 계산(_wrPatternClose — branch_weekly.js도 사용)
   //  (구 Weekly 슬라이드의 지점 WoW 표·ALSM 표·업데이트 요약·쇼트/폐기 위험은 2026-11-25 제거:
-  //   지점별 분석은 Workspace › Minutes '이번 주 위클리 생성' 자동 카드, ALSM은 Weekly › ALSM 탭, 재고는 Stock 슬라이드)
+  //   지점별 분석은 Weekly Meeting(회의록) '이번 주 위클리 생성' 자동 카드, ALSM은 Weekly › ALSM 탭, 재고는 Stock 슬라이드)
   // ═══════════════════════════════════════════════
 
   // ① 이번 주 FCST 변동 한 줄 (Overview 상단)
@@ -1798,7 +1798,7 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
         '<span style="color:var(--kn-text-mute);">'+(meta.label||'이번 주')+'</span>'
       + '<span>FCST <b style="color:#fff;">'+f1(ttl.this_week_fcst)+' HL</b></span>'
       + '<span>전주 대비 <b style="color:'+wc+';">'+wTxt+'</b> <span style="color:var(--kn-text-mute);">('+f1(lw)+' → '+f1(ttl.this_week_fcst)+')</span></span>'
-      + '<span style="margin-left:auto;color:var(--kn-text-mute);">지점별 분석 · 이슈 → Workspace › Minutes</span>';
+      + '<span style="margin-left:auto;color:var(--kn-text-mute);">지점별 분석 · 이슈 → Weekly Meeting</span>';
   }
 
   // 발주패턴(Order Pattern) 기반 누적 진행률 — 완료된 월들의 주차별 발주분포 '연평균'으로
@@ -9708,11 +9708,12 @@ const _tabInitialized = {};
 //  시트가 12개로 늘어 한 줄에 다 안 들어가므로 그룹(상단) → 하위 시트(하단 칩)로 분리.
 //  switchTab(tabId) API는 그대로 유지 — 그룹은 tabId로 역산해서 활성화한다.
 const TAB_GROUPS = [
+  { key: 'meeting', label: 'Weekly Meeting', tabs: [['minutes','Minutes']] },   // 위클리 회의록(지점별 분석 자동 카드) — 가장 중요해서 맨 앞 대분류
   { key: 'weekly', label: 'Weekly',      tabs: [['wk10','FCST Status'], ['branch-stock','Stock & Cover'], ['rofo-sheet','Rofo'], ['order','Order Pattern'], ['alsm','ALSM']] },
   { key: 'perf',   label: 'Performance', tabs: [['ytd','YTD'], ['branch','Branch Analysis'], ['revenue','Revenue']] },
   { key: 'sku',    label: 'SKU',         tabs: [['sku','SKU Detail'], ['sku-hist','SKU History']] },
   { key: 'cost',   label: 'Cost',        tabs: [['freight','Freight (운송비)'], ['keg','공케그·CO2'], ['range','Range DC'], ['vc','Value Chain']] },
-  { key: 'work',   label: 'Workspace',   tabs: [['minutes','Minutes'], ['calendar','Calendar & To-Do']] },
+  { key: 'work',   label: 'Workspace',   tabs: [['calendar','Calendar & To-Do']] },
 ];
 const _tabGroupOf = tabId => TAB_GROUPS.find(g => g.tabs.some(t => t[0] === tabId)) || null;
 let _lastTabInGroup = {};   // { groupKey: tabId } — 그룹 재방문 시 마지막으로 보던 시트로
