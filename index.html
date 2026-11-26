@@ -2238,6 +2238,10 @@ html.kn-motion .kn-reveal { opacity: 0; will-change: opacity, transform; }
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11l3-4 3 2 4-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           이번 주 위클리 생성
         </button>
+        <button onclick="minutesWeeklyGenerate(true)" class="min-new-btn" id="min-bw-next-btn" title="다음 주 월요일 날짜로 회의록을 미리 만들고 자동 카드를 넣습니다 — 월이 걸치는 주면 전월 마감 + 다음 달 시작 카드 (미팅 당일 '다시 생성'으로 최신 DSR 반영)">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 7h8M8 3.5L11.5 7 8 10.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="min-bw-next-label">다음 주 위클리 미리 생성</span>
+        </button>
         <div id="minutes-list" style="padding:2px 0 12px;"></div>
       </div>
 
@@ -10517,6 +10521,7 @@ function minutesSyncMonthWeekFromDate() {
 
 async function minutesLoad() {
   _minImgEnsureBound();
+  _minNextWeekLabelSync();
   const listEl = document.getElementById('minutes-list');
   listEl.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">불러오는 중...</div>';
   const { data, error } = await _supabase
@@ -10687,6 +10692,17 @@ function _minTodayStr() {
   const t = new Date();
   return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 }
+// 다음 주 월요일 (오늘이 월요일이어도 다음 주)
+function _minNextMondayStr() {
+  const t = new Date(); t.setDate(t.getDate() + (7 - (t.getDay() + 6) % 7));
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
+// '다음 주 미리 생성' 버튼 이름: 월 전환 주면 'Dec W1 (11월 마감 + 12월 시작)'
+function _minNextWeekLabelSync() {
+  const el = document.getElementById('min-bw-next-label'); if (!el) return;
+  const nl = _minWeekLabelOf(_minNextMondayStr());
+  el.textContent = nl.span ? `다음 주 미리 생성 · ${nl.label} (${nl.span.prev.month}월 마감+${nl.span.next.month}월)` : `다음 주 미리 생성 · ${nl.label}`;
+}
 function _minWeeklySyncBar() {
   const bar = document.getElementById('min-bw-bar'); if (!bar) return;
   const metas = Object.values(_minAutoMeta);
@@ -10742,7 +10758,7 @@ function _minWeeklyMerge(existing, autoCards) {
   rest.forEach((c, i) => { if (!used.has(i)) out.push(c); });
   return out;
 }
-async function _minWeeklyApply(isNew) {
+async function _minWeeklyApply(isNew, nextLabel) {
   const st = document.getElementById('min-status');
   const cur = _minutesCollectCards();
   if (cur.some(c => c.auto && c.locked)) { st.textContent = '마감된 위클리입니다 — 마감 해제 후 다시 생성하세요.'; st.style.color = '#e53e3e'; return false; }
@@ -10753,13 +10769,14 @@ async function _minWeeklyApply(isNew) {
   minutesRenderCards(_minWeeklyMerge(cur, built.cards));
   await minutesSave();
   if ((st.textContent || '').indexOf('저장되었습니다') === 0) {
-    st.textContent = (isNew ? '이번 주 위클리를 만들었습니다' : '자동 카드를 갱신했습니다') + ' · DSR ~' + (built.R.dsrAsOf || '-') + ' · 저장됨';
+    st.textContent = (nextLabel ? `다음 주(${nextLabel}) 위클리를 ${isNew ? '미리 만들었습니다' : '갱신했습니다'} — 미팅 당일 '다시 생성'으로 최신 DSR 반영` : (isNew ? '이번 주 위클리를 만들었습니다' : '자동 카드를 갱신했습니다')) + ' · DSR ~' + (built.R.dsrAsOf || '-') + ' · 저장됨';
   }
   return true;
 }
-async function minutesWeeklyGenerate() {
+// next=true: 다음 주 월요일 날짜로 미리 생성 (월 전환 주 미팅 준비 — 회의 날짜 기준으로 전월 마감·다음 달 시작 카드)
+async function minutesWeeklyGenerate(next) {
   if (typeof switchTab === 'function' && !document.getElementById('tab-minutes')?.classList.contains('active')) { window._minSkipOpenLatest = true; switchTab('minutes'); }
-  const ds = _minTodayStr(), wl = _minWeekLabelOf(ds);
+  const ds = next ? _minNextMondayStr() : _minTodayStr(), wl = _minWeekLabelOf(ds);
   const { data: rows, error } = await _supabase.from('meeting_minutes')
     .select('id, week_label, meeting_date, action_items')
     .order('meeting_date', { ascending: false }).order('id', { ascending: false });
@@ -10783,7 +10800,7 @@ async function minutesWeeklyGenerate() {
       minutesRenderActions();
     }
   }
-  await _minWeeklyApply(!hit);
+  await _minWeeklyApply(!hit, next ? wl.label : null);
 }
 async function minutesWeeklyRegenerate() {
   if (!confirm('자동 카드를 최신 데이터로 다시 만듭니다. 직접 쓴 카드와 Action Items는 그대로 둡니다. 진행할까요?')) return;
