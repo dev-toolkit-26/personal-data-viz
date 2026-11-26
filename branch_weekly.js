@@ -61,7 +61,9 @@
     stockCheckDays: 45,
     stockTopN: 5,
     patternMinCum: 0.15,                       // 평소 이맘때 누적 비중이 15% 미만(월초)이면 패턴 전망 대신 최근 속도 사용                              // 재고 표 = 지점별 월초 재고(HL) 상위 5개 SKU — 재고가 많은 SKU가 매출도 큰 SKU                        // 재고일수 45일 초과 = '확인 필요'(실제 과다 또는 입력·추정 확인)
-    stockImpactQ: -0.05,                       // 월초 재고 초과분이 RoFo 달성률을 5%p 넘게 깎으면 질문
+    stockImpactQ: -0.05,                       // (전월 재고 없을 때) 월초 재고 초과분이 RoFo 달성률을 5%p 넘게 깎으면 질문
+    stockMinDays: 3,                           // 위클리 재고 기준 = 운영 최소 재고 3일분. 넘는 재고는 전부 이번 달 출고를 줄이는 양 (Stock & Cover 탭 7/14일 기준과 별개)
+    stockRiseQDays: 1,                         // 월초 재고가 전월보다 1일분 이상 늘면 질문 (전월 밀어넣기 → 이번 달 출고 감소)
     maxQuestions: 3,
   };
 
@@ -213,37 +215,52 @@
   // ── 도매장 월초 재고 → 이번 달 영향 (RoFo·FCST 대비, 참고자료) ──
   //  예상 소진(추정)은 쓰지 않는다(생맥주처럼 추세가 큰 SKU에서 맞지 않음). 기준은 목표 물량뿐:
   //   재고일수 = 월초 재고 ÷ (월 RoFo 또는 월 FCST ÷ 달력일)
-  //   적정 재고 = 부족·과다 기준의 가운데 일수(기본 10.5일)분 → 초과분 = 월초 재고 − 적정 재고
-  //   달성률 영향 = −초과분 ÷ 목표 (초과 재고만큼 이번 달 출고가 줄어든다고 볼 때 RoFo·FCST 달성률을 몇 %p 깎나)
-  const stockTH = D => Object.assign({ short: 7, over: 14 }, (D.on_fcst_book && D.on_fcst_book.thresholds) || {});
+  //   기준 = 운영 최소 재고(RULE.stockMinDays일분). 도매장이 그보다 더 들고 있으면 그만큼 이번 달 우리 출고가 덜 나간다
+  //   → 초과분 = 월초 재고 − 최소 재고, 달성률 영향 = −초과분 ÷ 목표 (RoFo·FCST 달성률을 몇 %p 깎나)
+  //   + 전월 월초 재고 대비 증감: 늘었으면 전월에 밀어 넣은 물량이 이번 달 출고를 깎는 것 → 질문은 이걸로
+  //   (Stock & Cover 탭의 부족 7·과다 14일 판정은 엑셀 기준 그대로, 여기와 별개)
+  const stockTH = () => ({ min: RULE.stockMinDays });
   const bookMonth = (D, y, m) => D.on_fcst_book && D.on_fcst_book.months && D.on_fcst_book.months[`${y}-${String(m).padStart(2, '0')}`];
-  function vsGoal(stockHl, goalHl, T, TH) {
-    if (!(goalHl > 0)) return null;
-    const daily = goalHl / T, tg = (TH.short + TH.over) / 2;
-    const days = stockHl / daily, excess = stockHl - daily * tg;
-    return { goal: goalHl, days, excess, impact: -excess / goalHl, status: days < TH.short ? 'short' : days > RULE.stockCheckDays ? 'check' : days > TH.over ? 'over' : 'ok' };
+  const prevYM = (y, m) => m === 1 ? [y - 1, 12] : [y, m - 1];
+  function vsGoal(stockQty, goalQty, T, TH, prevQty) {
+    if (!(goalQty > 0)) return null;
+    const daily = goalQty / T;
+    const days = stockQty / daily, excess = stockQty - daily * TH.min;
+    const delta = prevQty != null ? stockQty - prevQty : null;
+    return { goal: goalQty, days, excess, impact: -excess / goalQty, status: days < TH.min ? 'short' : days > RULE.stockCheckDays ? 'check' : 'over',
+             prev: prevQty != null ? prevQty : null, delta, deltaDays: delta != null ? delta / daily : null };
   }
-  // 지점 전체 월초 재고(HL, 입력된 전 SKU) vs RoFo·FCST
-  function branchStock(D, bookKey, y, m, hfOf, rofoHl, fcstHl) {
+  // 지점 월초 재고 합(HL, 입력된 전 SKU)
+  function stockSum(D, bookKey, y, m, hfOf) {
     const M = bookMonth(D, y, m); if (!M || !M.rows || !M.rows[bookKey]) return null;
     let hl = 0, n = 0;
     Object.entries(M.rows[bookKey]).forEach(([sku, x]) => { if (x && x.stock != null) { hl += (+x.stock || 0) * hfOf(sku); n++; } });
-    if (!n) return null;
+    return n ? { hl, n } : null;
+  }
+  function stockPack(D, hl, n, prevHl, y, m, rofoHl, fcstHl) {
     const TH = stockTH(D), T = new Date(y, m, 0).getDate();
-    return { hl, n, th: TH, targetDays: (TH.short + TH.over) / 2, rofo: vsGoal(hl, rofoHl, T, TH), fcst: vsGoal(hl, fcstHl, T, TH) };
+    return { hl, n, th: TH, targetDays: TH.min, prevHl, rofo: vsGoal(hl, rofoHl, T, TH, prevHl), fcst: vsGoal(hl, fcstHl, T, TH, prevHl) };
+  }
+  // 지점 전체 월초 재고 vs RoFo·FCST (+ 전월 월초 재고)
+  function branchStock(D, bookKey, y, m, hfOf, rofoHl, fcstHl) {
+    const cur = stockSum(D, bookKey, y, m, hfOf); if (!cur) return null;
+    const pv = stockSum(D, bookKey, ...prevYM(y, m), hfOf);
+    return stockPack(D, cur.hl, cur.n, pv ? pv.hl : null, y, m, rofoHl, fcstHl);
   }
   // 월초 재고(HL) 상위 N개 SKU — SKU별 RoFo가 지점 단위로 없어 FCST 대비만
   function topStock(D, bookKey, y, m, rowsMap, ctx, fcstQtyOf) {
     const M = bookMonth(D, y, m); if (!M || !M.rows || !M.rows[bookKey]) return [];
     const hfOf = sku => (rowsMap[sku] && rowsMap[sku].hf) || ctx.hfOf(sku);
     const TH = stockTH(D), T = new Date(y, m, 0).getDate();
+    const PM = bookMonth(D, ...prevYM(y, m)), PR = PM && PM.rows && PM.rows[bookKey];
+    const prevOf = sku => PR ? (PR[sku] && PR[sku].stock != null ? +PR[sku].stock || 0 : 0) : null;
     return Object.entries(M.rows[bookKey])
       .filter(([, x]) => x && +x.stock > 0)
       .map(([sku, x]) => ({ sku, qty: +x.stock, hl: (+x.stock) * hfOf(sku) }))
       .sort((a, b) => b.hl - a.hl).slice(0, RULE.stockTopN)
       .map(({ sku, qty, hl }) => {
         const fq = fcstQtyOf(sku), hf = hfOf(sku);
-        const g = vsGoal(qty, fq, T, TH);   // 박스 단위로 계산(비율은 같음)
+        const g = vsGoal(qty, fq, T, TH, prevOf(sku));   // 박스 단위로 계산(비율은 같음)
         return { label: sku, sku, unit: /Keg$/i.test(sku) ? 'keg' : 'cs', qty, hl, hf, fcstQty: fq, ratio: fq > 0 ? qty / fq : null, vs: g, th: TH };
       });
   }
@@ -267,11 +284,18 @@
     const sk = (B || []).filter(x => x.sigClose && x.sigClose.k === 'bad' && x.short < 0 && (A.short == null || A.short >= 0 || x.short / A.short >= RULE.skuQuestionMinShare))
       .sort((a, b) => a.short - b.short)[0];
     if (sk) push(3, `${sk.label} 지금 속도면 FCST의 ${Math.round(sk.vsFcst * 100)}% (${fcs(sk.short, sk.csf)} ${sk.unit === 'keg' ? 'keg' : 'c/s'} 부족) — 원인과 대응은?`);
-    // 월초 도매장 재고 → 이번 달 영향 (RoFo·FCST 대비)
-    if (ST && ST.rofo && ST.rofo.impact <= RULE.stockImpactQ)
-      push(3.6, `${br} 월초 도매장 재고가 적정(${ST.targetDays}일분)보다 ${fq(ST.rofo.excess)} HL 많음 — RoFo 달성률 −${Math.round(-ST.rofo.impact * 100)}%p 요인, 이번 달 대응은?`);
-    const so = (S || []).filter(x => x.vs && (x.vs.status === 'over' || x.vs.status === 'check')).sort((a, b) => b.vs.excess * b.hf - a.vs.excess * a.hf)[0];
-    if (so) push(3.7, `${so.label} 월초 재고가 FCST의 ${Math.round(so.vs.days)}일분 — 적정보다 ${f0q(so.vs.excess)} ${so.unit === 'keg' ? 'keg' : 'c/s'} 많아 이번 달 출고 영향은?`);
+    // 월초 도매장 재고 → 이번 달 영향. 전월 재고가 있으면 '늘었나'로, 없으면 최소 재고 초과분의 달성률 영향으로
+    const g0 = ST && (ST.rofo || ST.fcst);
+    if (g0 && g0.deltaDays != null) {
+      if (g0.deltaDays >= RULE.stockRiseQDays)
+        push(3.6, `${br} 월초 도매장 재고가 지난달보다 ${fq(g0.delta)} HL(+${fq(g0.deltaDays)}일분) 늘어 ${fq(g0.days)}일분 — 전월 밀어넣기? 이번 달 출고${ST.rofo ? '(RoFo 달성률 −' + Math.round(-ST.rofo.impact * 100) + '%p)' : ''} 영향 대응은?`);
+    } else if (ST && ST.rofo && ST.rofo.impact <= RULE.stockImpactQ)
+      push(3.6, `${br} 월초 도매장 재고 ${fq(ST.rofo.days)}일분 — 최소(${ST.targetDays}일분)보다 ${fq(ST.rofo.excess)} HL 많아 RoFo 달성률 −${Math.round(-ST.rofo.impact * 100)}%p 요인, 이번 달 대응은?`);
+    const unitOf = x => x.unit === 'keg' ? 'keg' : 'c/s';
+    const sr = (S || []).filter(x => x.vs && x.vs.deltaDays != null && x.vs.deltaDays >= RULE.stockRiseQDays).sort((a, b) => b.vs.delta * b.hf - a.vs.delta * a.hf)[0];
+    const so = sr ? null : (S || []).filter(x => x.vs && x.vs.deltaDays == null && (x.vs.status === 'over' || x.vs.status === 'check')).sort((a, b) => b.vs.excess * b.hf - a.vs.excess * a.hf)[0];
+    if (sr) push(3.7, `${sr.label} 월초 재고가 지난달보다 ${f0q(sr.vs.delta)} ${unitOf(sr)} 늘어 FCST의 ${Math.round(sr.vs.days)}일분 — 이번 달 출고 영향은?`);
+    if (so) push(3.7, `${so.label} 월초 재고가 FCST의 ${Math.round(so.vs.days)}일분 — 최소보다 ${f0q(so.vs.excess)} ${unitOf(so)} 많아 이번 달 출고 영향은?`);
     const ss = (S || []).filter(x => x.vs && x.vs.status === 'short').sort((a, b) => a.vs.days - b.vs.days)[0];
     if (ss) push(3.5, `${ss.label} 월초 재고가 FCST의 ${(Math.round(ss.vs.days * 10) / 10)}일분(부족) — 이번 달 추가 출고 여지?`);
     if (C.trend && C.trend.down2) { const s = C.trend.series, n = s.length; push(4, `${br} FCST 2주 연속 하향(${fq(s[n - 3].hl)}→${fq(s[n - 1].hl)} HL) — 일시적인가, 구조적인가?`); }
@@ -292,12 +316,13 @@
   // On TTL 월초 재고 = 5개 지점 합
   function ttlStock(D, ctx, list, rofoHl, fcstHl, y, m) {
     y = y || ctx.year; m = m || ctx.mon;
-    let hl = 0, n = 0;
-    list.forEach(b => { const rows = skuRows(D, b.sku), M = bookMonth(D, y, m); if (!M || !M.rows || !M.rows[b.book]) return;
-      Object.entries(M.rows[b.book]).forEach(([sku, x]) => { if (x && x.stock != null) { hl += (+x.stock || 0) * ((rows[sku] && rows[sku].hf) || ctx.hfOf(sku)); n++; } }); });
+    const [py, pm] = prevYM(y, m);
+    let hl = 0, n = 0, phl = 0, pn = 0;
+    list.forEach(b => { if (!b.book) return; const rows = skuRows(D, b.sku), hfOf = sku => (rows[sku] && rows[sku].hf) || ctx.hfOf(sku);
+      const c = stockSum(D, b.book, y, m, hfOf); if (c) { hl += c.hl; n += c.n; }
+      const p = stockSum(D, b.book, py, pm, hfOf); if (p) { phl += p.hl; pn += p.n; } });
     if (!n) return null;
-    const TH = stockTH(D), T = new Date(y, m, 0).getDate();
-    return { hl, n, th: TH, targetDays: (TH.short + TH.over) / 2, rofo: vsGoal(hl, rofoHl, T, TH), fcst: vsGoal(hl, fcstHl, T, TH) };
+    return stockPack(D, hl, n, pn ? phl : null, y, m, rofoHl, fcstHl);
   }
   // ── 지점 1개 (이번 달) ──
   function computeBranch(D, b, ctx) {
@@ -550,30 +575,35 @@
       `<th ${THL}>SKU</th><th ${TH}>월 FCST</th><th ${TH}>MTD</th><th ${TH}>마감 전망</th><th ${TH}>FCST 대비</th><th ${TH}>부족·초과</th><th ${TH}>주당 필요</th><th ${TH}>최근 주당</th>`, rows)
       + NOTE(isAlsm ? 'ALSM SKU 최근 주당 = MTD 런레이트 (SKU별 일자 실적 없음) · c/s = SKU 실제 박스' : 'c/s = SKU 실제 박스(20L은 keg)');
   }
-  const ST = { short: ['부족', SIG.bad], over: ['과다', SIG.warn], ok: ['적정', SIG.ok], check: ['확인 필요', SIG.warn], idle: ['판매 없음', null], none: ['—', null] };
+  const ST = { short: ['최소 미만', SIG.ok], over: ['초과', SIG.warn], ok: ['적정', SIG.ok], check: ['확인 필요', SIG.warn], idle: ['판매 없음', null], none: ['—', null] };
+  // 전월 월초 재고 대비 증감 칸 (늘었으면 빨강 = 이번 달 출고를 더 깎음)
+  const deltaCell = (g, fmt, u) => !g || g.delta == null ? '<span style="color:#9ca3af;">전월 없음</span>'
+    : '<b style="color:' + (g.delta > 0 ? '#b91c1c' : '#15803d') + ';">' + (g.delta >= 0 ? '+' : '−') + fmt(Math.abs(g.delta)) + u + '</b>'
+      + SMALL((g.deltaDays >= 0 ? '+' : '−') + f1(Math.abs(g.deltaDays)) + '일분');
   const ST_ = ST;
   function stockGoalRow(name, g, unitLbl) {
-    if (!g) return `<tr><td ${TDL}><b>${name}</b></td><td ${TD} colspan="4"><span style="color:#9ca3af;">목표 없음</span></td></tr>`;
+    if (!g) return `<tr><td ${TDL}><b>${name}</b></td><td ${TD} colspan="5"><span style="color:#9ca3af;">목표 없음</span></td></tr>`;
     const st = ST[g.status] || ST.none;
     return `<tr><td ${TDL}><b>${name}</b></td><td ${TD}>${f1(g.goal)} ${unitLbl}</td><td ${TD}>${st[1] ? pill(st[1], f1(g.days) + '일') : f1(g.days) + '일'}</td>`
       + `<td ${TD}>${'<b style="color:' + (g.excess > 0 ? '#b91c1c' : '#15803d') + ';">' + (g.excess > 0 ? '+' : '−') + f1(Math.abs(g.excess)) + ' ' + unitLbl + '</b>'}</td>`
-      + `<td ${TD}>${pill(g.impact < RULE.stockImpactQ ? SIG.bad : g.impact < 0 ? SIG.warn : SIG.ok, (g.impact >= 0 ? '+' : '−') + Math.abs(Math.round(g.impact * 100)) + '%p')}</td></tr>`;
+      + `<td ${TD}>${pill(g.impact < RULE.stockImpactQ ? SIG.bad : g.impact < 0 ? SIG.warn : SIG.ok, (g.impact >= 0 ? '+' : '−') + Math.abs(Math.round(g.impact * 100)) + '%p')}</td>`
+      + `<td ${TD}>${deltaCell(g, f1, ' ' + unitLbl)}</td></tr>`;
   }
   function stockTable(ST, S, title) {
     if (!ST && !(S && S.length)) return '';
-    const tg = ST ? ST.targetDays : (S[0].th.short + S[0].th.over) / 2;
+    const tg = ST ? ST.targetDays : S[0].th.min;
     let h = H(title || '월초 도매장 재고 → 이번 달 영향');
     if (ST) h += `<div style="font-size:12px;color:#374151;margin:2px 0;">월초 도매장 재고 <b>${f1(ST.hl)} HL</b> (${f0(ST.hl / RULE.csStd)} c/s · 입력 ${ST.n}개 SKU)</div>`
-      + TABLE(`<th ${THL}>목표 기준</th><th ${TH}>월 목표</th><th ${TH}>재고일수</th><th ${TH}>적정(${tg}일분) 대비</th><th ${TH}>달성률 영향</th>`,
+      + TABLE(`<th ${THL}>목표 기준</th><th ${TH}>월 목표</th><th ${TH}>재고일수</th><th ${TH}>최소(${tg}일분) 초과<br>(= 출고 감소)</th><th ${TH}>달성률 영향</th><th ${TH}>전월 월초 대비</th>`,
         stockGoalRow('RoFo', ST.rofo, 'HL') + stockGoalRow('FCST', ST.fcst, 'HL'));
     if (S && S.length) h += `<div style="font-size:12px;color:#374151;margin:6px 0 2px;">재고 상위 ${S.length} SKU (FCST 대비)</div>` + TABLE(
-      `<th ${THL}>SKU</th><th ${TH}>월초 재고</th><th ${TH}>월 FCST</th><th ${TH}>재고율<br>(÷FCST)</th><th ${TH}>재고일수<br>(FCST 기준)</th><th ${TH}>적정 대비<br>(= 출고 영향)</th>`,
+      `<th ${THL}>SKU</th><th ${TH}>월초 재고</th><th ${TH}>월 FCST</th><th ${TH}>재고율<br>(÷FCST)</th><th ${TH}>재고일수<br>(FCST 기준)</th><th ${TH}>최소 초과<br>(= 출고 감소)</th><th ${TH}>전월 월초 대비</th>`,
       S.map(x => { const u = x.unit === 'keg' ? ' keg' : ' c/s', g = x.vs, st = g ? (ST_[g.status] || ST_.none) : ST_.none;
         return `<tr><td ${TDL}>${esc(x.label)}</td><td ${TD}>${f0(x.qty)}${u}${SMALL(f1(x.hl) + ' HL')}</td><td ${TD}>${x.fcstQty != null ? f0(x.fcstQty) + u : '—'}</td>`
           + `<td ${TD}>${pct(x.ratio)}</td><td ${TD}>${g ? (st[1] ? pill(st[1], f1(g.days) + '일') : f1(g.days) + '일') : '—'}</td>`
-          + `<td ${TD}>${g ? '<b style="color:' + (g.excess > 0 ? '#b91c1c' : '#15803d') + ';">' + (g.excess > 0 ? '+' : '−') + f0(Math.abs(g.excess)) + u + '</b>' + SMALL(g.excess > 0 ? '출고 줄이는 요인' : '더 나갈 여지') : '—'}</td></tr>`; }).join(''));
-    const th = ST ? ST.th : S[0].th;
-    return h + NOTE(`참고자료 · 도매장 재고(통합 FCST 양식 '월초 재고') · 재고일수 = 월초 재고 ÷ (월 목표 ÷ 달력일) · 적정 = ${tg}일분(부족 ${th.short}일·과다 ${th.over}일의 가운데) · 적정 대비 초과분만큼 이번 달 출고가 줄어든다고 보면 달성률 영향 = −초과분 ÷ 월 목표 · SKU별 RoFo는 지점 단위로 없어 SKU는 FCST 기준 · ${RULE.stockCheckDays}일 초과는 '확인 필요'`);
+          + `<td ${TD}>${g ? '<b style="color:' + (g.excess > 0 ? '#b91c1c' : '#15803d') + ';">' + (g.excess > 0 ? '+' : '−') + f0(Math.abs(g.excess)) + u + '</b>' + SMALL(g.excess > 0 ? '출고 줄이는 요인' : '더 나갈 여지') : '—'}</td>`
+          + `<td ${TD}>${deltaCell(g, f0, u)}</td></tr>`; }).join(''));
+    return h + NOTE(`참고자료 · 도매장 재고(통합 FCST 양식 '월초 재고') · 재고일수 = 월초 재고 ÷ (월 목표 ÷ 달력일) · 기준 = 운영 최소 ${tg}일분 — 도매장이 그보다 더 들고 있으면 그만큼 이번 달 우리 출고가 덜 나간다고 보고 달성률 영향 = −초과분 ÷ 월 목표 · 전월 월초 대비 증가 = 전월에 밀어 넣은 물량(이번 달 출고 감소) · SKU별 RoFo는 지점 단위로 없어 SKU는 FCST 기준 · ${RULE.stockCheckDays}일 초과는 '확인 필요' · Stock & Cover 탭(7/14일)과 기준이 다름`);
   }
   function blockC(C, csf, title) {
     const items = [];
@@ -600,7 +630,8 @@
     const r = STk.rofo, f = STk.fcst, main = r || f;
     const imp = g => g ? (g.impact >= 0 ? '+' : '−') + Math.abs(Math.round(g.impact * 100)) + '%p' : '—';
     return `<div style="font-size:12.5px;margin:-2px 0 6px;"><span>월초 재고 영향 ${pill(main.impact < RULE.stockImpactQ ? SIG.bad : main.impact < 0 ? SIG.warn : SIG.ok, 'RoFo ' + imp(r) + ' · FCST ' + imp(f))} `
-      + `<span style="color:#6b7280;">도매장 재고 ${f1(STk.hl)} HL = ${r ? 'RoFo ' + f1(r.days) + '일분' : ''}${r && f ? ' · ' : ''}${f ? 'FCST ' + f1(f.days) + '일분' : ''} (적정 ${STk.targetDays}일분)</span></span></div>`;
+      + `<span style="color:#6b7280;">도매장 재고 ${f1(STk.hl)} HL = ${r ? 'RoFo ' + f1(r.days) + '일분' : ''}${r && f ? ' · ' : ''}${f ? 'FCST ' + f1(f.days) + '일분' : ''} (최소 ${STk.targetDays}일분 초과분 = 출고 감소)`
+      + `${main.delta != null ? ' · 전월 월초 대비 ' + (main.delta >= 0 ? '+' : '−') + f1(Math.abs(main.delta)) + ' HL' : ''}</span></span></div>`;
   }
   function branchHtml(R, b) {
     return headLine(b.A, b.C) + stockHead(b.ST) + targetTable(b.A) + paceTable(b.A) + skuTable(b.B, b.key === 'alsm') + stockTable(b.ST, b.S) + regionTable(b.regions) + blockC(b.C, RULE.csStd) + blockE(b.E) + footer(R);
